@@ -1,0 +1,65 @@
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TextInput, KeyboardAvoidingView, Platform, ScrollView, Pressable } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Feather } from '@expo/vector-icons';
+import { colors, fonts, radius, spacing } from '@/src/theme';
+import { PrimaryButton, GhostButton } from '@/src/components/Button';
+import { useAuth } from '@/src/auth';
+
+export default function Account() {
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const { signUp } = useAuth();
+  const [pseudo, setPseudo] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const submit = async () => {
+    setErr(null); setLoading(true);
+    try {
+      await signUp(email.trim(), password, pseudo.trim());
+      router.replace('/onboarding/themes');
+    } catch (e: any) {
+      setErr(e.detail?.detail === 'email_taken' ? 'Cette adresse est déjà utilisée.' : 'Impossible de créer ton compte.');
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, backgroundColor: colors.glacier }}>
+      <ScrollView contentContainerStyle={[styles.c, { paddingTop: insets.top + spacing.xl, paddingBottom: insets.bottom + spacing.xl }]} keyboardShouldPersistTaps="handled">
+        <Pressable onPress={() => router.back()} testID="onb-back" style={styles.back}>
+          <Feather name="chevron-left" size={22} color={colors.espresso} />
+        </Pressable>
+        <Text style={styles.title}>Créer ton compte</Text>
+        <Text style={styles.sub}>Rejoins Manent en quelques secondes.</Text>
+
+        <View style={{ height: spacing.xl }} />
+        <Text style={styles.label}>Pseudo</Text>
+        <TextInput testID="input-pseudo" value={pseudo} onChangeText={setPseudo} placeholder="Léa" placeholderTextColor={colors.clay} style={styles.input} autoCapitalize="none" />
+        <Text style={styles.label}>E-mail</Text>
+        <TextInput testID="input-email" value={email} onChangeText={setEmail} placeholder="toi@exemple.com" placeholderTextColor={colors.clay} style={styles.input} autoCapitalize="none" keyboardType="email-address" />
+        <Text style={styles.label}>Mot de passe</Text>
+        <TextInput testID="input-password" value={password} onChangeText={setPassword} placeholder="6 caractères minimum" placeholderTextColor={colors.clay} style={styles.input} secureTextEntry />
+
+        {err && <Text style={styles.err}>{err}</Text>}
+
+        <View style={{ height: spacing.xl }} />
+        <PrimaryButton testID="btn-signup" title="Créer mon compte" onPress={submit} loading={loading} disabled={!pseudo || !email || password.length < 6} />
+        <GhostButton testID="btn-goto-login" title="J'ai déjà un compte" onPress={() => router.push('/(auth)/login')} />
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+}
+
+const styles = StyleSheet.create({
+  c: { paddingHorizontal: spacing.xl, gap: spacing.xs },
+  back: { width: 40, height: 40, alignItems: 'flex-start', justifyContent: 'center', marginBottom: spacing.md, marginLeft: -8 },
+  title: { fontFamily: fonts.displayMedium, fontSize: 30, color: colors.espresso },
+  sub: { fontFamily: fonts.body, fontSize: 14, color: colors.clay, marginTop: spacing.xs },
+  label: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase', marginTop: spacing.md, marginBottom: spacing.xs },
+  input: { height: 52, borderWidth: 1, borderColor: colors.borderSoft, borderRadius: radius.md, paddingHorizontal: spacing.md, fontFamily: fonts.body, fontSize: 15, color: colors.espresso, backgroundColor: colors.creme },
+  err: { color: colors.espresso, fontFamily: fonts.body, marginTop: spacing.md },
+});

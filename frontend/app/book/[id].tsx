@@ -1,0 +1,154 @@
+import React, { useCallback, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
+import { Feather } from '@expo/vector-icons';
+import { colors, fonts, radius, spacing } from '@/src/theme';
+import { QuoteCard, Quote } from '@/src/components/QuoteCard';
+import { api } from '@/src/api';
+
+export default function BookDetail() {
+  const insets = useSafeAreaInsets();
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const router = useRouter();
+  const [book, setBook] = useState<any>(null);
+  const [quotes, setQuotes] = useState<Quote[]>([]);
+  const [rating, setRating] = useState(0);
+  const [recap, setRecap] = useState('');
+  const [newLesson, setNewLesson] = useState('');
+  const [lessons, setLessons] = useState<string[]>([]);
+
+  useFocusEffect(useCallback(() => {
+    (async () => {
+      const b = await api<any>(`/books/${id}`); setBook(b);
+      setRating(b.rating || 0); setRecap(b.recap || ''); setLessons(b.lessons || []);
+      const q = await api<{ quotes: Quote[] }>(`/quotes?book_id=${id}`);
+      setQuotes(q.quotes);
+    })();
+  }, [id]));
+
+  const saveField = async (patch: any) => { await api(`/books/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }); };
+  const addLesson = async () => {
+    if (!newLesson.trim()) return;
+    const next = [...lessons, newLesson.trim()];
+    setLessons(next); setNewLesson('');
+    await saveField({ lessons: next });
+  };
+
+  if (!book) return <View style={{ flex: 1, backgroundColor: colors.glacier }} />;
+  const isWattpad = book.type === 'wattpad';
+  const isEtude = book.type === 'etude';
+  const total = isWattpad ? book.chapters : book.pages;
+  const prog = isWattpad ? book.progress_chapter : book.progress_page;
+  const pct = total && prog ? Math.min(100, Math.round((prog / total) * 100)) : 0;
+
+  return (
+    <View style={{ flex: 1, backgroundColor: colors.glacier }} testID="screen-book-detail">
+      <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
+        <Pressable onPress={() => router.back()} testID="book-back" style={styles.iconBtn}><Feather name="chevron-left" size={22} color={colors.espresso} /></Pressable>
+        <Text style={styles.headerTitle} numberOfLines={1}>{book.title}</Text>
+        <View style={{ width: 40 }} />
+      </View>
+      <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + spacing.xxl }}>
+        <View style={styles.top}>
+          <View style={styles.cover}><Text style={styles.coverInitial}>{(book.title[0] || 'M').toUpperCase()}</Text></View>
+          <View style={{ flex: 1, gap: 4 }}>
+            {isWattpad ? <Text style={styles.badge}>HISTOIRE WATTPAD</Text> : isEtude ? <Text style={styles.badge}>ÉTUDES</Text> : null}
+            <Text style={styles.title}>{book.title}</Text>
+            {book.author ? <Text style={styles.author}>{book.author}</Text> : null}
+            <View style={{ flexDirection: 'row', gap: 4, marginTop: 4 }}>
+              {[1,2,3,4,5].map(i => (
+                <Pressable key={i} testID={`star-${i}`} onPress={async () => { setRating(i); await saveField({ rating: i }); }}>
+                  <Feather name="star" size={18} color={colors.chambray} style={{ opacity: i <= rating ? 1 : 0.3 }} />
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        </View>
+
+        {total ? (
+          <View style={{ marginTop: spacing.lg }}>
+            <View style={styles.progressBar}><View style={[styles.progressFill, { width: `${pct}%` }]} /></View>
+            <Text style={styles.progressText}>{prog || 0} / {total} {isWattpad ? 'chap.' : 'p.'} · {pct}%</Text>
+          </View>
+        ) : null}
+
+        <Text style={styles.sectionLabel}>Mon récapitulatif</Text>
+        <TextInput
+          testID="book-recap"
+          value={recap} onChangeText={setRecap}
+          onEndEditing={() => saveField({ recap })}
+          placeholder="Ce que ce livre te laisse en tête…"
+          placeholderTextColor={colors.clay}
+          style={[styles.input, { minHeight: 90, textAlignVertical: 'top' }]}
+          multiline
+        />
+
+        <Text style={styles.sectionLabel}>Enseignements tirés</Text>
+        <View style={{ gap: 8 }}>
+          {lessons.map((l, i) => (
+            <View key={i} style={styles.lessonRow}>
+              <View style={styles.bullet} />
+              <Text style={styles.lessonText}>{l}</Text>
+            </View>
+          ))}
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TextInput testID="book-new-lesson" value={newLesson} onChangeText={setNewLesson} placeholder="Ajoute un enseignement…" placeholderTextColor={colors.clay} style={[styles.input, { flex: 1 }]} />
+            <Pressable testID="btn-add-lesson" onPress={addLesson} style={styles.plusBtn}><Feather name="plus" size={20} color={colors.creme} /></Pressable>
+          </View>
+        </View>
+
+        <Text style={styles.sectionLabel}>Où trouver ce livre</Text>
+        <View style={{ gap: 8 }}>
+          {[
+            { name: 'Librairies indépendantes', tag: 'leslibraires.fr' },
+            { name: 'Fnac', tag: 'fnac.com' },
+            { name: 'Amazon', tag: 'amazon.fr' },
+          ].map(l => (
+            <View key={l.name} style={styles.linkRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.linkName}>{l.name}</Text>
+                <Text style={styles.linkTag}>{l.tag}  ·  LIEN AFFILIÉ</Text>
+              </View>
+              <Feather name="external-link" size={18} color={colors.chambray} />
+            </View>
+          ))}
+          <Text style={styles.linkNote}>Commission reversée à Manent, sans surcoût pour toi.</Text>
+        </View>
+
+        <Text style={styles.sectionLabel}>Citations du livre ({quotes.length})</Text>
+        {quotes.length === 0 ? (
+          <Text style={styles.emptyQuotes}>Aucune citation pour l'instant. Utilise la capture pour en ajouter.</Text>
+        ) : quotes.map(q => (
+          <QuoteCard key={q.quote_id} quote={q} onPress={() => router.push({ pathname: '/quote/[id]', params: { id: q.quote_id } })} />
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSoft, backgroundColor: colors.glacier },
+  iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontFamily: fonts.displayMedium, fontSize: 18, color: colors.espresso, flex: 1, textAlign: 'center', marginHorizontal: spacing.md },
+  top: { flexDirection: 'row', gap: spacing.md },
+  cover: { width: 96, height: 144, borderRadius: radius.sm, backgroundColor: colors.bisque, alignItems: 'center', justifyContent: 'center' },
+  coverInitial: { fontFamily: fonts.displayMedium, fontSize: 54, color: colors.espresso },
+  badge: { fontFamily: fonts.bodyMedium, fontSize: 9, color: colors.creme, backgroundColor: colors.clay, alignSelf: 'flex-start', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 3, letterSpacing: 1 },
+  title: { fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso },
+  author: { fontFamily: fonts.body, fontSize: 14, color: colors.clay },
+  progressBar: { height: 4, backgroundColor: colors.borderSoft, borderRadius: 2, overflow: 'hidden' },
+  progressFill: { height: 4, backgroundColor: colors.chambray },
+  progressText: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.clay, letterSpacing: 1, marginTop: 4, textTransform: 'uppercase' },
+  sectionLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase', marginTop: spacing.xl, marginBottom: spacing.sm },
+  input: { minHeight: 44, borderWidth: 1, borderColor: colors.borderSoft, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontFamily: fonts.body, fontSize: 15, color: colors.espresso, backgroundColor: colors.creme },
+  lessonRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start', paddingVertical: 4 },
+  bullet: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.chambray, marginTop: 8 },
+  lessonText: { flex: 1, fontFamily: fonts.body, fontSize: 15, color: colors.espresso, lineHeight: 22 },
+  plusBtn: { width: 44, height: 44, borderRadius: radius.md, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },
+  linkRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft },
+  linkName: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.espresso },
+  linkTag: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.clay, letterSpacing: 1.5, marginTop: 2, textTransform: 'uppercase' },
+  linkNote: { fontFamily: fonts.body, fontSize: 12, color: colors.clay, marginTop: 4, fontStyle: 'italic' },
+  emptyQuotes: { fontFamily: fonts.body, fontSize: 14, color: colors.clay },
+});

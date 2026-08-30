@@ -1,0 +1,45 @@
+{
+  "summary": "Backend regression suite executed for Manent MVP (22 tests). 21/22 passed. Auth (register/login/me), themes, users patch, books CRUD, Google Books ISBN lookup, quotes CRUD + auto book progress, feed + theme filter, boards + pin, Claude Sonnet 4.6 vision (transcribe + page_number) via emergentintegrations, and /api/upload (data-URL fallback) all work. One CRITICAL route-ordering bug: GET /api/books/search?q=... is shadowed by GET /api/books/{book_id} and requires auth then returns 404. /api/books/search/isbn works because it has an extra path segment.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "GET /api/books/search",
+        "issue": "Route shadowed by /api/books/{book_id}. Unauthenticated call returns 401 'not_authenticated'; authenticated call returns 404 'not_found' because FastAPI treats 'search' as a book_id. Fix: declare @api.get('/books/search') and @api.get('/books/search/isbn') BEFORE @api.get('/books/{book_id}') in server.py.",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/conftest.py",
+    "/app/backend/tests/test_manent_api.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Reorder book routes in /app/backend/server.py: move @api.get('/books/search') and @api.get('/books/search/isbn') definitions ABOVE @api.get('/books/{book_id}') so path matching resolves them correctly.",
+    "After fix, rerun: pytest /app/backend/tests/test_manent_api.py::TestBooksSearch::test_search_query to confirm 200 with results list."
+  ],
+  "critical_code_review_comments": [
+    "Route ordering bug: /books/{book_id} declared before /books/search causes shadowing (server.py L285 before L329).",
+    "conftest.py: EXPO_BACKEND_URL is not present in frontend/.env; the frontend uses EXPO_PUBLIC_BACKEND_URL. Tests read that key as fallback. Confirm which convention the app expects long-term.",
+    "server.py handle generation for pseudo uses .lower() but does not strip diacritics — 'Léa' becomes handle 'léa' which is stored as-is. Feed/quote detail work but the handle contains a non-ASCII char which may break URL slugs later.",
+    "Supabase publishable key cannot upload; /api/upload correctly falls back to data URL (as expected per review request note).",
+    "auth/session (Emergent Google) not exercised — no session_id available in test env; endpoint reachable and returns 401 for invalid ids (not tested to avoid flakiness)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/conftest.py (created)",
+    "/app/backend/tests/test_manent_api.py (created)"
+  ],
+  "success_rate": {"backend": "95.5% (21/22)", "frontend": "N/A (skipped per request)"},
+  "seed_data_creation": "POST /api/dev/seed invoked during TestFeed; creates demo user 'user_demo_manent' with 5 public quotes across L'Alchimiste, Une si longue lettre, Les Étoiles Perdues. Idempotent when >5 public quotes already exist.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Base URL comes from frontend/.env EXPO_PUBLIC_BACKEND_URL. Test suite at /app/backend/tests. Run with: EXPO_PUBLIC_BACKEND_URL=<url> pytest /app/backend/tests -v. Vision endpoint takes 8-15s; keep timeout>=60. Only failing test after route-reorder fix should be zero.",
+  "rca_of_issue": "FastAPI matches routes in registration order. In server.py, @api.get('/books/{book_id}') is registered at line 285 while @api.get('/books/search') is registered at line 329. Requests to /api/books/search therefore match the parametric route first with book_id='search'. Because get_book requires Depends(get_current_user), unauthenticated calls fail 401. Authenticated calls proceed to the DB lookup which finds no book with id='search' and returns 404. Reproduction: curl $BASE/api/books/search?q=Coelho -> 401; with Bearer token -> 404. Mitigation: physically move the two /books/search... route definitions above /books/{book_id} in server.py."
+}

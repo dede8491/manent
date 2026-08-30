@@ -1,0 +1,172 @@
+{
+  "app_name": "Manent",
+  "personality": "3 Editorial Mobile (with strict custom color palette overrides)",
+  "personality_one_liner": "Calm literary library, paper and ink, editorial warmth.",
+  "color": {
+    "surface": "#D2E2EC",
+    "onSurface": "#3A2119",
+    "surfaceSecondary": "#EBCDB7",
+    "onSurfaceSecondary": "#3A2119",
+    "surfaceTertiary": "#F5EDE4",
+    "onSurfaceTertiary": "#3A2119",
+    "surfaceInverse": "#3A2119",
+    "onSurfaceInverse": "#F5EDE4",
+    "brand": "#79A3C3",
+    "brandPrimary": "#79A3C3",
+    "onBrandPrimary": "#3A2119",
+    "brandSecondary": "#957662",
+    "onBrandSecondary": "#F5EDE4",
+    "brandTertiary": "#EBCDB7",
+    "onBrandTertiary": "#3A2119",
+    "success": "#79A3C3",
+    "onSuccess": "#3A2119",
+    "warning": "#957662",
+    "onWarning": "#F5EDE4",
+    "error": "#3A2119",
+    "onError": "#F5EDE4",
+    "info": "#79A3C3",
+    "onInfo": "#3A2119",
+    "border": "#BBA99C",
+    "borderStrong": "#957662",
+    "divider": "#BBA99C"
+  },
+  "dark_color": {
+    "surface": "#3A2119",
+    "onSurface": "#F5EDE4",
+    "surfaceSecondary": "#4A2E23",
+    "onSurfaceSecondary": "#F5EDE4",
+    "surfaceTertiary": "#2D1913",
+    "onSurfaceTertiary": "#F5EDE4",
+    "surfaceInverse": "#F5EDE4",
+    "onSurfaceInverse": "#3A2119",
+    "brand": "#79A3C3",
+    "brandPrimary": "#79A3C3",
+    "onBrandPrimary": "#3A2119",
+    "brandSecondary": "#957662",
+    "onBrandSecondary": "#F5EDE4",
+    "brandTertiary": "#4A2E23",
+    "onBrandTertiary": "#F5EDE4",
+    "success": "#79A3C3",
+    "onSuccess": "#3A2119",
+    "warning": "#957662",
+    "onWarning": "#F5EDE4",
+    "error": "#F5EDE4",
+    "onError": "#3A2119",
+    "info": "#79A3C3",
+    "onInfo": "#3A2119",
+    "border": "#5C3C30",
+    "borderStrong": "#957662",
+    "divider": "#5C3C30"
+  },
+  "typography": {
+    "displayFontFamily": "CormorantGaramond-Italic",
+    "textFontFamily": "Inter-Regular",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24,
+      "3xl": 32
+    }
+  },
+  "spacing": {
+    "rule": "Generous vertical breathing room. Whitespace carries the calm library personality.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 4,
+    "md": 8,
+    "lg": 16,
+    "pill": 999
+  },
+  "shadow_tier": "0",
+  "navigation": "bottom_tabs",
+  "icon_set": "Feather",
+  "glassmorphism": {
+    "enabled": false,
+    "do's": [],
+    "dont's": ["Do not use blur or glass effects. Interface should feel like paper and ink."]
+  },
+  "platform_libraries": {
+    "image": "expo-image",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Home",
+      "purpose": "Home feed with masonry grid of quotes and books.",
+      "states": {
+        "loading": "Centered minimalist spinner (Chambray).",
+        "empty": "Invitation in tutoiement: 'Ton premier tableau t\\'attend.'",
+        "error": "Readable message + Retry button (Espresso)."
+      },
+      "layout": "Pinterest-style masonry grid. 2 columns. Cards have Bisque background. Clean top header with 'Manent' wordmark in Cormorant italic Espresso."
+    },
+    {
+      "name": "Bibliothèque",
+      "purpose": "Library of paper books, Wattpad stories, and study books.",
+      "states": {
+        "loading": "Centered minimalist spinner.",
+        "empty": "Invitation to add the first book.",
+        "error": "Readable message + Retry button."
+      },
+      "layout": "Tabbed or segmented list (Inter uppercase for tabs). Clean list or grid of book covers with progress tracking."
+    },
+    {
+      "name": "Capture Modal",
+      "purpose": "Photo capture of book passages with AI transcription.",
+      "states": {
+        "loading": "Transcription loading state.",
+        "empty": "Camera view.",
+        "error": "Error capturing image."
+      },
+      "layout": "Full screen camera view overlay with minimalist controls."
+    },
+    {
+      "name": "Quote Detail",
+      "purpose": "View a quote, edit it, and generate a quote card for sharing.",
+      "states": {
+        "loading": "Centered minimalist spinner.",
+        "empty": "N/A",
+        "error": "Readable message + Retry button."
+      },
+      "layout": "Showcase the 'Signature quote card'. Large page number, Bisque background, oversized Chambray opening quote mark. Export buttons (1080x1350 and 1080x1920) at bottom."
+    }
+  ],
+  "images": {
+    "home_hero": {
+      "url": "https://images.unsplash.com/photo-1603950227760-e609ce8e15b4?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1Mjh8MHwxfHNlYXJjaHwxfHxhZXN0aGV0aWMlMjBib29rJTIwcmVhZGluZyUyMGtpbmZvbGt8ZW58MHx8fHwxNzg4MDk0ODkzfDA&ixlib=rb-4.1.0&q=85",
+      "dark": "https://images.unsplash.com/photo-1722182877533-7378b60bf1e8?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzV8MHwxfHNlYXJjaHwxfHxvbGQlMjBsaWJyYXJ5JTIwY2FsbXxlbnwwfHx8fDE3ODgwOTQ4OTN8MA&ixlib=rb-4.1.0&q=85",
+      "alt": "Aesthetic reading setup"
+    },
+    "paper_texture": {
+      "url": "https://images.unsplash.com/photo-1637325258040-d2f09636ecf6?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1ODR8MHwxfHNlYXJjaHwxfHxtaW5pbWFsaXN0JTIwcGFwZXIlMjB0ZXh0dXJlfGVufDB8fHx8MTc4ODA5NDg5M3ww&ixlib=rb-4.1.0&q=85",
+      "alt": "Minimalist paper texture"
+    },
+    "avatar_placeholder": {
+      "url": "https://images.unsplash.com/photo-1622547748225-3fc4abd2cca0?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxOTF8MHwxfHNlYXJjaHwxfHxtaW5pbWFsaXN0JTIwcHJvZmlsZSUyMHBpY3R1cmV8ZW58MHx8fHwxNzg4MDk0ODkzfDA&ixlib=rb-4.1.0&q=85",
+      "alt": "Minimalist avatar"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Load fonts manually using expo-font and local assets (e.g., .ttf files), avoiding @expo-google-fonts packages as per the strict instruction.",
+    "Implement the strict color palette exactly as specified. Never use pure black. Ensure Espresso (#3A2119) is used for main text and icons. Glacier (#D2E2EC) is the default screen background.",
+    "Use ONLY Chambray (#79A3C3) as the single accent color for primary buttons, active states, and badges. Do not introduce other accent colors.",
+    "Typography is strictly Cormorant Garamond Italic (500) for titles/quotes and Inter (400/500) for UI. Use uppercase Inter with 1-3px letter-spacing (tracking) at 11-12px for metadata, page numbers, and stats.",
+    "Ensure all text is in sentence case, never Title Case.",
+    "Implement the custom bottom tab bar with 5 entries. The center 'Capture' button must be elevated, a Chambray circle, opening a modal. Tab icons must be outline 1.5px (use Feather or similarly clean outline icons), with solid fill ONLY for the active state (using Chambray).",
+    "Build the Signature Quote Card strictly: Bisque background, oversized Chambray opening quote mark, quote in Cormorant italic Espresso, source in uppercase letter-spaced Clay, divider line, 'Manent' signature + @handle, and large page number (Cormorant 500) with PAGE or CHAP. label.",
+    "Avoid heavy shadows, gradients, and neons. The design must feel flat, editorial, like paper and ink.",
+    "Use tutoiement in all French copy (e.g., 'Ton premier tableau t\\'attend').",
+    "No emojis anywhere in the UI."
+  ]
+}
