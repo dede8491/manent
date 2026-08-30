@@ -1,8 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Modal, FlatList } from 'react-native';
+import React, { useEffect, useState, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, Modal, FlatList, Platform, Alert, Linking, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
+import { captureRef } from 'react-native-view-shot';
+import * as MediaLibrary from 'expo-media-library';
+import * as Sharing from 'expo-sharing';
+import { ShareQuoteCard } from '@/src/components/ShareQuoteCard';
 import { colors, fonts, radius, spacing } from '@/src/theme';
 import { QuoteCard, Quote } from '@/src/components/QuoteCard';
 import { api } from '@/src/api';
@@ -16,6 +20,9 @@ export default function QuoteDetail() {
   const [style, setStyle] = useState<'papier'|'encre'|'glacier'>('papier');
   const [pinning, setPinning] = useState(false);
   const [boards, setBoards] = useState<any[]>([]);
+  const shareRef = useRef<View>(null);
+  const [busy, setBusy] = useState<null | 'save' | 'share'>(null);
+  const [feedback, setFeedback] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -33,6 +40,110 @@ export default function QuoteDetail() {
   const del = async () => {
     await api(`/quotes/${id}`, { method: 'DELETE' });
     router.back();
+  };
+
+  // ---- Export image 1080×1350 ----
+  const capture = async (): Promise<string> => {
+    return await captureRef(shareRef, {
+      format: 'png',
+      quality: 1,
+      width: 1080,
+      height: 1350,
+      result: Platform.OS === 'web' ? 'data-uri' : 'tmpfile',
+    });
+  };
+
+  const downloadWeb = (dataUri: string) => {
+    const a = document.createElement('a');
+    a.href = dataUri;
+    a.download = 'manent-citation.png';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
+  const openSettingsAlert = () => {
+    Alert.alert(
+      'Accès aux photos',
+      "Pour enregistrer ta quote card, autorise l'accès aux photos dans les réglages.",
+      [
+        { text: 'Annuler', style: 'cancel' },
+        { text: 'Ouvrir les réglages', onPress: () => Linking.openSettings() },
+      ],
+    );
+  };
+
+  const ensureMediaPermission = async (): Promise<boolean> => {
+    const current = await MediaLibrary.getPermissionsAsync(true);
+    if (current.granted) return true;
+    if (!current.canAskAgain) { openSettingsAlert(); return false; }
+    const proceed = await new Promise<boolean>(resolve => {
+      Alert.alert(
+        'Enregistrer dans ta galerie',
+        "Manent enregistre ta quote card dans tes photos pour la partager facilement.",
+        [
+          { text: 'Annuler', style: 'cancel', onPress: () => resolve(false) },
+          { text: 'Continuer', onPress: () => resolve(true) },
+        ],
+      );
+    });
+    if (!proceed) return false;
+    const req = await MediaLibrary.requestPermissionsAsync(true);
+    if (req.granted) return true;
+    if (!req.canAskAgain) openSettingsAlert();
+    return false;
+  };
+
+  const saveToGallery = async () => {
+    setFeedback('');
+    setBusy('save');
+    try {
+      if (Platform.OS === 'web') {
+        const uri = await capture();
+        downloadWeb(uri);
+        setFeedback('Image téléchargée.');
+      } else {
+        const ok = await ensureMediaPermission();
+        if (!ok) return;
+        const uri = await capture();
+        await MediaLibrary.saveToLibraryAsync(uri);
+        setFeedback('Enregistrée dans ta galerie.');
+      }
+    } catch {
+      setFeedback("Impossible de générer l'image. Réessaie.");
+    } finally { setBusy(null); }
+  };
+
+  const shareImage = async () => {
+    setFeedback('');
+    setBusy('share');
+    try {
+      const uri = await capture();
+      if (Platform.OS === 'web') {
+        try {
+          const blob = await (await fetch(uri)).blob();
+          const file = new File([blob], 'manent-citation.png', { type: 'image/png' });
+          const nav: any = navigator;
+          if (nav.canShare && nav.canShare({ files: [file] })) {
+            await nav.share({ files: [file], title: 'Manent' });
+          } else {
+            downloadWeb(uri);
+            setFeedback('Image téléchargée — partage-la sur Instagram ou WhatsApp.');
+          }
+        } catch {
+          downloadWeb(uri);
+          setFeedback('Image téléchargée — partage-la sur Instagram ou WhatsApp.');
+        }
+      } else {
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Partager la citation' });
+        } else {
+          setFeedback("Le partage n'est pas disponible sur cet appareil.");
+        }
+      }
+    } catch {
+      setFeedback("Impossible de générer l'image. Réessaie.");
+    } finally { setBusy(null); }
   };
 
   if (!quote) return <View style={{ flex: 1, backgroundColor: colors.glacier }} />;
@@ -77,9 +188,34 @@ export default function QuoteDetail() {
         </View>
 
         <View style={{ height: spacing.lg }} />
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Pressable testID="btn-save-image" onPress={saveToGallery} disabled={busy !== null} style={[styles.shareBtn, styles.shareBtnGhost]}>
+            {busy === 'save' ? <ActivityIndicator size="small" color={colors.espresso} /> : (
+              <>
+                <Feather name="download" size={16} color={colors.espresso} />
+                <Text style={styles.shareBtnGhostText}>Galerie</Text>
+              </>
+            )}
+          </Pressable>
+          <Pressable testID="btn-share-image" onPress={shareImage} disabled={busy !== null} style={styles.shareBtn}>
+            {busy === 'share' ? <ActivityIndicator size="small" color={colors.creme} /> : (
+              <>
+                <Feather name="share" size={16} color={colors.creme} />
+                <Text style={styles.shareBtnText}>Partager l&rsquo;image</Text>
+              </>
+            )}
+          </Pressable>
+        </View>
+        {feedback ? <Text style={styles.feedback} testID="share-feedback">{feedback}</Text> : null}
+        <View style={{ height: spacing.md }} />
         <PrimaryButton testID="btn-pin" title="Épingler sur un tableau" onPress={openPin} />
         <GhostButton title="Retour" onPress={() => router.back()} />
       </ScrollView>
+
+      {/* Rendu hors écran 1080×1350 pour l'export */}
+      <View style={styles.offscreen} pointerEvents="none">
+        <ShareQuoteCard ref={shareRef} quote={quote} variant={style} />
+      </View>
 
       <Modal visible={pinning} transparent animationType="slide" onRequestClose={() => setPinning(false)}>
         <View style={styles.modalOverlay}>
@@ -125,6 +261,12 @@ const styles = StyleSheet.create({
   styleChip: { flex: 1, height: 44, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.creme },
   styleChipActive: { backgroundColor: colors.chambray, borderColor: colors.chambray },
   styleText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.espresso },
+  shareBtn: { flex: 1.4, height: 52, borderRadius: radius.md, backgroundColor: colors.chambray, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  shareBtnGhost: { flex: 1, backgroundColor: colors.creme, borderWidth: 1, borderColor: colors.borderSoft },
+  shareBtnText: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.creme },
+  shareBtnGhostText: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.espresso },
+  feedback: { fontFamily: fonts.body, fontSize: 13, color: colors.clay, textAlign: 'center', marginTop: spacing.sm },
+  offscreen: { position: 'absolute', top: 0, left: -2000 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(58,33,25,0.4)', justifyContent: 'flex-end' },
   modal: { backgroundColor: colors.glacier, padding: spacing.xl, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '70%' },
   grabber: { width: 44, height: 4, backgroundColor: colors.borderSoft, borderRadius: 2, alignSelf: 'center', marginBottom: spacing.md },

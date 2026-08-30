@@ -249,6 +249,7 @@ class BookPatch(BaseModel):
     progress_chapter: Optional[int] = None
     exam_date: Optional[str] = None
     level: Optional[str] = None
+    sheet: Optional[dict] = None  # fiche d'études: author_bio, characters, summary, themes
 
 
 @api.post("/books")
@@ -261,6 +262,7 @@ async def create_book(body: BookCreate, user=Depends(get_current_user)):
         "rating": 0,
         "recap": "",
         "lessons": [],
+        "sheet": {},
         "progress_page": 0,
         "progress_chapter": 0,
         "created_at": now_utc(),
@@ -516,6 +518,49 @@ async def delete_quote(quote_id: str, user=Depends(get_current_user)):
     await db.quotes.delete_one({"quote_id": quote_id, "user_id": user["user_id"]})
     await db.board_quotes.delete_many({"quote_id": quote_id})
     return {"ok": True}
+
+
+# ============ Recherche fine ============
+@api.get("/search")
+async def search_all(
+    q: str = "",
+    theme: Optional[str] = None,
+    book_id: Optional[str] = None,
+    scope: str = "all",
+    user=Depends(get_current_user),
+):
+    uid = user["user_id"]
+    rx = {"$regex": re.escape(q.strip()), "$options": "i"} if q.strip() else None
+    out = {"quotes": [], "books": []}
+
+    if scope in ("all", "quotes"):
+        qq: dict = {"user_id": uid}
+        if rx:
+            qq["$or"] = [{"text": rx}, {"note": rx}]
+        if theme:
+            qq["themes"] = theme
+        if book_id:
+            qq["book_id"] = book_id
+        quotes = await db.quotes.find(qq, {"_id": 0}).sort("created_at", -1).to_list(200)
+        book_ids = list({x["book_id"] for x in quotes if x.get("book_id")})
+        bmap = {}
+        if book_ids:
+            bl = await db.books.find(
+                {"book_id": {"$in": book_ids}},
+                {"_id": 0, "book_id": 1, "title": 1, "author": 1, "type": 1},
+            ).to_list(200)
+            bmap = {b["book_id"]: b for b in bl}
+        for x in quotes:
+            x["book"] = bmap.get(x.get("book_id"))
+        out["quotes"] = quotes
+
+    if scope in ("all", "books") and not theme and not book_id:
+        bq: dict = {"user_id": uid}
+        if rx:
+            bq["$or"] = [{"title": rx}, {"author": rx}, {"recap": rx}]
+        out["books"] = await db.books.find(bq, {"_id": 0}).sort("created_at", -1).to_list(100)
+
+    return out
 
 
 # ============ Boards ============

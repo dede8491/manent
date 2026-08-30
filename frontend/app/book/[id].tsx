@@ -1,10 +1,13 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Platform, Alert, Linking, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { colors, fonts, radius, spacing } from '@/src/theme';
 import { QuoteCard, Quote } from '@/src/components/QuoteCard';
+import { StudySheet } from '@/src/components/StudySheet';
+import { toBase64 } from '@/src/image';
 import { api } from '@/src/api';
 
 export default function BookDetail() {
@@ -17,6 +20,8 @@ export default function BookDetail() {
   const [recap, setRecap] = useState('');
   const [newLesson, setNewLesson] = useState('');
   const [lessons, setLessons] = useState<string[]>([]);
+  const [detecting, setDetecting] = useState(false);
+  const [detectedPage, setDetectedPage] = useState<number | null>(null);
 
   useFocusEffect(useCallback(() => {
     (async () => {
@@ -33,6 +38,52 @@ export default function BookDetail() {
     const next = [...lessons, newLesson.trim()];
     setLessons(next); setNewLesson('');
     await saveField({ lessons: next });
+  };
+
+  // ---- Progression par photo de page (Claude Vision) ----
+  const openCameraSettings = () => {
+    Alert.alert(
+      "Accès à l'appareil photo",
+      'Autorise la caméra dans les réglages pour photographier ta page.',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        { text: 'Ouvrir les réglages', onPress: () => Linking.openSettings() },
+      ],
+    );
+  };
+
+  const photoProgress = async () => {
+    let res: ImagePicker.ImagePickerResult;
+    if (Platform.OS === 'web') {
+      res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
+    } else {
+      const current = await ImagePicker.getCameraPermissionsAsync();
+      if (!current.granted) {
+        if (!current.canAskAgain) { openCameraSettings(); return; }
+        const req = await ImagePicker.requestCameraPermissionsAsync();
+        if (!req.granted) { if (!req.canAskAgain) openCameraSettings(); return; }
+      }
+      res = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
+    }
+    if (res.canceled || !res.assets?.[0]?.uri) return;
+    setDetecting(true);
+    try {
+      const b64 = await toBase64(res.assets[0].uri);
+      const r = await api<{ page_number: number }>('/vision', { method: 'POST', body: JSON.stringify({ image_base64: b64, mode: 'page_number' }) });
+      setDetectedPage(r.page_number > 0 ? r.page_number : -1);
+    } catch {
+      setDetectedPage(-1);
+    } finally { setDetecting(false); }
+  };
+
+  const confirmDetectedPage = async () => {
+    if (!detectedPage || detectedPage < 1) return;
+    const patch: any = { progress_page: detectedPage };
+    if (book.pages && detectedPage >= book.pages) patch.status = 'termine';
+    else if (book.status === 'a_lire') patch.status = 'en_cours';
+    const b = await api<any>(`/books/${id}`, { method: 'PATCH', body: JSON.stringify(patch) });
+    setBook(b);
+    setDetectedPage(null);
   };
 
   if (!book) return <View style={{ flex: 1, backgroundColor: colors.glacier }} />;
@@ -72,6 +123,45 @@ export default function BookDetail() {
             <Text style={styles.progressText}>{prog || 0} / {total} {isWattpad ? 'chap.' : 'p.'} · {pct}%</Text>
           </View>
         ) : null}
+
+        {!isWattpad && (
+          <View style={{ marginTop: spacing.md }}>
+            {detectedPage === null ? (
+              <Pressable testID="btn-photo-page" onPress={photoProgress} disabled={detecting} style={styles.photoBtn}>
+                {detecting
+                  ? <ActivityIndicator size="small" color={colors.creme} />
+                  : <Feather name="camera" size={16} color={colors.creme} />}
+                <Text style={styles.photoBtnText}>{detecting ? 'Analyse de la page…' : 'Photographier ma dernière page lue'}</Text>
+              </Pressable>
+            ) : detectedPage === -1 ? (
+              <View style={styles.detectBox}>
+                <Text style={styles.detectText}>Aucun numéro de page détecté. Réessaie avec une photo nette du coin de la page.</Text>
+                <Pressable testID="btn-page-close" onPress={() => setDetectedPage(null)} style={[styles.detectGhost, { marginTop: spacing.sm }]}>
+                  <Text style={styles.detectGhostText}>Fermer</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View style={styles.detectBox} testID="page-detected-box">
+                <Text style={styles.detectText}>Page détectée : <Text style={styles.detectNum}>{detectedPage}</Text></Text>
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: spacing.sm }}>
+                  <Pressable testID="btn-page-confirm" onPress={confirmDetectedPage} style={styles.detectConfirm}>
+                    <Text style={styles.photoBtnText}>Mettre à jour</Text>
+                  </Pressable>
+                  <Pressable testID="btn-page-cancel" onPress={() => setDetectedPage(null)} style={styles.detectGhost}>
+                    <Text style={styles.detectGhostText}>Annuler</Text>
+                  </Pressable>
+                </View>
+              </View>
+            )}
+          </View>
+        )}
+
+        {isEtude && (
+          <>
+            <Text style={styles.sectionLabel}>Fiche scolaire</Text>
+            <StudySheet key={book.book_id} sheet={book.sheet} onSave={(s) => saveField({ sheet: s })} />
+          </>
+        )}
 
         <Text style={styles.sectionLabel}>Mon récapitulatif</Text>
         <TextInput
@@ -140,6 +230,14 @@ const styles = StyleSheet.create({
   progressBar: { height: 4, backgroundColor: colors.borderSoft, borderRadius: 2, overflow: 'hidden' },
   progressFill: { height: 4, backgroundColor: colors.chambray },
   progressText: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.clay, letterSpacing: 1, marginTop: 4, textTransform: 'uppercase' },
+  photoBtn: { height: 48, borderRadius: radius.md, backgroundColor: colors.chambray, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  photoBtnText: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.creme },
+  detectBox: { padding: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft },
+  detectText: { fontFamily: fonts.body, fontSize: 14, color: colors.espresso, lineHeight: 20 },
+  detectNum: { fontFamily: fonts.displayMedium, fontSize: 20, color: colors.chambray },
+  detectConfirm: { flex: 1, height: 44, borderRadius: radius.md, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },
+  detectGhost: { flex: 1, height: 44, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center' },
+  detectGhostText: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.espresso },
   sectionLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase', marginTop: spacing.xl, marginBottom: spacing.sm },
   input: { minHeight: 44, borderWidth: 1, borderColor: colors.borderSoft, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontFamily: fonts.body, fontSize: 15, color: colors.espresso, backgroundColor: colors.creme },
   lessonRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start', paddingVertical: 4 },

@@ -36,6 +36,12 @@
       "expo-camera",
       "expo-image-picker",
       [
+        "expo-media-library",
+        {
+          "savePhotosPermission": "Enregistrer tes quote cards dans ta galerie"
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-image.png",

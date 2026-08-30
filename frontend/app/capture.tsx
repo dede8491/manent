@@ -4,27 +4,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system/legacy';
 import { colors, fonts, radius, spacing } from '@/src/theme';
 import { PrimaryButton, GhostButton } from '@/src/components/Button';
+import { toBase64 } from '@/src/image';
 import { api } from '@/src/api';
-
-async function toBase64(uri: string): Promise<string> {
-  if (uri.startsWith('data:')) return uri;
-  try {
-    const b64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-    return `data:image/jpeg;base64,${b64}`;
-  } catch {
-    // web fallback
-    const res = await fetch(uri);
-    const blob = await res.blob();
-    return await new Promise((resolve, reject) => {
-      const r = new FileReader();
-      r.onerror = reject; r.onload = () => resolve(r.result as string);
-      r.readAsDataURL(blob);
-    });
-  }
-}
 
 export default function CaptureModal() {
   const insets = useSafeAreaInsets();

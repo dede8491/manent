@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TextInput, Pressable, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, Pressable, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -17,7 +17,6 @@ export default function Home() {
   const [active, setActive] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [q, setQ] = useState('');
 
   const load = useCallback(async (theme?: string | null) => {
     try {
@@ -41,7 +40,7 @@ export default function Home() {
 
   // masonry: split into 2 columns
   const colWidth = (width - spacing.xl * 2 - spacing.md) / 2;
-  const shown = q ? quotes.filter(x => x.text.toLowerCase().includes(q.toLowerCase())) : quotes;
+  const shown = quotes;
   const col1: Quote[] = [], col2: Quote[] = [];
   shown.forEach((x, i) => (i % 2 === 0 ? col1 : col2).push(x));
 
@@ -50,16 +49,10 @@ export default function Home() {
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
         <Wordmark size={28} />
         <View style={styles.searchRow}>
-          <View style={styles.search}>
+          <Pressable testID="home-search" onPress={() => router.push('/search')} style={styles.search}>
             <Feather name="search" size={16} color={colors.clay} />
-            <TextInput
-              testID="home-search"
-              value={q} onChangeText={setQ}
-              placeholder="Cherche une idée, un thème…"
-              placeholderTextColor={colors.clay}
-              style={styles.searchInput}
-            />
-          </View>
+            <Text style={styles.searchPlaceholder}>Cherche une citation, un livre…</Text>
+          </Pressable>
         </View>
         <View style={styles.chipRow}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: spacing.xl }}>
@@ -112,7 +105,7 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: 0, paddingBottom: spacing.sm, backgroundColor: colors.glacier, gap: spacing.md },
   searchRow: { paddingHorizontal: spacing.xl },
   search: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 44, paddingHorizontal: spacing.md, backgroundColor: colors.creme, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft },
-  searchInput: { flex: 1, fontFamily: fonts.body, fontSize: 14, color: colors.espresso, paddingVertical: 0 },
+  searchPlaceholder: { flex: 1, fontFamily: fonts.body, fontSize: 14, color: colors.clay },
   chipRow: { height: 44 },
   chip: { height: 36, paddingHorizontal: 14, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   chipActive: { backgroundColor: colors.chambray, borderColor: colors.chambray },
