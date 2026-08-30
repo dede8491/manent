@@ -327,9 +327,19 @@ async def list_books(status: Optional[str] = None, user=Depends(get_current_user
     return {"books": books}
 
 
+def _valid_ean13(code: str) -> bool:
+    if not re.fullmatch(r'97[89]\d{10}', code):
+        return False
+    digits = [int(c) for c in code]
+    checksum = (10 - sum(d * (3 if i % 2 else 1) for i, d in enumerate(digits[:12])) % 10) % 10
+    return checksum == digits[12]
+
+
 @api.get("/books/search/isbn")
 async def search_isbn(isbn: str):
     isbn = re.sub(r'[^0-9Xx]', '', isbn)
+    if len(isbn) == 13 and not _valid_ean13(isbn):
+        raise HTTPException(status_code=404, detail="isbn_not_found")
     async with httpx.AsyncClient(timeout=15) as http:
         r = await http.get(f"https://www.googleapis.com/books/v1/volumes?q=isbn:{isbn}")
         data = r.json() if r.status_code == 200 else {}
@@ -378,24 +388,48 @@ async def search_isbn(isbn: str):
 
 @api.get("/books/search")
 async def search_books(q: str):
-    async with httpx.AsyncClient(timeout=15) as http:
-        r = await http.get(
-            "https://www.googleapis.com/books/v1/volumes",
-            params={"q": q, "maxResults": 8, "langRestrict": "fr"},
-        )
-    data = r.json() if r.status_code == 200 else {}
-    items = data.get("items") or []
     results = []
-    for it in items:
-        v = it.get("volumeInfo", {})
-        results.append({
-            "title": v.get("title"),
-            "author": ", ".join(v.get("authors", []) or []),
-            "isbn": next((i.get("identifier") for i in (v.get("industryIdentifiers") or []) if i.get("type") in ("ISBN_13", "ISBN_10")), None),
-            "pages": v.get("pageCount"),
-            "year": (v.get("publishedDate") or "")[:4] or None,
-            "cover": (v.get("imageLinks") or {}).get("thumbnail", "").replace("http://", "https://"),
-        })
+    async with httpx.AsyncClient(timeout=15) as http:
+        try:
+            r = await http.get(
+                "https://www.googleapis.com/books/v1/volumes",
+                params={"q": q, "maxResults": 8, "langRestrict": "fr"},
+            )
+            data = r.json() if r.status_code == 200 else {}
+            for it in (data.get("items") or []):
+                v = it.get("volumeInfo", {})
+                results.append({
+                    "title": v.get("title"),
+                    "author": ", ".join(v.get("authors", []) or []),
+                    "isbn": next((i.get("identifier") for i in (v.get("industryIdentifiers") or []) if i.get("type") in ("ISBN_13", "ISBN_10")), None),
+                    "pages": v.get("pageCount"),
+                    "year": (v.get("publishedDate") or "")[:4] or None,
+                    "cover": (v.get("imageLinks") or {}).get("thumbnail", "").replace("http://", "https://"),
+                })
+        except Exception:
+            logger.warning("google books search failed for %s", q)
+        if not results:
+            # Repli : Open Library (Google Books est souvent limité en quota)
+            try:
+                r2 = await http.get(
+                    "https://openlibrary.org/search.json",
+                    params={"q": q, "limit": 8, "lang": "fr",
+                            "fields": "title,author_name,first_publish_year,isbn,number_of_pages_median,cover_i"},
+                )
+                docs = (r2.json() or {}).get("docs", []) if r2.status_code == 200 else []
+                for d in docs:
+                    isbns = d.get("isbn") or []
+                    isbn13 = next((x for x in isbns if len(x) == 13), isbns[0] if isbns else None)
+                    results.append({
+                        "title": d.get("title"),
+                        "author": ", ".join(d.get("author_name", [])[:2]),
+                        "isbn": isbn13,
+                        "pages": d.get("number_of_pages_median"),
+                        "year": str(d["first_publish_year"]) if d.get("first_publish_year") else None,
+                        "cover": f"https://covers.openlibrary.org/b/id/{d['cover_i']}-M.jpg" if d.get("cover_i") else None,
+                    })
+            except Exception:
+                logger.warning("openlibrary search fallback failed for %s", q)
     return {"results": results}
 
 
@@ -985,18 +1019,90 @@ async def leave_club(club_id: str, user=Depends(get_current_user)):
     return {"ok": True}
 
 
+def _compose_recap(club: dict) -> Optional[str]:
+    parts = ["Récap de la semaine"]
+    wp = club.get("weekly_passage")
+    if wp and wp.get("text"):
+        src = f" ({wp.get('book_title')}" + (f", p. {wp.get('page')}" if wp.get("page") else "") + ")" if wp.get("book_title") else (f" (p. {wp.get('page')})" if wp.get("page") else "")
+        parts.append(f"Passage : « {wp['text']} »{src}")
+    ch = club.get("challenge")
+    if ch:
+        progress = ch.get("progress", {})
+        ranked = sorted(progress.items(), key=lambda kv: -int(kv[1] or 0))[:3]
+        lines = [f"Défi « {ch.get('title')} » — objectif {ch.get('goal_pages')} pages :"]
+        if ranked:
+            for i, (uid, pages) in enumerate(ranked):
+                lines.append(f"{i + 1}. {{{uid}}} — {pages} p.")
+        else:
+            lines.append("Personne n'a encore noté sa page. À vos livres !")
+        parts.append("\n".join(lines))
+    if len(parts) == 1:
+        return None
+    parts.append("Bonne lecture à toutes et à tous.")
+    return "\n\n".join(parts)
+
+
+async def _post_recap(club: dict) -> Optional[dict]:
+    text = _compose_recap(club)
+    if not text:
+        return None
+    # remplace les {user_id} par les pseudos
+    uids = re.findall(r'\{([^}]+)\}', text)
+    if uids:
+        ul = await db.users.find({"user_id": {"$in": uids}}, {"_id": 0, "user_id": 1, "pseudo": 1}).to_list(50)
+        for u in ul:
+            text = text.replace("{" + u["user_id"] + "}", u["pseudo"])
+    text = re.sub(r'\{[^}]+\}', 'Lecteur', text)
+    doc = {
+        "message_id": new_id("cm"),
+        "club_id": club["club_id"],
+        "user_id": "system_manent",
+        "is_system": True,
+        "text": text,
+        "created_at": now_utc(),
+    }
+    await db.club_messages.insert_one(doc.copy())
+    return clean_doc(doc)
+
+
+@api.post("/clubs/{club_id}/recap")
+async def send_recap(club_id: str, user=Depends(get_current_user)):
+    club = await _club_or_404(club_id, user["user_id"])
+    if club["owner_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="owner_only")
+    msg = await _post_recap(club)
+    if not msg:
+        raise HTTPException(status_code=400, detail="nothing_to_recap")
+    week = now_utc().strftime("%G-W%V")
+    await db.clubs.update_one({"club_id": club_id}, {"$set": {"last_recap_week": week}})
+    return msg
+
+
 @api.get("/clubs/{club_id}/messages")
 async def club_messages(club_id: str, user=Depends(get_current_user)):
-    await _club_or_404(club_id, user["user_id"])
+    club = await _club_or_404(club_id, user["user_id"])
+    # récap hebdo automatique (une fois par semaine, si passage ou défi existe)
+    week = now_utc().strftime("%G-W%V")
+    if club.get("last_recap_week") != week and (club.get("weekly_passage") or club.get("challenge")):
+        r = await db.clubs.update_one(
+            {"club_id": club_id, "last_recap_week": {"$ne": week}},
+            {"$set": {"last_recap_week": week}},
+        )
+        if r.modified_count == 1:
+            await _post_recap(club)
     msgs = await db.club_messages.find({"club_id": club_id}, {"_id": 0}).sort("created_at", 1).to_list(200)
-    uids = list({m["user_id"] for m in msgs})
+    uids = list({m["user_id"] for m in msgs if not m.get("is_system")})
     umap = {}
     if uids:
         ul = await db.users.find({"user_id": {"$in": uids}}, {"_id": 0, "user_id": 1, "pseudo": 1, "handle": 1}).to_list(200)
         umap = {u["user_id"]: u for u in ul}
     for m in msgs:
-        m["author"] = umap.get(m["user_id"], {"pseudo": "Lecteur", "handle": "lecteur"})
-        m["is_me"] = m["user_id"] == user["user_id"]
+        if m.get("is_system"):
+            m["author"] = {"pseudo": "Manent", "handle": "manent"}
+            m["is_me"] = False
+        else:
+            m["author"] = umap.get(m["user_id"], {"pseudo": "Lecteur", "handle": "lecteur"})
+            m["is_me"] = m["user_id"] == user["user_id"]
     return {"messages": msgs}
 
 
@@ -1164,6 +1270,43 @@ async def reading_stats(user=Depends(get_current_user)):
     active_month = len([k for k in by_day if k.startswith(month_prefix)])
     total_pages = sum(e.get("pages", 0) for e in events)
     return {"streak": streak, "week": week, "week_pages": week_pages, "active_days_month": active_month, "total_pages": total_pages}
+
+
+# ============ Badges lecteur ============
+@api.get("/badges")
+async def get_badges(user=Depends(get_current_user)):
+    uid = user["user_id"]
+    quotes_count = await db.quotes.count_documents({"user_id": uid})
+    books_done = await db.books.count_documents({"user_id": uid, "status": "termine"})
+    stats = await reading_stats(user)
+    streak = stats["streak"]
+    clubs = await db.clubs.find({"members": uid}, {"_id": 0, "challenge": 1}).to_list(100)
+    challenges_done = 0
+    for c in clubs:
+        ch = c.get("challenge")
+        if ch and int((ch.get("progress") or {}).get(uid, 0)) >= int(ch.get("goal_pages") or 10**9):
+            challenges_done += 1
+
+    def sheet_complete(s):
+        s = s or {}
+        return bool((s.get('author_bio') or '').strip()) and bool(s.get('characters')) and bool((s.get('summary') or '').strip()) and bool(s.get('themes'))
+
+    etudes = await db.books.find({"user_id": uid, "type": "etude"}, {"_id": 0, "sheet": 1}).to_list(200)
+    sheet_done = any(sheet_complete(b.get("sheet")) for b in etudes)
+
+    badges = [
+        {"id": "first_quote", "title": "Premiers mots", "desc": "Ta première citation capturée", "icon": "feather", "earned": quotes_count >= 1},
+        {"id": "collector", "title": "Collectionneur", "desc": "10 citations gardées", "icon": "layers", "earned": quotes_count >= 10},
+        {"id": "anthologist", "title": "Anthologiste", "desc": "50 citations qui restent", "icon": "archive", "earned": quotes_count >= 50},
+        {"id": "streak3", "title": "Trois jours de suite", "desc": "Lire 3 jours d'affilée", "icon": "sunrise", "earned": streak >= 3},
+        {"id": "streak7", "title": "Semaine habitée", "desc": "7 jours de lecture d'affilée", "icon": "sun", "earned": streak >= 7},
+        {"id": "streak30", "title": "Rituel installé", "desc": "30 jours d'affilée", "icon": "award", "earned": streak >= 30},
+        {"id": "first_book", "title": "Livre refermé", "desc": "Ton premier livre terminé", "icon": "book", "earned": books_done >= 1},
+        {"id": "five_books", "title": "Étagère vivante", "desc": "5 livres terminés", "icon": "book-open", "earned": books_done >= 5},
+        {"id": "challenge", "title": "Défi relevé", "desc": "Un défi de club atteint", "icon": "flag", "earned": challenges_done >= 1},
+        {"id": "sheet", "title": "Fiche parfaite", "desc": "Une fiche d'études complétée", "icon": "check-circle", "earned": sheet_done},
+    ]
+    return {"badges": badges, "earned_count": sum(1 for b in badges if b["earned"])}
 
 
 # ============ Home feed (public quotes) ============

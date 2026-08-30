@@ -271,23 +271,27 @@ export default function BookDetail() {
           </View>
         </View>
 
-        <Text style={styles.sectionLabel}>Où trouver ce livre</Text>
-        <View style={{ gap: 8 }}>
-          {[
-            { name: 'Librairies indépendantes', tag: 'leslibraires.fr' },
-            { name: 'Fnac', tag: 'fnac.com' },
-            { name: 'Amazon', tag: 'amazon.fr' },
-          ].map(l => (
-            <View key={l.name} style={styles.linkRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.linkName}>{l.name}</Text>
-                <Text style={styles.linkTag}>{l.tag}  ·  LIEN AFFILIÉ</Text>
-              </View>
-              <Feather name="external-link" size={18} color={colors.chambray} />
+        {!isWattpad && (
+          <>
+            <Text style={styles.sectionLabel}>Où trouver ce livre</Text>
+            <View style={{ gap: 8 }}>
+              {[
+                { name: 'Librairies indépendantes', tag: 'leslibraires.fr', url: `https://www.leslibraires.fr/recherche/?q=${encodeURIComponent(book.isbn || `${book.title} ${book.author || ''}`.trim())}` },
+                { name: 'Fnac', tag: 'fnac.com', url: `https://www.fnac.com/SearchResult/ResultList.aspx?Search=${encodeURIComponent(book.isbn || `${book.title} ${book.author || ''}`.trim())}` },
+                { name: 'Amazon', tag: 'amazon.fr', url: `https://www.amazon.fr/s?k=${encodeURIComponent(book.isbn || `${book.title} ${book.author || ''}`.trim())}` },
+              ].map(l => (
+                <Pressable key={l.name} testID={`store-${l.tag}`} onPress={() => Linking.openURL(l.url)} style={styles.linkRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.linkName}>{l.name}</Text>
+                    <Text style={styles.linkTag}>{l.tag}  ·  LIEN AFFILIÉ</Text>
+                  </View>
+                  <Feather name="external-link" size={18} color={colors.chambray} />
+                </Pressable>
+              ))}
+              <Text style={styles.linkNote}>Commission reversée à Manent, sans surcoût pour toi.</Text>
             </View>
-          ))}
-          <Text style={styles.linkNote}>Commission reversée à Manent, sans surcoût pour toi.</Text>
-        </View>
+          </>
+        )}
 
         <Text style={styles.sectionLabel}>Citations du livre ({quotes.length})</Text>
         {quotes.length === 0 ? (

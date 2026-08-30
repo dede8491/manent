@@ -1,0 +1,48 @@
+{
+  "summary": "Iteration 7 — CRITICAL user bug (books search) verified E2E + backend iteration 7 test suite executed. Backend: 8/8 pytest tests pass (badges shape/consistency, recap manual owner-only/400/no placeholders, recap auto idempotent per ISO week via last_recap_week, regular club message regression). Test fixture had to be fixed (endpoint /api/clubs/mine → /api/clubs, and owner detection via is_owner) before running — this is a test-only change. Frontend (mobile 390×844, Léa/test.manent): search 'alchimiste' returns 8 results with covers via Open Library fallback (Google 429, fallback active as designed); tap result-0 → confirm-card shows 'O Alquimista / Paulo Coelho / 197 pages · 1988' with cover; status 'en_cours' + Ajouter à ma bibliothèque → book detail opens; library reload shows the new book. Second search 'petit prince' → 8 results, first = 'Le petit prince / Antoine de Saint-Exupéry / 1943'. ISBN manual entry 9782070368228 → confirm-card appears (source=openlibrary). Profile → badges-section shows 10 badges with counter 1/10, badge-first_quote is colored/earned, others grey (locked). Candide fiche → 3 lignes 'Où trouver ce livre' (store-leslibraires.fr, store-fnac.com, store-amazon.fr) each showing 'LIEN AFFILIÉ' mention. Club Candide → 3 recap-message cards labelled 'Manent · Récap' with proper interpolation ('Léa — 90 p.', no raw {user_id}/{pseudo} placeholders anywhere in the page); owner club-send-recap button posts a new recap (3→4). Regression: normal message posts and appears immediately. Account left in LIGHT mode, non-premium.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/books/search/isbn?isbn=9782070368228", "issue": "Open Library returns title 'George Orwell — 1984' (438 p, 1993) instead of 'Le Petit Prince'. Not a code bug (OL catalog quirk for this ISBN edition), but end-user will be surprised. Consider preferring the ISBN's expected Gallimard-Folio record or falling back to Google when OL title looks unrelated."},
+      {"endpoint": "GET /api/books/search/isbn?isbn=9999999999999", "issue": "Bogus ISBN returns 200 with an unrelated random book (Rómulo Maccio) instead of 404 — Open Library serves a loose match. Suggest server-side ISBN checksum validation (EAN-13 check digit) before hitting OL to force 404 on syntactically-invalid ISBNs."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "add.tsx / library.tsx", "issue": "Duplicate testID 'btn-add-book' — used both on library screen (open add) and on add screen confirm CTA ('Ajouter à ma bibliothèque'). Causes Playwright resolvedTo 2 elements. Recommend renaming confirm CTA to testID 'btn-add-book-confirm'. Reference: /app/frontend/app/(tabs)/library.tsx:89 and /app/frontend/app/book/add.tsx:211", "testID": "btn-add-book", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "quote/[id].tsx offscreen ShareQuoteCard", "issue": "Carry-over deprecation warning: props.pointerEvents is deprecated, use style.pointerEvents. Non-blocking. Reference: /app/frontend/app/quote/[id].tsx"},
+      {"component": "package.json expo-av", "issue": "Carry-over: deprecated 'expo-av' package still declared. Should migrate to expo-audio + expo-video. Reference: /app/frontend/package.json"}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration7.py",
+    "/app/test_reports/pytest/iteration7.xml"
+  ],
+  "action_items": [
+    "(optional, minor) Add EAN-13 check-digit validation in /api/books/search/isbn to return 404 for syntactically-invalid ISBNs before calling Open Library (server.py:330).",
+    "(optional, minor) For /api/books/search/isbn, when Open Library returns a title that clearly mismatches the ISBN's expected edition, prefer Google or return null; the specific ISBN 9782070368228 currently resolves to 'Orwell — 1984' via OL. Consider requerying openlibrary.org/search.json?isbn= for a French-edition match.",
+    "(low priority) Rename testID 'btn-add-book' on the AddBook confirm CTA to 'btn-add-book-confirm' to avoid collision with the Library entry point button.",
+    "(carry-over, low) Replace deprecated `pointerEvents` prop with style.pointerEvents in /app/frontend/app/quote/[id].tsx.",
+    "(carry-over, low) Migrate expo-av → expo-audio + expo-video in /app/frontend/package.json."
+  ],
+  "critical_code_review_comments": [
+    "GET /api/books/search fallback chain is correct: try Google Books (fr, maxResults=8) → if 0 results OR exception, fallback to openlibrary.org/search.json (lang=fr, limit=8). Verified live: 8/8 covers returned for 'alchimiste' and 'petit prince' with Google returning 429. Good defensive design.",
+    "conftest fixture uses /api/clubs/mine which does not exist (endpoint is GET /api/clubs). Fixed test fixture to use the correct endpoint and is_owner flag from the response. Server code is fine — test file only was buggy.",
+    "server.py:1012 _compose_recap uses safe string formatting via f-strings + pseudo lookups (no user-supplied templates), so the earlier 'raw {placeholder}' risk is addressed at code level. Confirmed at runtime that recap text contains resolved pseudos ('Léa — 90 p.') and no raw braces."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration7.py (fixed primary_club fixture: /api/clubs/mine → /api/clubs; owner detection via is_owner)",
+    "/app/test_reports/iteration_7.json (this file)",
+    "/app/test_reports/pytest/iteration7.xml (junit output)"
+  ],
+  "success_rate": {"backend": "100% (8/8 iteration_7 tests pass; books/search + ISBN endpoints verified via curl)", "frontend": "100% on critical flow (add book via title search, badges, store links, club recap owner+regression). ISBN cosmetic mismatch is OL catalog issue, not app code."},
+  "seed_data_creation": "Added 1 test book to Léa's library ('O Alquimista' by Paulo Coelho, en_cours) as part of the critical add-book E2E test. Posted 1 test regression message and triggered 1 extra manual recap in Club Candide. Account left in LIGHT mode and NON-PREMIUM as requested.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Bug 'je ne trouve pas de livres' is fixed via Open Library fallback in /api/books/search — verified end-to-end. Backend iteration_7 test suite is now runnable and green (test fixture patched). Minor ISBN metadata quirks with Open Library are documented as low-priority; not blocking. If touching ISBN endpoint again, consider EAN-13 checksum + preferring Google when OL title looks unrelated. Léa account now has 2 books (Candide + O Alquimista), 3+1=4 recap messages in Club Candide.",
+  "rca_of_issue": "RCA of original user bug: Google Books v1 daily public quota exhausted in this container → HTTP 429 with 0 items. AddBook.tsx debounced search called /api/books/search which returned {results: []}, so results list stayed empty and users saw nothing. Fix already implemented by main agent: /api/books/search now cascades to openlibrary.org/search.json when Google returns 0 items or throws. Live verification: curl on preview URL returns 8 results (source=openlibrary) with cover URLs pointing to covers.openlibrary.org. UI renders these results with covers, titles, authors, years, tap adds book. Full add flow validated end-to-end."
+}

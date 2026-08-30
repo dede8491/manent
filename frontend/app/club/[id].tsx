@@ -105,6 +105,14 @@ export default function ClubDetail() {
     setMyPages('');
   };
 
+  const sendRecap = async () => {
+    try {
+      const m = await api<any>(`/clubs/${id}/recap`, { method: 'POST' });
+      setMessages(prev => [...prev, m]);
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+    } catch {}
+  };
+
   if (!club) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.glacier, alignItems: 'center', justifyContent: 'center' }}>
@@ -230,12 +238,24 @@ export default function ClubDetail() {
           <Text style={styles.emptyText}>Aucun défi en cours.</Text>
         )}
 
-        <Text style={styles.sectionLabel}>Discussion</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginTop: spacing.xl, marginBottom: spacing.sm }}>
+          <Text style={[styles.sectionLabel, { marginTop: 0, marginBottom: 0 }]}>Discussion</Text>
+          {club.is_owner && (club.weekly_passage || club.challenge) ? (
+            <Pressable testID="club-send-recap" onPress={sendRecap} hitSlop={8}>
+              <Text style={styles.recapLink}>Envoyer le récap</Text>
+            </Pressable>
+          ) : null}
+        </View>
         {messages.length === 0 ? (
           <Text style={styles.emptyText}>Lance la conversation — premier mot sur la lecture ?</Text>
         ) : (
           <View style={{ gap: spacing.sm }}>
-            {messages.map(m => (
+            {messages.map(m => m.is_system ? (
+              <View key={m.message_id} style={styles.recapCard} testID="recap-message">
+                <Text style={styles.recapLabel}>Manent · Récap</Text>
+                <Text style={styles.recapText}>{m.text}</Text>
+              </View>
+            ) : (
               <View key={m.message_id} style={[styles.msg, m.is_me && styles.msgMine]}>
                 {!m.is_me && <Text style={styles.msgAuthor}>{m.author?.pseudo}</Text>}
                 <Text style={[styles.msgText, m.is_me && { color: colors.espresso }]}>{m.text}</Text>
@@ -355,6 +375,10 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   msgMine: { alignSelf: 'flex-end', backgroundColor: colors.bisque, borderColor: colors.bisque },
   msgAuthor: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.chambray, marginBottom: 2 },
   msgText: { fontFamily: fonts.body, fontSize: 14, color: colors.espresso, lineHeight: 20 },
+  recapLink: { fontFamily: fonts.body, fontSize: 12, color: colors.clay, textDecorationLine: 'underline' },
+  recapCard: { backgroundColor: colors.bisque, borderRadius: radius.md, padding: spacing.md },
+  recapLabel: { fontFamily: fonts.bodyMedium, fontSize: 9, color: colors.clay, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 6 },
+  recapText: { fontFamily: fonts.body, fontSize: 13.5, color: colors.espresso, lineHeight: 20 },
   leaveBtn: { alignSelf: 'center', marginTop: spacing.xl, paddingVertical: spacing.sm, paddingHorizontal: spacing.lg },
   leaveText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.clay },
   inputBar: { flexDirection: 'row', gap: 8, paddingHorizontal: spacing.xl, paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.borderSoft, backgroundColor: colors.glacier },

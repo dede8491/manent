@@ -86,7 +86,7 @@ export default function Library() {
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
         <View style={styles.headerRow}>
           <Text style={styles.h1}>Bibliothèque</Text>
-          <Pressable testID="btn-add-book" onPress={() => router.push('/book/add')} style={styles.addBtn}>
+          <Pressable testID="btn-library-add" onPress={() => router.push('/book/add')} style={styles.addBtn}>
             <Feather name="plus" size={22} color={colors.creme} />
           </Pressable>
         </View>

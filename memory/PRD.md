@@ -55,7 +55,15 @@
 - **Défis de club**: `challenge {title, goal_pages, progress}` sur le club (PATCH owner), `POST /clubs/{id}/challenge/progress {pages}`, leaderboard trié (pct, is_me) renvoyé par GET club. UI: carte défi + classement barres chambray + saisie de ma page.
 - **Stats de lecture**: collection `reading_events` (jour, pages) alimentée à chaque citation créée et chaque delta de progress_page. `GET /stats/reading` → streak (tolérance hier), 7 jours, pages semaine, jours actifs du mois. Carte sur le profil (série + barres) + vraies stats livres/citations/tableaux.
 - **Mode sombre**: `src/themeCtx.tsx` (ThemeProvider, useColors/useStyles/useScheme/useToggleScheme, persisté AsyncStorage). ~20 fichiers convertis en `makeStyles(colors)` + hooks. Palette sombre: fond #2D1913, cartes #4A2E23/#5A3A2B, texte #F5EDE4, clay #C6AB93, chambray inchangé. Wordmark bascule en version crème. `premium.tsx` et `ShareQuoteCard` restent statiques volontairement (déjà sombres / export marque). Toggle sur le profil (row-darkmode). ATTENTION pour futurs composants module-scope: tout composant utilisant `styles` doit appeler `useStyles(makeStyles)` (bug BookCard corrigé en itération 6).
-- Connu/minor: Google Books peut renvoyer 429 (rate limit) depuis ce conteneur → l'UI bascule proprement sur l'ajout manuel; envisager repli Open Library aussi pour la recherche par titre.
+- Connu/minor: Google Books peut renvoyer 429 (rate limit) depuis ce conteneur → repli Open Library ajouté sur la recherche PAR TITRE (`/books/search`, itération 7 — bug utilisateur « je ne trouve pas de livres » corrigé et validé e2e) comme sur l'ISBN. Validation checksum EAN-13 ajoutée (`_valid_ean13`) → ISBN invalide = 404.
+
+## Ajouts session 2 quinquies (juin 2026) — Liens librairies, Badges, Récap hebdo (itération 7: pytest 8/8, e2e PASS)
+- **Liens librairies** (fiche livre, non-Wattpad): section « Où trouver ce livre » cliquable — leslibraires.fr, Fnac, Amazon (recherche par ISBN sinon titre+auteur), mention LIEN AFFILIÉ + note commission. testIDs `store-{domaine}`.
+- **Badges lecteur**: `GET /api/badges` → 10 badges calculés (citations 1/10/50, streak 3/7/30, livres terminés 1/5, défi de club atteint, fiche d'études 100 %). Profil: rangée horizontale (gagnés en Chambray d'abord, verrouillés grisés), compteur X/10.
+- **Récap hebdo club**: message système « Manent · Récap » (passage de la semaine + top 3 du défi avec pseudos) — posté automatiquement 1×/semaine à l'ouverture des messages (garde atomique `last_recap_week`, semaine ISO) + bouton owner « Envoyer le récap » (`POST /clubs/{id}/recap`). Rendu carte Bisque distincte (`recap-message`).
+- Renommage testID: bouton d'ajout de la Bibliothèque = `btn-library-add` (l'ancien `btn-add-book` dupliquait le CTA de l'écran d'ajout).
+- Reste à faire (mineur, non bloquant): migrer le warning `pointerEvents` (web), quirk Open Library sur certains ISBN d'éditions FR (renvoie parfois une autre œuvre).
+
 
 
 

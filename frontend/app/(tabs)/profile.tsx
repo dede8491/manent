@@ -19,11 +19,13 @@ export default function Profile() {
   const [premium, setPremium] = useState<{ is_premium: boolean; plan?: string | null; captures_used: number; captures_limit: number } | null>(null);
   const [stats, setStats] = useState({ books: 0, quotes: 0, boards: 0 });
   const [reading, setReading] = useState<{ streak: number; week: { label: string; pages: number; active: boolean }[]; week_pages: number; active_days_month: number } | null>(null);
+  const [badges, setBadges] = useState<{ id: string; title: string; desc: string; icon: string; earned: boolean }[]>([]);
 
   useFocusEffect(React.useCallback(() => {
     (async () => {
       try { setPremium(await api('/premium/status')); } catch {}
       try { setReading(await api('/stats/reading')); } catch {}
+      try { const b = await api<{ badges: any[] }>('/badges'); setBadges(b.badges); } catch {}
       try {
         const [b, q, t] = await Promise.all([
           api<{ books: any[] }>('/books'),
@@ -74,6 +76,23 @@ export default function Profile() {
               );
             })}
           </View>
+        </View>
+      )}
+
+      {badges.length > 0 && (
+        <View style={{ marginTop: spacing.md }} testID="badges-section">
+          <Text style={styles.badgesLabel}>Badges · {badges.filter(b => b.earned).length}/{badges.length}</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm, paddingHorizontal: spacing.xl }} testID="badges-row">
+            {[...badges].sort((a, b) => Number(b.earned) - Number(a.earned)).map(b => (
+              <View key={b.id} testID={`badge-${b.id}`} style={[styles.badge, !b.earned && styles.badgeLocked]}>
+                <View style={[styles.badgeIcon, b.earned && { backgroundColor: colors.chambray }]}>
+                  <Feather name={b.icon as any} size={18} color={b.earned ? '#F5EDE4' : colors.clay} />
+                </View>
+                <Text style={[styles.badgeTitle, !b.earned && { color: colors.clay }]} numberOfLines={1}>{b.title}</Text>
+                <Text style={styles.badgeDesc} numberOfLines={2}>{b.desc}</Text>
+              </View>
+            ))}
+          </ScrollView>
         </View>
       )}
 
@@ -131,6 +150,12 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   barTrack: { height: 48, justifyContent: 'flex-end' },
   bar: { width: 14, borderRadius: 3, backgroundColor: colors.borderSoft },
   dayLbl: { fontFamily: fonts.bodyMedium, fontSize: 9, color: colors.clay, letterSpacing: 0.5, textTransform: 'uppercase' },
+  badgesLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase', paddingHorizontal: spacing.xl, marginBottom: spacing.sm },
+  badge: { width: 128, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md, alignItems: 'center' },
+  badgeLocked: { opacity: 0.55 },
+  badgeIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.glacier, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm },
+  badgeTitle: { fontFamily: fonts.displayMedium, fontSize: 15, color: colors.espresso, textAlign: 'center' },
+  badgeDesc: { fontFamily: fonts.body, fontSize: 10.5, color: colors.clay, textAlign: 'center', marginTop: 2, lineHeight: 14 },
   premium: { margin: spacing.xl, padding: spacing.lg, backgroundColor: colors.bisque, borderRadius: radius.md },
   premiumTitle: { fontFamily: fonts.displayMedium, fontSize: 22, color: colors.espresso },
   premiumText: { fontFamily: fonts.body, fontSize: 13, color: colors.espresso, marginTop: spacing.xs, lineHeight: 20 },
