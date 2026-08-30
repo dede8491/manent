@@ -30,7 +30,10 @@ export function wattpadDeepLink(url: string): string {
  * hors ligne et comme pré-remplissage instantané avant la réponse du backend.
  */
 export function guessFromUrl(url: string): WattpadStory {
-  const tail = url.split('?')[0].replace(/\/$/, '').split('/').pop() ?? '';
+  // On ne lit que le dernier segment du chemin : sans chemin utile (lien vers
+  // l'accueil), il ne faut surtout pas retomber sur le nom de domaine.
+  const path = url.trim().split('?')[0].replace(/^https?:\/\/[^/]+/i, '');
+  const tail = path.split('/').filter(Boolean).pop() ?? '';
   const words = tail
     .replace(/^\d+-/, '')
     .split('-')
