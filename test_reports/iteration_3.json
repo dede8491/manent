@@ -1,0 +1,52 @@
+{
+  "summary": "Iteration 3 fully verified. Backend: 16/16 new tests PASSED for GET /api/themes/{theme}/page (auth, stats, private-quote exclusion, unknown theme = zero), GET /api/readers/{handle} (auth, 404, lea profile, is_me self, private exclusion), GET /api/quotes/{id} (own is_owner=true, other's public 200 is_owner=false with author, other's private 404, unknown 404), and DELETE/PATCH owner-restriction regression. Regression suite: 55/56 (only known Google Books 429 external rate-limit still failing, same as iteration 2). Frontend: theme-chip navigation to /theme/[name] works (title/stats/quote grid render); @lea meta-row on quote card navigates to /reader/lea (pseudo 'Léa', 3 stat-cards, public quotes grid); btn-share-profile clipboard fallback shows 'Lien copié dans le presse-papiers.'; opening another user's public quote renders the detail screen (previously blank!) with q-delete hidden, btn-pin hidden, btn-view-author '@lea' visible and correctly navigating to /reader/lea; save/share image buttons still present; own quote still shows q-delete + btn-pin. Export PDF on Candide (etude) opens a new tab whose HTML contains 'Candide' and 'Fiche d'études'; btn-photo-page remains on papier/etude books; /search still loads. Deprecated packages detected: expo-av is still declared in package.json (should be replaced with expo-audio/expo-video per Expo SDK guidance).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/books/search?q=...", "issue": "Same external Google Books 429 already reported in iteration 2 — not a Manent regression."},
+      {"endpoint": "DELETE /api/quotes/{id} (non-owner)", "issue": "Silently returns 200 {ok:true} even when the user is NOT the owner; the delete_one filter correctly prevents any modification, but returning {ok:true} could be misleading for API consumers. Consider returning 404/403 when the owned document does not exist, to make ownership explicit."},
+      {"endpoint": "PATCH /api/quotes/{id} (non-owner)", "issue": "Same as DELETE — non-owner PATCH returns 200 with the current (unchanged) document (via get_quote fallthrough) but never modifies data. Consider explicit 403/404 for clarity. Current behaviour is safe but not RESTful."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "quote/[id].tsx offscreen View", "issue": "Deprecation warning still emitted at runtime: 'props.pointerEvents is deprecated. Use style.pointerEvents'. Same finding as iteration 2; the fix was not applied. Reference: /app/frontend/app/quote/[id].tsx:304 (styles.offscreen contains pointerEvents but the prop is likely also being passed on the <View>)."},
+      {"component": "package.json deprecated audio/video", "issue": "package.json still declares 'expo-av' (deprecated). Should migrate to 'expo-audio' (audio) and 'expo-video' (video) per Expo SDK 52+ guidance. Reference: /app/frontend/package.json"}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration3.py",
+    "/app/test_reports/pytest/iteration3.xml",
+    "/app/backend/tests/test_new_features.py",
+    "/app/backend/tests/test_manent_api.py"
+  ],
+  "action_items": [
+    "(carry-over from iteration 2) Replace deprecated `pointerEvents=\"none\"` prop with style.pointerEvents on the offscreen ShareQuoteCard container at quote/[id].tsx to silence the runtime warning.",
+    "(carry-over from iteration 2) Replace deprecated `ImagePicker.MediaTypeOptions.Images` with `mediaTypes: ['images']` in book/[id].tsx photoProgress().",
+    "Optional: return 403/404 from DELETE/PATCH /api/quotes/{id} when the requester is not the owner (currently returns 200 with unchanged data — safe but misleading). This is a nice-to-have, not blocking.",
+    "Optional: replace expo-av in package.json with expo-audio + expo-video (Expo deprecation path).",
+    "(carry-over) Google Books /api/books/search occasionally returns empty due to upstream 429 — add tiny in-memory cache or backoff. Not blocking."
+  ],
+  "critical_code_review_comments": [
+    "server.py::get_quote correctly separates owner check from is_public gate — public quotes of other users return is_owner=false with the true author attached. Good.",
+    "server.py::theme_page + public_profile share the _attach_public_meta helper — DRY.",
+    "server.py::patch_quote calls get_quote(quote_id, user) as a fallthrough for non-owner requests, which returns 200 with is_owner=false. Technically safe (update_one filter includes user_id, so nothing is written) but the endpoint's HTTP semantics would be clearer with an explicit 403.",
+    "reader/[handle].tsx::shareProfile has a nested try/catch which is good; clipboard fallback works in Chromium headless with grant_permissions. Native Share.share() path is only reachable off-web.",
+    "book/[id].tsx::exportPdf: on web it uses window.open('','_blank') + document.write + setTimeout(w.print, 600). Works — no console errors observed. On native it uses expo-print + expo-sharing (not tested via web preview).",
+    "theme/[name].tsx and reader/[handle].tsx both re-implement a two-column masonry loop; consider extracting into <MasonryGrid /> to reduce duplication."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration3.py (created)",
+    "/app/test_reports/iteration_3.json (created)",
+    "/app/test_reports/pytest/iteration3.xml (generated)"
+  ],
+  "success_rate": {"backend": "100% new (16/16); 98.2% overall regression (55/56 — 1 external Google Books 429)", "frontend": "100% (6/6 flows OK: theme page, reader profile+share, public-other quote detail with btn-view-author, own quote with q-delete+btn-pin, PDF export popup, /search regression)"},
+  "seed_data_creation": "Each test run registers a fresh user via /api/auth/register, patches themes/reading_mode, calls /api/dev/seed (idempotent), then creates a Candide (etude) book with full sheet + one public own-quote. Backend suite uses TEST_ prefix and teardowns delete created quotes/books.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All 4 iteration 3 features (theme pages, public profiles, get_quote-of-other-user, export PDF) are functionally correct on backend and web preview. The remaining findings are pre-existing carry-overs from iteration 2 (pointerEvents deprecation warning, expo-av package, Google Books 429). To re-run: pytest /app/backend/tests/test_iteration3.py should stay 16/16. Note the seed is only inserted once (checks existing_public>5), so tests relying on 'lea' data assume the seed has run at least once in the DB. Auth: register with POST /api/auth/register {email,password:'Test1234!',pseudo}; localStorage key 'manent_session_token'; onboarding skipped when PATCH /api/users/me sets reading_mode+themes.",
+  "rca_of_issue": "No blocking issue identified. Two carry-over warnings from iteration 2 (pointerEvents prop deprecation, expo-av package) remain unaddressed but do not affect functionality on web preview."
+}

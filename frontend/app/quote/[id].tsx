@@ -169,7 +169,9 @@ export default function QuoteDetail() {
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
         <Pressable onPress={() => router.back()} testID="q-back" style={styles.iconBtn}><Feather name="chevron-left" size={22} color={colors.espresso} /></Pressable>
         <Text style={styles.h1}>Citation</Text>
-        <Pressable onPress={del} testID="q-delete" style={styles.iconBtn}><Feather name="trash-2" size={20} color={colors.espresso} /></Pressable>
+        {quote.is_owner !== false ? (
+          <Pressable onPress={del} testID="q-delete" style={styles.iconBtn}><Feather name="trash-2" size={20} color={colors.espresso} /></Pressable>
+        ) : <View style={{ width: 40 }} />}
       </View>
       <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + spacing.xxl }}>
         <View style={[styles.card, { backgroundColor: bg }]} testID="quote-card-hero">
@@ -221,7 +223,22 @@ export default function QuoteDetail() {
         </View>
         {feedback ? <Text style={styles.feedback} testID="share-feedback">{feedback}</Text> : null}
         <View style={{ height: spacing.md }} />
-        <PrimaryButton testID="btn-pin" title="Épingler sur un tableau" onPress={openPin} />
+        {quote.is_owner === false && quote.author?.handle ? (
+          <Pressable
+            testID="btn-view-author"
+            onPress={() => router.push({ pathname: '/reader/[handle]', params: { handle: quote.author!.handle! } })}
+            style={styles.authorRow}
+          >
+            <View style={styles.authorAvatar}><Text style={styles.authorInitial}>{(quote.author?.pseudo?.[0] || 'M').toUpperCase()}</Text></View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.authorName}>{quote.author?.pseudo}</Text>
+              <Text style={styles.authorHandle}>Voir le profil de @{quote.author?.handle}</Text>
+            </View>
+            <Feather name="chevron-right" size={18} color={colors.clay} />
+          </Pressable>
+        ) : (
+          <PrimaryButton testID="btn-pin" title="Épingler sur un tableau" onPress={openPin} />
+        )}
         <GhostButton title="Retour" onPress={() => router.back()} />
       </ScrollView>
 
@@ -279,6 +296,11 @@ const styles = StyleSheet.create({
   shareBtnText: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.creme },
   shareBtnGhostText: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.espresso },
   feedback: { fontFamily: fonts.body, fontSize: 13, color: colors.clay, textAlign: 'center', marginTop: spacing.sm },
+  authorRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft },
+  authorAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.bisque, alignItems: 'center', justifyContent: 'center' },
+  authorInitial: { fontFamily: fonts.displayMedium, fontSize: 22, color: colors.espresso },
+  authorName: { fontFamily: fonts.bodyMedium, fontSize: 15, color: colors.espresso },
+  authorHandle: { fontFamily: fonts.body, fontSize: 12, color: colors.clay, marginTop: 2 },
   offscreen: { position: 'absolute', top: 0, left: -2000, pointerEvents: 'none' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(58,33,25,0.4)', justifyContent: 'flex-end' },
   modal: { backgroundColor: colors.glacier, padding: spacing.xl, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '70%' },

@@ -9,11 +9,12 @@ export type Quote = {
   page?: number | null;
   chapter?: number | null;
   themes?: string[];
+  is_owner?: boolean;
   book?: { title?: string; author?: string; type?: string } | null;
   author?: { pseudo?: string; handle?: string } | null;
 };
 
-export function QuoteCard({ quote, onPress, compact }: { quote: Quote; onPress?: () => void; compact?: boolean }) {
+export function QuoteCard({ quote, onPress, compact, onPressAuthor }: { quote: Quote; onPress?: () => void; compact?: boolean; onPressAuthor?: () => void }) {
   const isWattpad = quote.book?.type === 'wattpad';
   const label = isWattpad ? 'CHAP.' : 'PAGE';
   const num = isWattpad ? quote.chapter : quote.page;
@@ -39,9 +40,9 @@ export function QuoteCard({ quote, onPress, compact }: { quote: Quote; onPress?:
         ) : null}
       </View>
       {(handle || quote.themes?.length) ? (
-        <View style={styles.metaRow}>
+        <Pressable style={styles.metaRow} onPress={onPressAuthor} disabled={!onPressAuthor} hitSlop={6}>
           <Text style={styles.brand}>Manent{handle ? `  ·  ${handle}` : ''}</Text>
-        </View>
+        </Pressable>
       ) : null}
     </Pressable>
   );

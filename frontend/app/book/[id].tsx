@@ -4,10 +4,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 import { colors, fonts, radius, spacing } from '@/src/theme';
 import { QuoteCard, Quote } from '@/src/components/QuoteCard';
 import { StudySheet } from '@/src/components/StudySheet';
 import { toBase64 } from '@/src/image';
+import { buildSheetHtml } from '@/src/sheetPdf';
 import { api } from '@/src/api';
 
 export default function BookDetail() {
@@ -22,6 +25,7 @@ export default function BookDetail() {
   const [lessons, setLessons] = useState<string[]>([]);
   const [detecting, setDetecting] = useState(false);
   const [detectedPage, setDetectedPage] = useState<number | null>(null);
+  const [exportingPdf, setExportingPdf] = useState(false);
 
   useFocusEffect(useCallback(() => {
     (async () => {
@@ -84,6 +88,31 @@ export default function BookDetail() {
     const b = await api<any>(`/books/${id}`, { method: 'PATCH', body: JSON.stringify(patch) });
     setBook(b);
     setDetectedPage(null);
+  };
+
+  // ---- Export PDF de la fiche ----
+  const exportPdf = async () => {
+    setExportingPdf(true);
+    try {
+      const fresh = await api<any>(`/books/${id}`);
+      const html = buildSheetHtml(fresh, quotes);
+      if (Platform.OS === 'web') {
+        const w = window.open('', '_blank');
+        if (w) {
+          w.document.write(html);
+          w.document.close();
+          w.focus();
+          setTimeout(() => w.print(), 600);
+        }
+      } else {
+        const { uri } = await Print.printToFileAsync({ html });
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Fiche d’études PDF' });
+        }
+      }
+    } catch {
+      Alert.alert('Export impossible', 'La génération du PDF a échoué. Réessaie.');
+    } finally { setExportingPdf(false); }
   };
 
   if (!book) return <View style={{ flex: 1, backgroundColor: colors.glacier }} />;
@@ -160,6 +189,12 @@ export default function BookDetail() {
           <>
             <Text style={styles.sectionLabel}>Fiche scolaire</Text>
             <StudySheet key={book.book_id} sheet={book.sheet} onSave={(s) => saveField({ sheet: s })} />
+            <Pressable testID="btn-export-pdf" onPress={exportPdf} disabled={exportingPdf} style={styles.pdfBtn}>
+              {exportingPdf
+                ? <ActivityIndicator size="small" color={colors.espresso} />
+                : <Feather name="file-text" size={16} color={colors.espresso} />}
+              <Text style={styles.pdfBtnText}>{exportingPdf ? 'Génération…' : 'Exporter la fiche en PDF'}</Text>
+            </Pressable>
           </>
         )}
 
@@ -238,6 +273,8 @@ const styles = StyleSheet.create({
   detectConfirm: { flex: 1, height: 44, borderRadius: radius.md, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },
   detectGhost: { flex: 1, height: 44, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center' },
   detectGhostText: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.espresso },
+  pdfBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 48, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, backgroundColor: colors.creme, marginTop: spacing.md },
+  pdfBtnText: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.espresso },
   sectionLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase', marginTop: spacing.xl, marginBottom: spacing.sm },
   input: { minHeight: 44, borderWidth: 1, borderColor: colors.borderSoft, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontFamily: fonts.body, fontSize: 15, color: colors.espresso, backgroundColor: colors.creme },
   lessonRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start', paddingVertical: 4 },

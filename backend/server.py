@@ -222,6 +222,48 @@ async def get_themes():
     return {"themes": THEMES}
 
 
+async def _attach_public_meta(quotes: list):
+    for qd in quotes:
+        if qd.get("book_id"):
+            qd["book"] = await db.books.find_one({"book_id": qd["book_id"]}, {"_id": 0, "title": 1, "author": 1, "type": 1})
+        u = await db.users.find_one({"user_id": qd["user_id"]}, {"_id": 0, "pseudo": 1, "handle": 1, "picture": 1})
+        qd["author"] = u
+
+
+@api.get("/themes/{theme}/page")
+async def theme_page(theme: str, user=Depends(get_current_user)):
+    q = {"is_public": True, "themes": theme}
+    total = await db.quotes.count_documents(q)
+    readers = len(await db.quotes.distinct("user_id", q))
+    books = len([b for b in await db.quotes.distinct("book_id", q) if b])
+    quotes = await db.quotes.find(q, {"_id": 0}).sort("created_at", -1).limit(80).to_list(80)
+    await _attach_public_meta(quotes)
+    return {"theme": theme, "stats": {"quotes": total, "readers": readers, "books": books}, "quotes": quotes}
+
+
+@api.get("/readers/{handle}")
+async def public_profile(handle: str, user=Depends(get_current_user)):
+    u = await db.users.find_one(
+        {"handle": handle},
+        {"_id": 0, "user_id": 1, "pseudo": 1, "handle": 1, "picture": 1, "created_at": 1},
+    )
+    if not u:
+        raise HTTPException(status_code=404, detail="not_found")
+    q = {"user_id": u["user_id"], "is_public": True}
+    total = await db.quotes.count_documents(q)
+    books = len([b for b in await db.quotes.distinct("book_id", q) if b])
+    boards = await db.boards.count_documents({"user_id": u["user_id"], "visibility": "public"})
+    quotes = await db.quotes.find(q, {"_id": 0}).sort("created_at", -1).limit(100).to_list(100)
+    await _attach_public_meta(quotes)
+    uid = u.pop("user_id")
+    return {
+        "user": u,
+        "is_me": uid == user["user_id"],
+        "stats": {"public_quotes": total, "books": books, "boards": boards},
+        "quotes": quotes,
+    }
+
+
 # ============ Books ============
 class BookCreate(BaseModel):
     type: Literal['papier', 'wattpad', 'etude']
@@ -496,12 +538,17 @@ async def list_quotes(book_id: Optional[str] = None, user=Depends(get_current_us
 
 @api.get("/quotes/{quote_id}")
 async def get_quote(quote_id: str, user=Depends(get_current_user)):
-    q = await db.quotes.find_one({"quote_id": quote_id, "user_id": user["user_id"]}, {"_id": 0})
+    q = await db.quotes.find_one({"quote_id": quote_id}, {"_id": 0})
     if not q:
+        raise HTTPException(status_code=404, detail="not_found")
+    is_owner = q["user_id"] == user["user_id"]
+    if not is_owner and not q.get("is_public"):
         raise HTTPException(status_code=404, detail="not_found")
     if q.get("book_id"):
         q["book"] = await db.books.find_one({"book_id": q["book_id"]}, {"_id": 0})
-    q["author"] = {"pseudo": user["pseudo"], "handle": user["handle"]}
+    owner = await db.users.find_one({"user_id": q["user_id"]}, {"_id": 0, "pseudo": 1, "handle": 1, "picture": 1})
+    q["author"] = owner or {"pseudo": "Lecteur", "handle": "lecteur"}
+    q["is_owner"] = is_owner
     return q
 
 

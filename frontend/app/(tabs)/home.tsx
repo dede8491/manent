@@ -14,13 +14,12 @@ export default function Home() {
   const { width } = useWindowDimensions();
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [themes, setThemes] = useState<string[]>([]);
-  const [active, setActive] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const load = useCallback(async (theme?: string | null) => {
+  const load = useCallback(async () => {
     try {
-      const r = await api<{ quotes: Quote[] }>(`/feed${theme ? `?theme=${encodeURIComponent(theme)}` : ''}`);
+      const r = await api<{ quotes: Quote[] }>('/feed');
       setQuotes(r.quotes);
     } catch {}
   }, []);
@@ -34,9 +33,9 @@ export default function Home() {
     })();
   }, [load]);
 
-  useFocusEffect(useCallback(() => { load(active); }, [active, load]));
+  useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  const onRefresh = async () => { setRefreshing(true); await load(active); setRefreshing(false); };
+  const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
 
   // masonry: split into 2 columns
   const colWidth = (width - spacing.xl * 2 - spacing.md) / 2;
@@ -56,12 +55,12 @@ export default function Home() {
         </View>
         <View style={styles.chipRow}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: spacing.xl }}>
-            <Pressable onPress={() => setActive(null)} style={[styles.chip, !active && styles.chipActive]}>
-              <Text style={[styles.chipText, !active && styles.chipTextActive]}>Pour toi</Text>
-            </Pressable>
+            <View style={[styles.chip, styles.chipActive]}>
+              <Text style={[styles.chipText, styles.chipTextActive]}>Pour toi</Text>
+            </View>
             {themes.map(t => (
-              <Pressable key={t} testID={`home-chip-${t}`} onPress={() => setActive(t === active ? null : t)} style={[styles.chip, active === t && styles.chipActive]}>
-                <Text style={[styles.chipText, active === t && styles.chipTextActive]}>{t}</Text>
+              <Pressable key={t} testID={`home-chip-${t}`} onPress={() => router.push({ pathname: '/theme/[name]', params: { name: t } })} style={styles.chip}>
+                <Text style={styles.chipText}>{t}</Text>
               </Pressable>
             ))}
           </ScrollView>
@@ -83,14 +82,14 @@ export default function Home() {
             <View style={{ width: colWidth, gap: spacing.md }}>
               {col1.map(x => (
                 <View key={x.quote_id}>
-                  <QuoteCard quote={x} compact onPress={() => router.push({ pathname: '/quote/[id]', params: { id: x.quote_id } })} />
+                  <QuoteCard quote={x} compact onPress={() => router.push({ pathname: '/quote/[id]', params: { id: x.quote_id } })} onPressAuthor={x.author?.handle ? () => router.push({ pathname: '/reader/[handle]', params: { handle: x.author!.handle! } }) : undefined} />
                 </View>
               ))}
             </View>
             <View style={{ width: colWidth, gap: spacing.md }}>
               {col2.map(x => (
                 <View key={x.quote_id}>
-                  <QuoteCard quote={x} compact onPress={() => router.push({ pathname: '/quote/[id]', params: { id: x.quote_id } })} />
+                  <QuoteCard quote={x} compact onPress={() => router.push({ pathname: '/quote/[id]', params: { id: x.quote_id } })} onPressAuthor={x.author?.handle ? () => router.push({ pathname: '/reader/[handle]', params: { handle: x.author!.handle! } }) : undefined} />
                 </View>
               ))}
             </View>

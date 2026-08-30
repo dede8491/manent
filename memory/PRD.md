@@ -40,7 +40,15 @@
 - **Recherche fine**: écran `/search` (barre de recherche de l'accueil = bouton) — plein texte sur MES citations (text, note) et MES livres (titre, auteur, récap), segments Tout/Citations/Livres, filtres par thème et par livre. Backend `GET /api/search?q=&theme=&book_id=&scope=`.
 
 ## En attente utilisateur
-- Visuels d'identité (logos SVG, icône 1024, loader HTML, identite-de-marque-manent.md) uploadés sur le GitHub de l'utilisateur mais PAS encore dans cet environnement — demander le lien du repo ou un upload direct dans le chat pour intégrer icône/splash/wordmark.
+- Visuels d'identité: repo GitHub fourni **https://github.com/dede8491/manent** mais PRIVÉ (404 via API publique). Demander à l'utilisateur de le passer en public temporairement OU d'uploader les fichiers (logo-manent-principal.svg, icone-manent-1024.png, logo-manent-horizontal.svg, logo-manent-fond-sombre.svg, icone-manent-*.svg, identite-de-marque-manent.md, loader_manent_ecriture_epure.html) directement dans le chat. À intégrer ensuite: icône d'app (app.json), splash, wordmark/monogramme dans l'app.
+
+## Ajouts session 2 bis (juin 2026) — Pages Thèmes, Profils Publics, Export PDF (testés, itération 3: backend 16/16, frontend 6/6)
+- **Pages Thèmes** (`/theme/[name]`): chips thème de l'accueil naviguent vers une page dédiée — titre Cormorant, 3 stat-cards (citations/lecteurs/livres), fil masonry des citations publiques. Backend `GET /api/themes/{theme}/page`.
+- **Profils Publics** (`/reader/[handle]`): avatar, pseudo, @handle, bouton « Partager le profil » (Share natif / clipboard web, lien manent.app/@handle), 3 stats, grille des citations publiques. Backend `GET /api/readers/{handle}`. Accès via la ligne « Manent · @handle » des quote cards (prop `onPressAuthor`) et via le détail d'une citation d'autrui.
+- **Citations publiques ouvertes**: `GET /api/quotes/{id}` renvoie désormais les citations publiques d'autres lecteurs (`is_owner=false`, vrai auteur attaché). Le détail masque poubelle + épinglage pour les non-propriétaires et affiche « Voir le profil de @handle ». DELETE/PATCH restent owner-scoped.
+- **Export PDF fiche scolaire**: bouton « Exporter la fiche en PDF » sous la fiche (livres `etude`) — HTML brandé généré par `src/sheetPdf.ts` (auteur, personnages, résumé, thèmes, % complétion, citations relevées). Web: nouvel onglet + window.print(); natif: expo-print `printToFileAsync` + expo-sharing.
+- Changement voulu: les chips thème de l'accueil ne filtrent plus le fil inline, ils ouvrent la page thème.
+
 
 
 ## Comment tester (aperçu web)
