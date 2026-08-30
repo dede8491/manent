@@ -111,16 +111,63 @@ describe('synchronize — envoi', () => {
     expect(gateway.rows('books')[0]).toMatchObject({ id: 'book_1', progress_units: 96 });
   });
 
-  it('n’envoie jamais le chemin local de la photo de page', async () => {
+  it('téléverse la photo de page et n’envoie que son chemin distant', async () => {
     const gateway = fakeGateway();
-    await synchronize(
+    const { snapshot: after } = await synchronize(
       gateway,
       snapshot({ quotes: [quote()], outbox: enqueue([], 'quotes', 'upsert', 'quote_1') }),
     );
 
     const row = gateway.rows('quotes')[0];
-    expect(row.source_image_path).toBeNull();
+    expect(row.source_image_path).toBe('user_1/quote_1.jpg');
+    // L'URI local n'a aucun sens ailleurs et ne doit jamais partir.
     expect(JSON.stringify(row)).not.toContain('file:///local');
+    expect(gateway.photos['user_1/quote_1.jpg']).toBe('file:///local/page.jpg');
+    expect(after.quotes[0].sourceImagePath).toBe('user_1/quote_1.jpg');
+  });
+
+  it('ne téléverse pas deux fois la même photo', async () => {
+    const gateway = fakeGateway();
+    const spy = jest.spyOn(gateway, 'uploadPagePhoto');
+    const already = quote({ sourceImagePath: 'user_1/quote_1.jpg' });
+
+    await synchronize(
+      gateway,
+      snapshot({ quotes: [already], outbox: enqueue([], 'quotes', 'upsert', 'quote_1') }),
+    );
+
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('envoie la citation même si le téléversement de la photo échoue', async () => {
+    const gateway = fakeGateway();
+    gateway.failPhotoUpload(true);
+
+    const { snapshot: after, report } = await synchronize(
+      gateway,
+      snapshot({ quotes: [quote()], outbox: enqueue([], 'quotes', 'upsert', 'quote_1') }),
+    );
+
+    expect(report.pushed).toBe(1);
+    expect(gateway.rows('quotes')[0].source_image_path).toBeNull();
+    // La photo repartira au passage suivant.
+    expect(after.quotes[0].sourceImagePath).toBeNull();
+  });
+
+  it('ne téléverse que les photos des citations réellement envoyées', async () => {
+    const gateway = fakeGateway();
+    const spy = jest.spyOn(gateway, 'uploadPagePhoto');
+
+    await synchronize(
+      gateway,
+      snapshot({
+        quotes: [quote(), quote({ id: 'quote_2' })],
+        outbox: enqueue([], 'quotes', 'upsert', 'quote_1'),
+      }),
+    );
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledWith('user_1', 'quote_1', 'file:///local/page.jpg');
   });
 
   it('marque la suppression côté serveur sans effacer la ligne', async () => {

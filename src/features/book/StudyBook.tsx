@@ -8,6 +8,7 @@ import {
 } from '@/components';
 import { daysUntil, formatDay, percent, plural } from '@/lib/format';
 import { exportBookSheetPdf } from '@/features/book/exportPdf';
+import { generateFlashcards } from '@/services/flashcards';
 import { useStore } from '@/store/useStore';
 import { colors, radii, spacing } from '@/theme';
 import type { Book, Quote, StudySheetSection } from '@/types';
@@ -168,6 +169,7 @@ export function StudyBook({ book, quotes }: { book: Book; quotes: Quote[] }) {
 function Flashcards({ bookId }: { bookId: string }) {
   const cards = useStore((s) => s.flashcards);
   const review = useStore((s) => s.reviewFlashcard);
+  const addFlashcards = useStore((s) => s.addFlashcards);
   const premium = useStore((s) => s.user.premium);
   const router = useRouter();
 
@@ -175,14 +177,47 @@ function Flashcards({ bookId }: { bookId: string }) {
   const limit = premium ? deck.length : Math.min(deck.length, 3);
   const [index, setIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
+  const [generating, setGenerating] = useState(false);
+
+  /** Fabrique des cartes depuis la fiche et les citations déjà saisies. */
+  const generate = async () => {
+    setGenerating(true);
+    try {
+      const added = addFlashcards(bookId, await generateFlashcards(bookId));
+      Alert.alert(
+        added > 0 ? 'Cartes ajoutées' : 'Rien de nouveau',
+        added > 0
+          ? `${added} carte(s) fabriquée(s) à partir de ta fiche et de tes citations.`
+          : 'Toutes les cartes proposées étaient déjà dans ton paquet.',
+      );
+    } catch (error) {
+      Alert.alert(
+        'Génération impossible',
+        error instanceof Error ? error.message : 'Réessaie dans un moment.',
+      );
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const generateButton = (
+    <Button
+      label={generating ? 'Génération…' : '✨ Générer des cartes depuis ma fiche'}
+      variant="dashed"
+      loading={generating}
+      onPress={generate}
+      style={styles.generate}
+    />
+  );
 
   if (deck.length === 0) {
     return (
       <Card>
-        <Text variant="bodySoft">
-          Les flashcards se génèrent à partir de ta fiche et de tes citations. Complète une section
-          pour en obtenir.
+        <Text variant="bodySoft" style={styles.emptyDeck}>
+          Les flashcards se fabriquent à partir de ta fiche et de tes citations. Complète une
+          rubrique ou capture une citation, puis lance la génération.
         </Text>
+        {generateButton}
       </Card>
     );
   }
@@ -227,6 +262,8 @@ function Flashcards({ bookId }: { bookId: string }) {
           </Text>
         </Text>
       ) : null}
+
+      {generateButton}
     </>
   );
 }
@@ -248,6 +285,8 @@ const styles = StyleSheet.create({
   flashHint: { color: colors.muted },
   flashActions: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md },
   flashLimit: { marginTop: spacing.md },
+  emptyDeck: { marginBottom: spacing.md },
+  generate: { marginTop: spacing.md },
   export: { marginTop: spacing.xl },
   exportHint: { marginTop: spacing.sm },
 });

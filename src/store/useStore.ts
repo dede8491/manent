@@ -106,6 +106,7 @@ interface AppState {
 
   // — Flashcards —
   reviewFlashcard: (id: string, known: boolean) => void;
+  addFlashcards: (bookId: string, cards: { question: string; answer: string }[]) => number;
 
   // — Notifications —
   markNotificationsRead: () => void;
@@ -479,6 +480,26 @@ export const useStore = create<AppState>()(
             return { ...f, box, dueAt: new Date(Date.now() + days * 86_400_000).toISOString() };
           }),
         })),
+
+      addFlashcards: (bookId, cards) => {
+        const existing = get().flashcards.filter((f) => f.bookId === bookId);
+        // On ne réimporte pas une carte déjà présente : régénérer doit
+        // compléter le paquet, pas le dupliquer.
+        const known = new Set(existing.map((f) => f.question.trim().toLowerCase()));
+        const fresh: Flashcard[] = cards
+          .filter((c) => !known.has(c.question.trim().toLowerCase()))
+          .map((c) => ({
+            id: uid('fc'),
+            bookId,
+            question: c.question,
+            answer: c.answer,
+            box: 0,
+            dueAt: now(),
+          }));
+
+        if (fresh.length > 0) set((s) => ({ flashcards: [...s.flashcards, ...fresh] }));
+        return fresh.length;
+      },
 
       markNotificationsRead: () =>
         set((s) => ({ notifications: s.notifications.map((n) => ({ ...n, read: true })) })),

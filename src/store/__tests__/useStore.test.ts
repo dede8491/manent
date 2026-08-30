@@ -317,3 +317,51 @@ describe('nouveau livre', () => {
     expect(book.notifyNewChapters).toBe(false);
   });
 });
+
+describe('génération de flashcards', () => {
+  it('ajoute les cartes fabriquées au paquet du livre', () => {
+    const added = store().addFlashcards('book_rouge', [
+      { question: 'Qui est l’abbé Pirard ?', answer: 'Le directeur du séminaire de Besançon.' },
+    ]);
+
+    expect(added).toBe(1);
+    const deck = store().flashcards.filter((f) => f.bookId === 'book_rouge');
+    expect(deck.some((f) => f.question === 'Qui est l’abbé Pirard ?')).toBe(true);
+  });
+
+  it('ouvre les cartes neuves au premier palier, à revoir tout de suite', () => {
+    store().addFlashcards('book_rouge', [{ question: 'Nouvelle ?', answer: 'Oui.' }]);
+    const card = store().flashcards.find((f) => f.question === 'Nouvelle ?')!;
+
+    expect(card.box).toBe(0);
+    expect(new Date(card.dueAt).getTime()).toBeLessThanOrEqual(Date.now() + 1000);
+  });
+
+  it('ne duplique pas une question déjà présente, à la casse près', () => {
+    const existing = store().flashcards.find((f) => f.bookId === 'book_rouge')!;
+    const before = store().flashcards.length;
+
+    const added = store().addFlashcards('book_rouge', [
+      { question: `  ${existing.question.toUpperCase()}  `, answer: 'Autre formulation.' },
+    ]);
+
+    expect(added).toBe(0);
+    expect(store().flashcards).toHaveLength(before);
+  });
+
+  it('n’écrase pas la progression des cartes déjà révisées', () => {
+    store().reviewFlashcard('fc_1', true);
+    const boxBefore = store().flashcards.find((f) => f.id === 'fc_1')!.box;
+
+    store().addFlashcards('book_rouge', [{ question: 'Question inédite ?', answer: 'Réponse.' }]);
+
+    expect(store().flashcards.find((f) => f.id === 'fc_1')!.box).toBe(boxBefore);
+  });
+
+  it('sépare les paquets par livre', () => {
+    store().addFlashcards('book_essais', [{ question: 'Montaigne ?', answer: 'Essais.' }]);
+
+    expect(store().flashcards.filter((f) => f.bookId === 'book_essais')).toHaveLength(1);
+    expect(store().flashcards.filter((f) => f.bookId === 'book_rouge').length).toBeGreaterThan(1);
+  });
+});

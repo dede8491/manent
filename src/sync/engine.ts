@@ -32,6 +32,29 @@ const emptyReport = (): SyncReport => ({
   skipped: null,
 });
 
+/**
+ * Téléverse les photos de pages encore locales et renvoie leur chemin distant.
+ * Un échec de téléversement n'empêche pas l'envoi de la citation : le texte
+ * compte plus que l'image, et la photo repartira au passage suivant.
+ */
+async function uploadPendingPhotos(
+  gateway: SyncGateway,
+  quotes: Quote[],
+  userId: string,
+): Promise<Map<string, string>> {
+  const pending = quotes.filter((q) => q.sourceImageUri && !q.sourceImagePath);
+  const paths = new Map<string, string>();
+
+  for (const quote of pending) {
+    try {
+      paths.set(quote.id, await gateway.uploadPagePhoto(userId, quote.id, quote.sourceImageUri!));
+    } catch {
+      // On réessaiera : la citation part quand même.
+    }
+  }
+  return paths;
+}
+
 /** Retrouve la ligne locale visée par une opération d'envoi. */
 function rowFor(
   entity: SyncEntity,
@@ -69,8 +92,23 @@ async function push(
   snapshot: SyncSnapshot,
   userId: string,
   report: SyncReport,
-): Promise<SyncOperation[]> {
+): Promise<{ outbox: SyncOperation[]; photoPaths: Map<string, string> }> {
   let remaining = snapshot.outbox;
+
+  const pushedQuoteIds = new Set(
+    snapshot.outbox.filter((o) => o.entity === 'quotes' && o.op === 'upsert').map((o) => o.rowId),
+  );
+  const photoPaths = await uploadPendingPhotos(
+    gateway,
+    snapshot.quotes.filter((q) => pushedQuoteIds.has(q.id)),
+    userId,
+  );
+  const withPhotos: SyncSnapshot = {
+    ...snapshot,
+    quotes: snapshot.quotes.map((q) =>
+      photoPaths.has(q.id) ? { ...q, sourceImagePath: photoPaths.get(q.id)! } : q,
+    ),
+  };
 
   for (const { entity, operations } of groupByEntity(snapshot.outbox)) {
     const upserts = operations.filter((o) => o.op === 'upsert');
@@ -79,7 +117,7 @@ async function push(
     const rows: Record<string, unknown>[] = [];
     const orphans: SyncOperation[] = [];
     for (const operation of upserts) {
-      const row = rowFor(entity, operation.rowId, snapshot, userId);
+      const row = rowFor(entity, operation.rowId, withPhotos, userId);
       // La ligne a disparu localement entre-temps : l'opération n'a plus d'objet.
       if (row) rows.push(row);
       else orphans.push(operation);
@@ -99,7 +137,7 @@ async function push(
     remaining = dequeue(remaining, orphans);
   }
 
-  return remaining;
+  return { outbox: remaining, photoPaths };
 }
 
 /** Applique les lignes distantes modifiées depuis le dernier passage. */
@@ -179,13 +217,18 @@ export async function synchronize(
   }
 
   const startedAt = new Date().toISOString();
-  const outbox = await push(gateway, snapshot, userId, report);
+  const { outbox, photoPaths } = await push(gateway, snapshot, userId, report);
   const pulled = await pull(gateway, snapshot, userId, report);
 
   return {
     snapshot: {
       ...snapshot,
       ...pulled,
+      // Les photos téléversées gardent leur chemin distant, y compris si la
+      // citation a par ailleurs été rafraîchie depuis le serveur.
+      quotes: pulled.quotes.map((q) =>
+        photoPaths.has(q.id) ? { ...q, sourceImagePath: photoPaths.get(q.id)! } : q,
+      ),
       outbox,
       // On ne date le passage que si tout est parti : sinon la prochaine
       // synchronisation doit repartir de la même borne.

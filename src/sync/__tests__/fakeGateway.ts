@@ -10,6 +10,9 @@ export interface FakeGateway extends SyncGateway {
   rows(entity: SyncEntity): (SyncedRow & Record<string, unknown>)[];
   /** Fait échouer la prochaine écriture sur cette entité. */
   failOn(entity: SyncEntity | null): void;
+  /** Photos téléversées, indexées par chemin. */
+  photos: Record<string, string>;
+  failPhotoUpload(shouldFail: boolean): void;
   upsertCalls: { entity: SyncEntity; ids: string[] }[];
 }
 
@@ -18,10 +21,24 @@ export function fakeGateway(userId: string | null = 'user_1'): FakeGateway {
   const tables: Tables = { books: {}, quotes: {}, boards: {}, board_quotes: {} };
   let failing: SyncEntity | null = null;
   const upsertCalls: { entity: SyncEntity; ids: string[] }[] = [];
+  const photos: Record<string, string> = {};
+  let photoFails = false;
 
   return {
     tables,
     upsertCalls,
+    photos,
+
+    failPhotoUpload(shouldFail) {
+      photoFails = shouldFail;
+    },
+
+    async uploadPagePhoto(userId, quoteId, localUri) {
+      if (photoFails) throw new Error('téléversement refusé');
+      const path = `${userId}/${quoteId}.jpg`;
+      photos[path] = localUri;
+      return path;
+    },
 
     seed(entity, row) {
       tables[entity][row.id] = { ...row, deleted_at: row.deleted_at ?? null };

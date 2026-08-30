@@ -18,7 +18,7 @@ reste à écrire. Il est à jour du dernier commit.
 | 9 | Ajouter une lecture | `ajouter` | ✅ ; Wattpad ⚠️ |
 | 10 | Fiche livre (perso) | `livre/[id]` | ✅ |
 | 11 | Fiche Wattpad | `livre/[id]` | ✅ |
-| 12 | Fiche études | `livre/[id]` | ✅ |
+| 12 | Fiche études | `livre/[id]` | ✅ ; génération des cartes ⚠️ |
 | 13 | Détail citation | `citation/[id]` | ✅ |
 | 14 | Partager la citation | `partager` | ✅ |
 | 15 | Communauté — Tableaux | `(tabs)/communaute` | ✅ |
@@ -46,6 +46,7 @@ identifiants ou le déploiement.
 | -------------- | ------------- | -- |
 | Transcription IA et lecture du n° de page | `ANTHROPIC_API_KEY` + `supabase functions deploy ocr` | `supabase/functions/ocr` |
 | Import Wattpad | `supabase functions deploy wattpad-import` | `supabase/functions/wattpad-import` |
+| Génération des flashcards | `ANTHROPIC_API_KEY` + `supabase functions deploy flashcards` | `supabase/functions/flashcards` |
 | Pages web publiques | déployer `public-page` et router `manent.app/q`, `/b`, `/@` dessus | `supabase/functions/public-page` |
 | Auth Google / Apple | `GOOGLE_CLIENT_ID`, `APPLE_CLIENT_ID`… dans Supabase Auth | `supabase/config.toml` |
 | Synchronisation multi-appareils | un projet Supabase et les deux migrations appliquées | `src/sync`, `supabase/migrations` |
@@ -62,9 +63,6 @@ manuelle, l'import Wattpad pré-remplit depuis l'URL, Premium s'active localemen
 contre une passerelle en mémoire, mais il n'a jamais tourné contre un vrai
 Supabase : c'est ce qu'il faut vérifier en premier. Trois manques connus :
 
-- Les **photos de pages ne sont pas téléversées**. `sourceImagePath` existe dans
-  le modèle et le schéma, mais rien n'écrit encore dans le bucket privé
-  `page-photos` ; une photo reste sur l'appareil qui l'a prise.
 - **Clubs, notifications, badges et challenges ne sont pas synchronisés.** Ils
   restent servis par le jeu de données local ; seuls les livres, citations,
   tableaux et épingles font l'aller-retour.
@@ -83,11 +81,7 @@ pluriel) et porte le vocabulaire partagé — statuts, visibilités, unités,
 décomptes. Les libellés propres à chaque écran sont encore écrits en français
 dans le JSX ; les migrer clé par clé est mécanique.
 
-**Génération des flashcards.** Les cartes sont aujourd'hui fournies par le jeu de
-données. Leur génération depuis la fiche de lecture et les citations de l'élève
-passera par la même fonction edge que l'OCR, avec une troisième consigne.
-
-**Tests.** 120 cas couvrent le store, les services, le moteur de synchronisation
+**Tests.** 128 cas couvrent le store, les services, le moteur de synchronisation
 et le design system. Il manque des tests d'écran (parcours de capture, parcours
 d'ajout d'une lecture) et un test d'intégration contre un Supabase local.
 
@@ -129,4 +123,4 @@ depuis les paramètres.
   liens affiliés, Premium. ✅ côté app ; recommandation et régie à construire.
 - **V3** — clubs complets (lectures communes, commentaires, visios, challenges,
   badges) et mode études (fiche structurée, flashcards, groupes de classe). ✅
-  côté app ; génération des flashcards par IA à brancher.
+  côté app ; la génération des cartes attend le déploiement de la fonction edge.

@@ -1,3 +1,5 @@
+import { File } from 'expo-file-system';
+
 import { supabase } from '@/services/supabase';
 import type { BoardRow, BookRow, PinRow, QuoteRow } from './mappers';
 import type { SyncEntity, SyncedRow } from './types';
@@ -14,6 +16,12 @@ export interface SyncGateway {
   upsert(entity: SyncEntity, rows: Record<string, unknown>[]): Promise<void>;
   /** Suppression douce : la ligne reste, `deleted_at` est renseigné. */
   softDelete(entity: SyncEntity, ids: string[]): Promise<void>;
+  /**
+   * Téléverse la photo d'une page dans le bucket privé et renvoie son chemin.
+   * Le bucket n'est jamais public : la photo relève de l'usage personnel, seule
+   * la citation transcrite peut circuler.
+   */
+  uploadPagePhoto(userId: string, quoteId: string, localUri: string): Promise<string>;
   /**
    * Lignes modifiées depuis `since` (null = tout), suppressions comprises.
    * La requête est restreinte aux lignes de `userId` : les politiques RLS
@@ -54,6 +62,16 @@ export function supabaseGateway(): SyncGateway | null {
         .update({ deleted_at: new Date().toISOString() })
         .in('id', ids);
       if (error) throw new Error(error.message);
+    },
+
+    async uploadPagePhoto(userId, quoteId, localUri) {
+      const path = `${userId}/${quoteId}.jpg`;
+      const bytes = await new File(localUri).bytes();
+      const { error } = await client.storage
+        .from('page-photos')
+        .upload(path, bytes, { contentType: 'image/jpeg', upsert: true });
+      if (error) throw new Error(error.message);
+      return path;
     },
 
     async changedSince(entity, since, userId) {

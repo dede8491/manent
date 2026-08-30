@@ -35,7 +35,7 @@ dernière écriture. Le détail est dans [`docs/ROADMAP.md`](docs/ROADMAP.md).
 | `npm run android`   | build de développement Android           |
 | `npm run typecheck` | TypeScript en mode strict                |
 | `npm run lint`      | ESLint (config Expo)                     |
-| `npm test`          | Jest — 120 cas                           |
+| `npm test`          | Jest — 128 cas                           |
 
 Les fonctionnalités natives — appareil photo, scan de code-barres, partage
 d'image, PDF, notifications — nécessitent un *development build*
@@ -106,7 +106,7 @@ Supabase : Postgres avec RLS, Auth (e-mail, Google, Apple), Storage, fonctions e
 supabase start
 supabase db reset                 # applique les migrations
 supabase secrets set ANTHROPIC_API_KEY=...
-supabase functions deploy ocr wattpad-import public-page
+supabase functions deploy ocr wattpad-import flashcards public-page
 ```
 
 - **`ocr`** — une seule brique de vision, deux consignes : transcrire une citation,
@@ -115,6 +115,9 @@ supabase functions deploy ocr wattpad-import public-page
 - **`wattpad-import`** — Wattpad n'a pas d'API publique : la fonction lit les
   métadonnées Open Graph de la page. Elle renvoie toujours un objet exploitable,
   quitte à laisser des champs à compléter à la main.
+- **`flashcards`** — fabrique les cartes de révision à partir de la fiche de
+  lecture et des citations de l'élève, et de rien d'autre : la consigne interdit
+  toute connaissance extérieure, pour que l'élève révise son propre travail.
 - **`public-page`** — rend les pages publiques (citation, tableau, profil) en HTML
   avec balises Open Graph : porte d'entrée virale et SEO. Elle n'expose **que** ce
   qui est explicitement public.
