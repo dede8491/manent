@@ -11,9 +11,11 @@ import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
 import { QuoteCard, Quote } from '@/src/components/QuoteCard';
 import { api } from '@/src/api';
+import { useT } from '@/src/i18n';
 import { PrimaryButton, GhostButton } from '@/src/components/Button';
 
 export default function QuoteDetail() {
+  const t = useT();
   const colors = useColors();
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
@@ -79,11 +81,11 @@ export default function QuoteDetail() {
 
   const openSettingsAlert = () => {
     Alert.alert(
-      'Accès aux photos',
-      "Pour enregistrer ta quote card, autorise l'accès aux photos dans les réglages.",
+      t('Accès aux photos'),
+      t("Pour enregistrer ta quote card, autorise l'accès aux photos dans les réglages."),
       [
-        { text: 'Annuler', style: 'cancel' },
-        { text: 'Ouvrir les réglages', onPress: () => Linking.openSettings() },
+        { text: t('Annuler'), style: 'cancel' },
+        { text: t('Ouvrir les réglages'), onPress: () => Linking.openSettings() },
       ],
     );
   };
@@ -94,11 +96,11 @@ export default function QuoteDetail() {
     if (!current.canAskAgain) { openSettingsAlert(); return false; }
     const proceed = await new Promise<boolean>(resolve => {
       Alert.alert(
-        'Enregistrer dans ta galerie',
-        "Manent enregistre ta quote card dans tes photos pour la partager facilement.",
+        t('Enregistrer dans ta galerie'),
+        t("Manent enregistre ta quote card dans tes photos pour la partager facilement."),
         [
-          { text: 'Annuler', style: 'cancel', onPress: () => resolve(false) },
-          { text: 'Continuer', onPress: () => resolve(true) },
+          { text: t('Annuler'), style: 'cancel', onPress: () => resolve(false) },
+          { text: t('Continuer'), onPress: () => resolve(true) },
         ],
       );
     });
@@ -122,13 +124,13 @@ export default function QuoteDetail() {
       if (Platform.OS === 'web') {
         const uri = await capture();
         downloadWeb(uri);
-        setFeedback('Image téléchargée.');
+        setFeedback(t('Image téléchargée.'));
       } else {
         const ok = await ensureMediaPermission();
         if (!ok) return;
         const uri = await capture();
         await MediaLibrary.saveToLibraryAsync(uri);
-        setFeedback('Enregistrée dans ta galerie.');
+        setFeedback(t('Enregistrée dans ta galerie.'));
       }
     } catch (e) {
       console.error('capture/save failed', e);
@@ -150,11 +152,11 @@ export default function QuoteDetail() {
             await nav.share({ files: [file], title: 'Manent' });
           } else {
             downloadWeb(uri);
-            setFeedback('Image téléchargée — partage-la sur Instagram ou WhatsApp.');
+            setFeedback(t('Image téléchargée — partage-la sur Instagram ou WhatsApp.'));
           }
         } catch {
           downloadWeb(uri);
-          setFeedback('Image téléchargée — partage-la sur Instagram ou WhatsApp.');
+          setFeedback(t('Image téléchargée — partage-la sur Instagram ou WhatsApp.'));
         }
       } else {
         if (await Sharing.isAvailableAsync()) {
@@ -177,7 +179,7 @@ export default function QuoteDetail() {
     <View style={{ flex: 1, backgroundColor: colors.glacier }} testID="screen-quote-detail">
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
         <Pressable onPress={() => router.back()} testID="q-back" style={styles.iconBtn}><Feather name="chevron-left" size={22} color={colors.espresso} /></Pressable>
-        <Text style={styles.h1}>Citation</Text>
+        <Text style={styles.h1}>{t('Citation')}</Text>
         {quote.is_owner !== false ? (
           <Pressable onPress={del} testID="q-delete" style={styles.iconBtn}><Feather name="trash-2" size={20} color={colors.espresso} /></Pressable>
         ) : <View style={{ width: 40 }} />}
@@ -202,11 +204,11 @@ export default function QuoteDetail() {
           <Text style={[styles.brand, { color: style === 'encre' ? colors.creme : colors.clay }]}>Manent · @{quote.author?.handle}</Text>
         </View>
 
-        <Text style={styles.label}>Style de partage</Text>
+        <Text style={styles.label}>{t('Style de partage')}</Text>
         <View style={{ flexDirection: 'row', gap: 8 }}>
           {(['papier','encre','glacier'] as const).map(s => (
             <Pressable key={s} testID={`style-${s}`} onPress={() => setStyle(s)} style={[styles.styleChip, style === s && styles.styleChipActive]}>
-              <Text style={[styles.styleText, style === s && { color: colors.creme }]}>{s === 'papier' ? 'Papier' : s === 'encre' ? 'Encre' : 'Glacier'}</Text>
+              <Text style={[styles.styleText, style === s && { color: colors.creme }]}>{s === 'papier' ? t('Papier') : s === 'encre' ? t('Encre') : t('Glacier')}</Text>
             </Pressable>
           ))}
         </View>
@@ -217,7 +219,7 @@ export default function QuoteDetail() {
             {busy === 'save' ? <ActivityIndicator size="small" color={colors.espresso} /> : (
               <>
                 <Feather name="download" size={16} color={colors.espresso} />
-                <Text style={styles.shareBtnGhostText}>Galerie</Text>
+                <Text style={styles.shareBtnGhostText}>{t('Galerie')}</Text>
               </>
             )}
           </Pressable>
@@ -225,7 +227,7 @@ export default function QuoteDetail() {
             {busy === 'share' ? <ActivityIndicator size="small" color={colors.creme} /> : (
               <>
                 <Feather name="share" size={16} color={colors.creme} />
-                <Text style={styles.shareBtnText}>Partager l&rsquo;image</Text>
+                <Text style={styles.shareBtnText}>{t('Partager l’image')}</Text>
               </>
             )}
           </Pressable>
@@ -241,14 +243,14 @@ export default function QuoteDetail() {
             <View style={styles.authorAvatar}><Text style={styles.authorInitial}>{(quote.author?.pseudo?.[0] || 'M').toUpperCase()}</Text></View>
             <View style={{ flex: 1 }}>
               <Text style={styles.authorName}>{quote.author?.pseudo}</Text>
-              <Text style={styles.authorHandle}>Voir le profil de @{quote.author?.handle}</Text>
+              <Text style={styles.authorHandle}>{t('Voir le profil de @{handle}', { handle: quote.author?.handle || '' })}</Text>
             </View>
             <Feather name="chevron-right" size={18} color={colors.clay} />
           </Pressable>
         ) : (
-          <PrimaryButton testID="btn-pin" title="Épingler sur un tableau" onPress={openPin} />
+          <PrimaryButton testID="btn-pin" title={t('Épingler sur un tableau')} onPress={openPin} />
         )}
-        <GhostButton title="Retour" onPress={() => router.back()} />
+        <GhostButton title={t('Retour')} onPress={() => router.back()} />
       </ScrollView>
 
       {/* Rendu hors écran 1080×1350 pour l'export */}
@@ -260,9 +262,9 @@ export default function QuoteDetail() {
         <View style={styles.modalOverlay}>
           <View style={[styles.modal, { paddingBottom: insets.bottom + spacing.lg }]}>
             <View style={styles.grabber} />
-            <Text style={styles.modalTitle}>Choisis un tableau</Text>
+            <Text style={styles.modalTitle}>{t('Choisis un tableau')}</Text>
             {boards.length === 0 ? (
-              <Text style={{ fontFamily: fonts.body, color: colors.clay, textAlign: 'center', paddingVertical: spacing.xl }}>Aucun tableau. Crée-en un depuis Communauté.</Text>
+              <Text style={{ fontFamily: fonts.body, color: colors.clay, textAlign: 'center', paddingVertical: spacing.xl }}>{t('Aucun tableau. Crée-en un depuis Communauté.')}</Text>
             ) : (
               <FlatList
                 data={boards}
@@ -275,7 +277,7 @@ export default function QuoteDetail() {
                 )}
               />
             )}
-            <GhostButton title="Fermer" onPress={() => setPinning(false)} />
+            <GhostButton title={t('Fermer')} onPress={() => setPinning(false)} />
           </View>
         </View>
       </Modal>

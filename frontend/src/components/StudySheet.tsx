@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TextInput, Pressable } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
+import { useT } from '@/src/i18n';
 
 export type Sheet = {
   author_bio?: string;
@@ -12,6 +13,7 @@ export type Sheet = {
 };
 
 export function StudySheet({ sheet, onSave }: { sheet?: Sheet | null; onSave: (s: Sheet) => void }) {
+  const t = useT();
   const colors = useColors();
   const styles = useStyles(makeStyles);
   const [authorBio, setAuthorBio] = useState(sheet?.author_bio || '');
@@ -61,25 +63,25 @@ export function StudySheet({ sheet, onSave }: { sheet?: Sheet | null; onSave: (s
   return (
     <View style={styles.card} testID="study-sheet">
       <View style={styles.headRow}>
-        <Text style={styles.headTitle}>Fiche d&rsquo;études</Text>
+        <Text style={styles.headTitle}>{t('Fiche d’études')}</Text>
         <Text style={styles.pct} testID="sheet-pct">{pct}%</Text>
       </View>
       <View style={styles.progressBar}><View style={[styles.progressFill, { width: `${pct}%` }]} /></View>
       <Text style={styles.pctHint}>{pct === 100 ? 'Fiche complète, prête pour tes révisions.' : `${filled} section${filled > 1 ? 's' : ''} sur 4 remplie${filled > 1 ? 's' : ''}`}</Text>
 
-      <Text style={styles.label}>L&rsquo;auteur</Text>
+      <Text style={styles.label}>{t('L’auteur')}</Text>
       <TextInput
         testID="sheet-author"
         value={authorBio} onChangeText={setAuthorBio}
         onEndEditing={() => onSave(build())}
         onBlur={() => onSave(build())}
-        placeholder="Vie, époque, courant littéraire…"
+        placeholder={t('Vie, époque, courant littéraire…')}
         placeholderTextColor={colors.clay}
         style={[styles.input, styles.multiline]}
         multiline
       />
 
-      <Text style={styles.label}>Personnages</Text>
+      <Text style={styles.label}>{t('Personnages')}</Text>
       <View style={{ gap: 8 }}>
         {characters.map((c, i) => (
           <View key={`${c.name}-${i}`} style={styles.charRow}>
@@ -92,26 +94,26 @@ export function StudySheet({ sheet, onSave }: { sheet?: Sheet | null; onSave: (s
             </Pressable>
           </View>
         ))}
-        <TextInput testID="sheet-char-name" value={charName} onChangeText={setCharName} placeholder="Nom du personnage" placeholderTextColor={colors.clay} style={styles.input} />
+        <TextInput testID="sheet-char-name" value={charName} onChangeText={setCharName} placeholder={t('Nom du personnage')} placeholderTextColor={colors.clay} style={styles.input} />
         <View style={{ flexDirection: 'row', gap: 8 }}>
-          <TextInput testID="sheet-char-desc" value={charDesc} onChangeText={setCharDesc} placeholder="Rôle, traits marquants…" placeholderTextColor={colors.clay} style={[styles.input, { flex: 1 }]} />
+          <TextInput testID="sheet-char-desc" value={charDesc} onChangeText={setCharDesc} placeholder={t('Rôle, traits marquants…')} placeholderTextColor={colors.clay} style={[styles.input, { flex: 1 }]} />
           <Pressable testID="sheet-char-add" onPress={addCharacter} style={styles.plusBtn}><Feather name="plus" size={20} color={colors.creme} /></Pressable>
         </View>
       </View>
 
-      <Text style={styles.label}>Résumé</Text>
+      <Text style={styles.label}>{t('Résumé')}</Text>
       <TextInput
         testID="sheet-summary"
         value={summary} onChangeText={setSummary}
         onEndEditing={() => onSave(build())}
         onBlur={() => onSave(build())}
-        placeholder="L'intrigue en quelques lignes…"
+        placeholder={t("L'intrigue en quelques lignes…")}
         placeholderTextColor={colors.clay}
         style={[styles.input, styles.multiline]}
         multiline
       />
 
-      <Text style={styles.label}>Thèmes de l&rsquo;œuvre</Text>
+      <Text style={styles.label}>{t('Thèmes de l’œuvre')}</Text>
       <View style={styles.themeWrap}>
         {themes.map(t => (
           <Pressable key={t} testID={`sheet-theme-${t}`} onPress={() => removeTheme(t)} style={styles.themeChip}>
@@ -121,7 +123,7 @@ export function StudySheet({ sheet, onSave }: { sheet?: Sheet | null; onSave: (s
         ))}
       </View>
       <View style={{ flexDirection: 'row', gap: 8 }}>
-        <TextInput testID="sheet-theme-input" value={newTheme} onChangeText={setNewTheme} onSubmitEditing={addTheme} placeholder="Ajoute un thème (ex. destin)" placeholderTextColor={colors.clay} style={[styles.input, { flex: 1 }]} />
+        <TextInput testID="sheet-theme-input" value={newTheme} onChangeText={setNewTheme} onSubmitEditing={addTheme} placeholder={t('Ajoute un thème (ex. destin)')} placeholderTextColor={colors.clay} style={[styles.input, { flex: 1 }]} />
         <Pressable testID="sheet-theme-add" onPress={addTheme} style={styles.plusBtn}><Feather name="plus" size={20} color={colors.creme} /></Pressable>
       </View>
     </View>

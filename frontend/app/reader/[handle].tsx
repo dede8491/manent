@@ -7,6 +7,7 @@ import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
 import { QuoteCard, Quote } from '@/src/components/QuoteCard';
 import { api } from '@/src/api';
+import { useT } from '@/src/i18n';
 
 type Profile = {
   user: { pseudo: string; handle: string; picture?: string };
@@ -16,6 +17,7 @@ type Profile = {
 };
 
 export default function ReaderProfile() {
+  const t = useT();
   const colors = useColors();
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
@@ -40,7 +42,7 @@ export default function ReaderProfile() {
   const shareProfile = async () => {
     if (!profile) return;
     const url = `manent.app/@${profile.user.handle}`;
-    const message = `Découvre les lectures de ${profile.user.pseudo} sur Manent — ${url}`;
+    const message = t('Découvre les lectures de {pseudo} sur Manent — {url}', { pseudo: profile.user.pseudo, url });
     try {
       if (Platform.OS === 'web') {
         const nav: any = navigator;
@@ -48,7 +50,7 @@ export default function ReaderProfile() {
           await nav.share({ title: 'Manent', text: message });
         } else if (nav.clipboard) {
           await nav.clipboard.writeText(message);
-          setFeedback('Lien copié dans le presse-papiers.');
+          setFeedback(t('Lien copié dans le presse-papiers.'));
         } else {
           setFeedback(url);
         }
@@ -71,7 +73,7 @@ export default function ReaderProfile() {
         <Pressable onPress={() => router.back()} testID="reader-back" style={styles.iconBtn}>
           <Feather name="chevron-left" size={22} color={colors.espresso} />
         </Pressable>
-        <Text style={styles.headerLabel}>Lecteur</Text>
+        <Text style={styles.headerLabel}>{t('Lecteur')}</Text>
         <Pressable onPress={shareProfile} testID="reader-share" style={styles.iconBtn}>
           <Feather name="share" size={19} color={colors.espresso} />
         </Pressable>
@@ -79,7 +81,7 @@ export default function ReaderProfile() {
 
       {notFound ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl }}>
-          <Text style={styles.emptyTitle}>Ce lecteur reste introuvable.</Text>
+          <Text style={styles.emptyTitle}>{t('Ce lecteur reste introuvable.')}</Text>
         </View>
       ) : !profile ? (
         <View style={{ paddingVertical: spacing.xxl, alignItems: 'center' }}>
@@ -95,16 +97,16 @@ export default function ReaderProfile() {
             <Text style={styles.handle}>@{profile.user.handle}</Text>
             <Pressable testID="btn-share-profile" onPress={shareProfile} style={styles.shareBtn}>
               <Feather name="share" size={14} color={colors.creme} />
-              <Text style={styles.shareBtnText}>Partager le profil</Text>
+              <Text style={styles.shareBtnText}>{t('Partager le profil')}</Text>
             </Pressable>
             {feedback ? <Text style={styles.feedback} testID="reader-feedback">{feedback}</Text> : null}
           </View>
 
           <View style={styles.statsRow}>
             {[
-              { n: profile.stats.public_quotes, l: profile.stats.public_quotes > 1 ? 'citations' : 'citation' },
-              { n: profile.stats.books, l: profile.stats.books > 1 ? 'livres' : 'livre' },
-              { n: profile.stats.boards, l: profile.stats.boards > 1 ? 'tableaux' : 'tableau' },
+              { n: profile.stats.public_quotes, l: t(profile.stats.public_quotes > 1 ? 'citations' : 'citation') },
+              { n: profile.stats.books, l: t(profile.stats.books > 1 ? 'livres' : 'livre') },
+              { n: profile.stats.boards, l: t(profile.stats.boards > 1 ? 'tableaux' : 'tableau') },
             ].map(s => (
               <View key={s.l} style={styles.statCard}>
                 <Text style={styles.statNum}>{s.n}</Text>
@@ -114,9 +116,9 @@ export default function ReaderProfile() {
           </View>
 
           <View style={{ paddingHorizontal: spacing.xl, marginTop: spacing.xl }}>
-            <Text style={styles.sectionLabel}>Citations publiques</Text>
+            <Text style={styles.sectionLabel}>{t('Citations publiques')}</Text>
             {profile.quotes.length === 0 ? (
-              <Text style={styles.emptySub}>Rien de public pour l&rsquo;instant.</Text>
+              <Text style={styles.emptySub}>{t('Rien de public pour l’instant.')}</Text>
             ) : (
               <View style={{ flexDirection: 'row', gap: spacing.md }}>
                 <View style={{ width: colWidth, gap: spacing.md }}>

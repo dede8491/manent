@@ -7,8 +7,10 @@ import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles, useScheme, useToggleScheme } from '@/src/themeCtx';
 import { useAuth } from '@/src/auth';
 import { api } from '@/src/api';
+import { useT } from '@/src/i18n';
 
 export default function Profile() {
+  const t = useT();
   const colors = useColors();
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
@@ -46,10 +48,10 @@ export default function Profile() {
         <Text style={styles.handle}>@{user?.handle}</Text>
       </View>
       <View style={styles.statsRow}>
-        <View style={styles.stat}><Text style={styles.statNum}>{stats.books}</Text><Text style={styles.statLbl}>livres</Text></View>
-        <View style={styles.stat}><Text style={styles.statNum}>{stats.quotes}</Text><Text style={styles.statLbl}>citations</Text></View>
-        <View style={styles.stat}><Text style={styles.statNum}>{stats.boards}</Text><Text style={styles.statLbl}>tableaux</Text></View>
-        <View style={styles.stat}><Text style={styles.statNum}>{user?.themes?.length || 0}</Text><Text style={styles.statLbl}>thèmes</Text></View>
+        <View style={styles.stat}><Text style={styles.statNum}>{stats.books}</Text><Text style={styles.statLbl}>{t('livres')}</Text></View>
+        <View style={styles.stat}><Text style={styles.statNum}>{stats.quotes}</Text><Text style={styles.statLbl}>{t('citations')}</Text></View>
+        <View style={styles.stat}><Text style={styles.statNum}>{stats.boards}</Text><Text style={styles.statLbl}>{t('tableaux')}</Text></View>
+        <View style={styles.stat}><Text style={styles.statNum}>{user?.themes?.length || 0}</Text><Text style={styles.statLbl}>{t('thèmes')}</Text></View>
       </View>
 
       {reading && (
@@ -57,11 +59,11 @@ export default function Profile() {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
             <View style={styles.streakBox}>
               <Text style={styles.streakNum}>{reading.streak}</Text>
-              <Text style={styles.streakLbl}>jour{reading.streak > 1 ? 's' : ''} d&rsquo;affilée</Text>
+              <Text style={styles.streakLbl}>{t(reading.streak > 1 ? 'jours d’affilée' : 'jour d’affilée')}</Text>
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.readingTitle}>Ta semaine de lecture</Text>
-              <Text style={styles.readingSub}>{reading.week_pages} page{reading.week_pages > 1 ? 's' : ''} lue{reading.week_pages > 1 ? 's' : ''} · {reading.active_days_month} jour{reading.active_days_month > 1 ? 's' : ''} actif{reading.active_days_month > 1 ? 's' : ''} ce mois-ci</Text>
+              <Text style={styles.readingTitle}>{t('Ta semaine de lecture')}</Text>
+              <Text style={styles.readingSub}>{t('{p} pages lues · {d} jours actifs ce mois-ci', { p: reading.week_pages, d: reading.active_days_month })}</Text>
             </View>
           </View>
           <View style={styles.weekRow}>
@@ -84,9 +86,9 @@ export default function Profile() {
       {reading && (
         <View style={styles.goalCard} testID="goal-card">
           <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
-            <Text style={styles.readingTitle}>Objectif {reading.year}</Text>
+            <Text style={styles.readingTitle}>{t('Objectif {year}', { year: reading.year })}</Text>
             <Pressable testID="goal-edit" onPress={() => { setGoalInput(reading.yearly_goal ? String(reading.yearly_goal) : ''); setGoalModal(true); }} hitSlop={8}>
-              <Text style={styles.goalEdit}>{reading.yearly_goal ? 'Modifier' : 'Fixer un objectif'}</Text>
+              <Text style={styles.goalEdit}>{reading.yearly_goal ? t('Modifier') : t('Fixer un objectif')}</Text>
             </Pressable>
           </View>
           {reading.yearly_goal ? (
@@ -95,19 +97,19 @@ export default function Profile() {
                 <View style={[styles.goalFill, { width: `${Math.min(100, Math.round((reading.books_year / reading.yearly_goal) * 100))}%` }]} />
               </View>
               <Text style={styles.goalText} testID="goal-text">
-                {reading.books_year} / {reading.yearly_goal} livre{reading.yearly_goal > 1 ? 's' : ''} terminé{reading.books_year > 1 ? 's' : ''}
-                {reading.books_year >= reading.yearly_goal ? '  ·  Objectif atteint.' : ''}
+                {t('{done} / {goal} livres terminés', { done: reading.books_year, goal: reading.yearly_goal })}
+                {reading.books_year >= reading.yearly_goal ? t('  ·  Objectif atteint.') : ''}
               </Text>
             </>
           ) : (
-            <Text style={styles.readingSub}>Combien de livres cette année ? Fixe ton cap, la jauge suivra.</Text>
+            <Text style={styles.readingSub}>{t('Combien de livres cette année ? Fixe ton cap, la jauge suivra.')}</Text>
           )}
         </View>
       )}
 
       {badges.length > 0 && (
         <View style={{ marginTop: spacing.md }} testID="badges-section">
-          <Text style={styles.badgesLabel}>Badges · {badges.filter(b => b.earned).length}/{badges.length}</Text>
+          <Text style={styles.badgesLabel}>{t('Badges · {earned}/{total}', { earned: badges.filter(b => b.earned).length, total: badges.length })}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm, paddingHorizontal: spacing.xl }} testID="badges-row">
             {[...badges].sort((a, b) => Number(b.earned) - Number(a.earned)).map(b => (
               <View key={b.id} testID={`badge-${b.id}`} style={[styles.badge, !b.earned && styles.badgeLocked]}>
@@ -125,17 +127,16 @@ export default function Profile() {
       <View style={styles.premium}>
         {premium?.is_premium ? (
           <>
-            <Text style={styles.premiumTitle}>Premium actif</Text>
-            <Text style={styles.premiumText}>Formule {premium.plan === 'annuel' ? 'annuelle' : 'mensuelle'} — captures IA illimitées, exports débloqués, sans filigrane.</Text>
-            <Pressable testID="btn-premium" onPress={() => router.push('/premium')} style={styles.premiumBtn}><Text style={styles.premiumBtnText}>Gérer mon abonnement</Text></Pressable>
+            <Text style={styles.premiumTitle}>{t('Premium actif')}</Text>
+            <Text style={styles.premiumText}>{t('Formule {plan} — captures IA illimitées, exports débloqués.', { plan: t(premium.plan === 'annuel' ? 'annuelle' : 'mensuelle') })}</Text>
+            <Pressable testID="btn-premium" onPress={() => router.push('/premium')} style={styles.premiumBtn}><Text style={styles.premiumBtnText}>{t('Gérer mon abonnement')}</Text></Pressable>
           </>
         ) : (
           <>
             <Text style={styles.premiumTitle}>Manent Premium</Text>
-            <Text style={styles.premiumText}>Captures IA illimitées, export PDF, quote cards sans filigrane.</Text>
-            {premium ? <Text style={styles.premiumUsage}>Captures IA ce mois-ci : {premium.captures_used}/{premium.captures_limit}</Text> : null}
-            <Text style={styles.premiumPrice}>3,99 €/mois  ·  34,99 €/an (−27%)</Text>
-            <Pressable testID="btn-premium" onPress={() => router.push('/premium')} style={styles.premiumBtn}><Text style={styles.premiumBtnText}>Découvrir Premium</Text></Pressable>
+            <Text style={styles.premiumText}>{t('Captures IA illimitées, export PDF, quote cards sans filigrane.')}</Text>
+            {premium ? <Text style={styles.premiumUsage}>{t('Captures IA ce mois-ci : {used}/{limit}', { used: premium.captures_used, limit: premium.captures_limit })}</Text> : null}
+            <Pressable testID="btn-premium" onPress={() => router.push('/premium')} style={styles.premiumBtn}><Text style={styles.premiumBtnText}>{t('Découvrir Premium')}</Text></Pressable>
           </>
         )}
       </View>
@@ -143,21 +144,21 @@ export default function Profile() {
       <View style={{ paddingHorizontal: spacing.xl, gap: spacing.sm, marginTop: spacing.lg }}>
         <Pressable testID="row-darkmode" onPress={toggle} style={styles.row}>
           <Feather name={scheme === 'dark' ? 'sun' : 'moon'} size={18} color={colors.espresso} />
-          <Text style={[styles.rowLabel, { flex: 1 }]}>Mode sombre</Text>
+          <Text style={[styles.rowLabel, { flex: 1 }]}>{t('Mode sombre')}</Text>
           <View style={[styles.switch, scheme === 'dark' && { backgroundColor: colors.chambray }]}>
             <View style={[styles.knob, scheme === 'dark' && { alignSelf: 'flex-end' }]} />
           </View>
         </Pressable>
-        <Pressable testID="row-settings" onPress={() => router.push('/settings')} style={styles.row}><Feather name="settings" size={18} color={colors.espresso} /><Text style={styles.rowLabel}>Paramètres</Text></Pressable>
-        <Pressable testID="row-signout" onPress={signOut} style={styles.row}><Feather name="log-out" size={18} color={colors.espresso} /><Text style={styles.rowLabel}>Se déconnecter</Text></Pressable>
+        <Pressable testID="row-settings" onPress={() => router.push('/settings')} style={styles.row}><Feather name="settings" size={18} color={colors.espresso} /><Text style={styles.rowLabel}>{t('Paramètres')}</Text></Pressable>
+        <Pressable testID="row-signout" onPress={signOut} style={styles.row}><Feather name="log-out" size={18} color={colors.espresso} /><Text style={styles.rowLabel}>{t('Se déconnecter')}</Text></Pressable>
       </View>
 
       <Modal visible={goalModal} transparent animationType="slide" onRequestClose={() => setGoalModal(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }}>
             <View style={styles.modal}>
-            <Text style={styles.modalTitle}>Objectif de l&rsquo;année</Text>
-            <Text style={styles.readingSub}>Un cap réaliste vaut mieux qu&rsquo;un record : combien de livres cette année ?</Text>
+            <Text style={styles.modalTitle}>{t('Objectif de l’année')}</Text>
+            <Text style={styles.readingSub}>{t('Un cap réaliste vaut mieux qu’un record : combien de livres cette année ?')}</Text>
             <TextInput
               testID="goal-input"
               value={goalInput} onChangeText={setGoalInput}
@@ -179,10 +180,10 @@ export default function Profile() {
               }}
               style={[styles.goalSaveBtn, (!goalInput || parseInt(goalInput, 10) < 1) && { opacity: 0.5 }]}
             >
-              <Text style={styles.goalSaveText}>Enregistrer</Text>
+              <Text style={styles.goalSaveText}>{t('Enregistrer')}</Text>
             </Pressable>
             <Pressable testID="goal-cancel" onPress={() => setGoalModal(false)} style={{ alignSelf: 'center', padding: spacing.sm }}>
-              <Text style={styles.goalEdit}>Annuler</Text>
+              <Text style={styles.goalEdit}>{t('Annuler')}</Text>
             </Pressable>
           </View>
           </ScrollView>

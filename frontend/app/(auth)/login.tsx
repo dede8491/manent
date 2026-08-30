@@ -7,8 +7,10 @@ import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
 import { PrimaryButton, GhostButton } from '@/src/components/Button';
 import { useAuth } from '@/src/auth';
+import { useT } from '@/src/i18n';
 
 export default function Login() {
+  const t = useT();
   const colors = useColors();
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
@@ -24,7 +26,7 @@ export default function Login() {
     try {
       await signIn(email.trim(), password);
     } catch {
-      setErr('Identifiants incorrects.');
+      setErr(t('Identifiants incorrects.'));
     } finally { setLoading(false); }
   };
   return (
@@ -33,17 +35,17 @@ export default function Login() {
         <Pressable onPress={() => router.back()} testID="login-back" style={styles.back}>
           <Feather name="chevron-left" size={22} color={colors.espresso} />
         </Pressable>
-        <Text style={styles.title}>Bon retour parmi nous</Text>
-        <Text style={styles.sub}>Reprends là où tu t'étais arrêtée.</Text>
+        <Text style={styles.title}>{t('Bon retour parmi nous')}</Text>
+        <Text style={styles.sub}>{t("Reprends là où tu t'étais arrêtée.")}</Text>
         <View style={{ height: spacing.xl }} />
-        <Text style={styles.label}>E-mail</Text>
+        <Text style={styles.label}>{t('E-mail')}</Text>
         <TextInput testID="login-email" value={email} onChangeText={setEmail} style={styles.input} autoCapitalize="none" keyboardType="email-address" placeholder="toi@exemple.com" placeholderTextColor={colors.clay} />
-        <Text style={styles.label}>Mot de passe</Text>
-        <TextInput testID="login-password" value={password} onChangeText={setPassword} style={styles.input} secureTextEntry placeholder="ton mot de passe" placeholderTextColor={colors.clay} />
+        <Text style={styles.label}>{t('Mot de passe')}</Text>
+        <TextInput testID="login-password" value={password} onChangeText={setPassword} style={styles.input} secureTextEntry placeholder={t('ton mot de passe')} placeholderTextColor={colors.clay} />
         {err && <Text style={{ color: colors.espresso, marginTop: spacing.md, fontFamily: fonts.body }}>{err}</Text>}
         <View style={{ height: spacing.xl }} />
-        <PrimaryButton testID="btn-login" title="Se connecter" onPress={submit} loading={loading} disabled={!email || !password} />
-        <GhostButton testID="btn-goto-signup" title="Créer un compte" onPress={() => router.replace('/onboarding/account')} />
+        <PrimaryButton testID="btn-login" title={t('Se connecter')} onPress={submit} loading={loading} disabled={!email || !password} />
+        <GhostButton testID="btn-goto-signup" title={t('Créer un compte')} onPress={() => router.replace('/onboarding/account')} />
       </ScrollView>
     </KeyboardAvoidingView>
   );

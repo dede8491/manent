@@ -7,6 +7,7 @@ import { useColors, useStyles } from '@/src/themeCtx';
 import { PrimaryButton } from '@/src/components/Button';
 import { api } from '@/src/api';
 import { useAuth } from '@/src/auth';
+import { useT } from '@/src/i18n';
 
 const MODES = [
   { id: 'plaisir', label: 'Plaisir', desc: 'Je lis pour respirer.' },
@@ -15,6 +16,7 @@ const MODES = [
 ] as const;
 
 export default function Themes() {
+  const t = useT();
   const colors = useColors();
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
@@ -47,8 +49,8 @@ export default function Themes() {
   return (
     <View style={[styles.c, { paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + spacing.lg }]} testID="onboarding-themes">
       <ScrollView contentContainerStyle={{ padding: spacing.xl }} showsVerticalScrollIndicator={false}>
-        <Text style={styles.step}>Étape 2 sur 2</Text>
-        <Text style={styles.title}>Tu lis surtout pour…</Text>
+        <Text style={styles.step}>{t('Étape 2 sur 2')}</Text>
+        <Text style={styles.title}>{t('Tu lis surtout pour…')}</Text>
         <View style={styles.modeRow}>
           {MODES.map(m => (
             <Pressable
@@ -57,14 +59,14 @@ export default function Themes() {
               onPress={() => setMode(m.id)}
               style={[styles.modeCard, mode === m.id && styles.modeCardActive]}
             >
-              <Text style={[styles.modeLabel, mode === m.id && { color: colors.creme }]}>{m.label}</Text>
-              <Text style={[styles.modeDesc, mode === m.id && { color: colors.creme, opacity: 0.9 }]}>{m.desc}</Text>
+              <Text style={[styles.modeLabel, mode === m.id && { color: colors.creme }]}>{t(m.label)}</Text>
+              <Text style={[styles.modeDesc, mode === m.id && { color: colors.creme, opacity: 0.9 }]}>{t(m.desc)}</Text>
             </Pressable>
           ))}
         </View>
 
-        <Text style={[styles.title, { marginTop: spacing.xxl }]}>Choisis tes thèmes</Text>
-        <Text style={styles.sub}>Au moins 3, pour construire ton fil.</Text>
+        <Text style={[styles.title, { marginTop: spacing.xxl }]}>{t('Choisis tes thèmes')}</Text>
+        <Text style={styles.sub}>{t('Au moins 3, pour construire ton fil.')}</Text>
         <View style={styles.tagWrap}>
           {themes.map(t => {
             const active = selected.includes(t);
@@ -79,7 +81,7 @@ export default function Themes() {
       <View style={{ paddingHorizontal: spacing.xl, paddingTop: spacing.sm }}>
         <PrimaryButton
           testID="btn-themes-continue"
-          title={selected.length < 3 ? `${selected.length}/3 thèmes` : 'Continuer'}
+          title={selected.length < 3 ? t('{n}/3 thèmes', { n: selected.length }) : t('Continuer')}
           disabled={!mode || selected.length < 3}
           loading={loading}
           onPress={save}

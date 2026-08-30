@@ -7,12 +7,23 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFonts } from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
 
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useIconFonts } from '@/src/hooks/use-icon-fonts';
 import { AuthProvider, useAuth } from '@/src/auth';
 import { ThemeProvider, useColors, useScheme } from '@/src/themeCtx';
+import { I18nProvider } from '@/src/i18n';
+import { initializeRevenueCat, SubscriptionProvider } from '@/src/revenuecat';
 
 LogBox.ignoreAllLogs(true);
 SplashScreen.preventAutoHideAsync();
+
+try {
+  initializeRevenueCat();
+} catch (err) {
+  console.warn('RevenueCat unavailable:', err);
+}
+
+const queryClient = new QueryClient();
 
 function NavGate() {
   const { user, loading } = useAuth();
@@ -74,7 +85,13 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider>
-      <ThemedApp />
+      <I18nProvider>
+        <QueryClientProvider client={queryClient}>
+          <SubscriptionProvider>
+            <ThemedApp />
+          </SubscriptionProvider>
+        </QueryClientProvider>
+      </I18nProvider>
     </ThemeProvider>
   );
 }

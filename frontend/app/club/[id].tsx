@@ -6,9 +6,11 @@ import { Feather } from '@expo/vector-icons';
 import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
 import { api } from '@/src/api';
+import { useT } from '@/src/i18n';
 import { PrimaryButton, GhostButton } from '@/src/components/Button';
 
 export default function ClubDetail() {
+  const t = useT();
   const colors = useColors();
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
@@ -27,6 +29,9 @@ export default function ClubDetail() {
   const [chTitle, setChTitle] = useState('');
   const [chGoal, setChGoal] = useState('');
   const [myPages, setMyPages] = useState('');
+  const [recoModal, setRecoModal] = useState(false);
+  const [recoBook, setRecoBook] = useState<any | null>(null);
+  const [recoNote, setRecoNote] = useState('');
   const scrollRef = useRef<ScrollView>(null);
 
   const load = useCallback(async () => {
@@ -51,7 +56,7 @@ export default function ClubDetail() {
   };
 
   const shareCode = async () => {
-    const message = `Rejoins mon club de lecture « ${club.name} » sur Manent avec le code ${club.code}`;
+    const message = t('Rejoins mon club de lecture « {name} » sur Manent avec le code {code}', { name: club.name, code: club.code });
     try {
       if (Platform.OS === 'web') {
         const nav: any = navigator;
@@ -113,6 +118,25 @@ export default function ClubDetail() {
     } catch {}
   };
 
+  const openReco = async () => {
+    if (!myBooks.length) {
+      try { const r = await api<{ books: any[] }>('/books'); setMyBooks(r.books); } catch {}
+    }
+    setRecoBook(null); setRecoNote('');
+    setRecoModal(true);
+  };
+
+  const sendReco = async () => {
+    if (!recoBook || !recoNote.trim()) return;
+    const m = await api<any>(`/clubs/${id}/reco`, {
+      method: 'POST',
+      body: JSON.stringify({ title: recoBook.title, author: recoBook.author, note: recoNote.trim() }),
+    });
+    setMessages(prev => [...prev, m]);
+    setRecoModal(false);
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+  };
+
   if (!club) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.glacier, alignItems: 'center', justifyContent: 'center' }}>
@@ -136,12 +160,12 @@ export default function ClubDetail() {
       <ScrollView ref={scrollRef} contentContainerStyle={{ padding: spacing.xl, paddingBottom: spacing.md }}>
         {!!club.description && <Text style={styles.desc}>{club.description}</Text>}
         <View style={styles.codeRow}>
-          <Text style={styles.codeLabel}>Code d&rsquo;invitation</Text>
+          <Text style={styles.codeLabel}>{t('Code d’invitation')}</Text>
           <Text style={styles.code} testID="club-code">{club.code}</Text>
-          <Text style={styles.membersCount}>{club.members_count} membre{club.members_count > 1 ? 's' : ''} · {club.members.map((m: any) => m.pseudo).join(', ')}</Text>
+          <Text style={styles.membersCount}>{t(club.members_count > 1 ? '{n} membres' : '{n} membre', { n: club.members_count })} · {club.members.map((m: any) => m.pseudo).join(', ')}</Text>
         </View>
 
-        <Text style={styles.sectionLabel}>Lecture commune</Text>
+        <Text style={styles.sectionLabel}>{t('Lecture commune')}</Text>
         {club.book ? (
           <View style={styles.bookRow}>
             <View style={styles.bookCover}><Text style={styles.bookInitial}>{(club.book.title?.[0] || 'M').toUpperCase()}</Text></View>
@@ -158,13 +182,13 @@ export default function ClubDetail() {
         ) : club.is_owner ? (
           <Pressable testID="club-set-book" onPress={openBookPicker} style={styles.dashedBtn}>
             <Feather name="book-open" size={18} color={colors.chambray} />
-            <Text style={styles.dashedBtnText}>Choisir le livre du club</Text>
+            <Text style={styles.dashedBtnText}>{t('Choisir le livre du club')}</Text>
           </Pressable>
         ) : (
-          <Text style={styles.emptyText}>Le livre du club n&rsquo;est pas encore choisi.</Text>
+          <Text style={styles.emptyText}>{t('Le livre du club n’est pas encore choisi.')}</Text>
         )}
 
-        <Text style={styles.sectionLabel}>Passage de la semaine</Text>
+        <Text style={styles.sectionLabel}>{t('Passage de la semaine')}</Text>
         {club.weekly_passage ? (
           <View style={styles.passageCard} testID="club-passage">
             <Text style={styles.passageMark}>&ldquo;</Text>
@@ -183,19 +207,19 @@ export default function ClubDetail() {
         ) : club.is_owner ? (
           <Pressable testID="club-set-passage" onPress={() => setPassageModal(true)} style={styles.dashedBtn}>
             <Feather name="feather" size={18} color={colors.chambray} />
-            <Text style={styles.dashedBtnText}>Définir le passage de la semaine</Text>
+            <Text style={styles.dashedBtnText}>{t('Définir le passage de la semaine')}</Text>
           </Pressable>
         ) : (
-          <Text style={styles.emptyText}>Aucun passage proposé cette semaine.</Text>
+          <Text style={styles.emptyText}>{t('Aucun passage proposé cette semaine.')}</Text>
         )}
 
-        <Text style={styles.sectionLabel}>Défi de lecture</Text>
+        <Text style={styles.sectionLabel}>{t('Défi de lecture')}</Text>
         {club.challenge ? (
           <View style={styles.challengeCard} testID="club-challenge">
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.challengeTitle}>{club.challenge.title}</Text>
-                <Text style={styles.challengeGoal}>Objectif : {club.challenge.goal_pages} pages</Text>
+                <Text style={styles.challengeGoal}>{t('Objectif : {n} pages', { n: club.challenge.goal_pages })}</Text>
               </View>
               {club.is_owner && (
                 <Pressable testID="club-edit-challenge" onPress={() => { setChTitle(club.challenge.title); setChGoal(String(club.challenge.goal_pages)); setChallengeModal(true); }} hitSlop={8}>
@@ -208,7 +232,7 @@ export default function ClubDetail() {
                 <View key={m.handle + i} style={styles.rankRow}>
                   <Text style={styles.rankNum}>{i + 1}</Text>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.rankName, m.is_me && { fontFamily: fonts.bodyMedium }]}>{m.pseudo}{m.is_me ? ' (toi)' : ''}</Text>
+                    <Text style={[styles.rankName, m.is_me && { fontFamily: fonts.bodyMedium }]}>{m.pseudo}{m.is_me ? t(' (toi)') : ''}</Text>
                     <View style={styles.rankBar}><View style={[styles.rankFill, { width: `${m.pct}%` }]} /></View>
                   </View>
                   <Text style={styles.rankPages}>{m.pages} p.</Text>
@@ -220,7 +244,7 @@ export default function ClubDetail() {
                 testID="challenge-my-pages"
                 value={myPages} onChangeText={setMyPages}
                 keyboardType="number-pad"
-                placeholder={`Ta page actuelle (${club.challenge.my_pages || 0})`}
+                placeholder={t('Ta page actuelle ({n})', { n: club.challenge.my_pages || 0 })}
                 placeholderTextColor={colors.clay}
                 style={styles.progressInput}
               />
@@ -232,28 +256,40 @@ export default function ClubDetail() {
         ) : club.is_owner ? (
           <Pressable testID="club-set-challenge" onPress={() => setChallengeModal(true)} style={styles.dashedBtn}>
             <Feather name="flag" size={18} color={colors.chambray} />
-            <Text style={styles.dashedBtnText}>Lancer un défi de lecture</Text>
+            <Text style={styles.dashedBtnText}>{t('Lancer un défi de lecture')}</Text>
           </Pressable>
         ) : (
-          <Text style={styles.emptyText}>Aucun défi en cours.</Text>
+          <Text style={styles.emptyText}>{t('Aucun défi en cours.')}</Text>
         )}
 
         <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginTop: spacing.xl, marginBottom: spacing.sm }}>
-          <Text style={[styles.sectionLabel, { marginTop: 0, marginBottom: 0 }]}>Discussion</Text>
-          {club.is_owner && (club.weekly_passage || club.challenge) ? (
-            <Pressable testID="club-send-recap" onPress={sendRecap} hitSlop={8}>
-              <Text style={styles.recapLink}>Envoyer le récap</Text>
+          <Text style={[styles.sectionLabel, { marginTop: 0, marginBottom: 0 }]}>{t('Discussion')}</Text>
+          <View style={{ flexDirection: 'row', gap: spacing.md }}>
+            <Pressable testID="club-reco-btn" onPress={openReco} hitSlop={8}>
+              <Text style={styles.recapLink}>{t('Recommander un livre')}</Text>
             </Pressable>
-          ) : null}
+            {club.is_owner && (club.weekly_passage || club.challenge) ? (
+              <Pressable testID="club-send-recap" onPress={sendRecap} hitSlop={8}>
+                <Text style={styles.recapLink}>{t('Envoyer le récap')}</Text>
+              </Pressable>
+            ) : null}
+          </View>
         </View>
         {messages.length === 0 ? (
-          <Text style={styles.emptyText}>Lance la conversation — premier mot sur la lecture ?</Text>
+          <Text style={styles.emptyText}>{t('Lance la conversation — premier mot sur la lecture ?')}</Text>
         ) : (
           <View style={{ gap: spacing.sm }}>
             {messages.map(m => m.is_system ? (
               <View key={m.message_id} style={styles.recapCard} testID="recap-message">
-                <Text style={styles.recapLabel}>Manent · Récap</Text>
+                <Text style={styles.recapLabel}>{t('Manent · Récap')}</Text>
                 <Text style={styles.recapText}>{m.text}</Text>
+              </View>
+            ) : m.is_reco ? (
+              <View key={m.message_id} style={styles.recoCard} testID="reco-message">
+                <Text style={styles.recapLabel}>{t('Reco de {pseudo}', { pseudo: m.author?.pseudo || '' })}</Text>
+                <Text style={styles.recoTitle}>{m.book?.title}</Text>
+                {!!m.book?.author && <Text style={styles.recoAuthor}>{m.book.author}</Text>}
+                <Text style={styles.recoNote}>« {m.text} »</Text>
               </View>
             ) : (
               <View key={m.message_id} style={[styles.msg, m.is_me && styles.msgMine]}>
@@ -265,7 +301,7 @@ export default function ClubDetail() {
         )}
 
         <Pressable testID="club-leave" onPress={leave} style={styles.leaveBtn}>
-          <Text style={styles.leaveText}>Quitter le club</Text>
+          <Text style={styles.leaveText}>{t('Quitter le club')}</Text>
         </Pressable>
       </ScrollView>
 
@@ -273,7 +309,7 @@ export default function ClubDetail() {
         <TextInput
           testID="club-msg-input"
           value={msg} onChangeText={setMsg}
-          placeholder="Écris au club…"
+          placeholder={t('Écris au club…')}
           placeholderTextColor={colors.clay}
           style={styles.input}
           onSubmitEditing={send}
@@ -288,7 +324,7 @@ export default function ClubDetail() {
         <View style={styles.modalOverlay}>
           <View style={[styles.modal, { paddingBottom: insets.bottom + spacing.lg }]}>
             <View style={styles.grabber} />
-            <Text style={styles.modalTitle}>Livre du club</Text>
+            <Text style={styles.modalTitle}>{t('Livre du club')}</Text>
             <FlatList
               data={myBooks}
               keyExtractor={x => x.book_id}
@@ -299,23 +335,55 @@ export default function ClubDetail() {
                   <Text style={styles.pickTitle} numberOfLines={1}>{item.title}</Text>
                 </Pressable>
               )}
-              ListEmptyComponent={<Text style={styles.emptyText}>Ajoute d&rsquo;abord un livre à ta bibliothèque.</Text>}
+              ListEmptyComponent={<Text style={styles.emptyText}>{t('Ajoute d’abord un livre à ta bibliothèque.')}</Text>}
             />
-            <GhostButton title="Fermer" onPress={() => setBookModal(false)} />
+            <GhostButton title={t('Fermer')} onPress={() => setBookModal(false)} />
           </View>
         </View>
+      </Modal>
+
+      <Modal visible={recoModal} transparent animationType="slide" onRequestClose={() => setRecoModal(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
+          <View style={[styles.modal, { paddingBottom: insets.bottom + spacing.lg }]}>
+            <View style={styles.grabber} />
+            <Text style={styles.modalTitle}>{t('Recommander un livre')}</Text>
+            <FlatList
+              data={myBooks}
+              keyExtractor={x => x.book_id}
+              style={{ maxHeight: 200 }}
+              renderItem={({ item }) => (
+                <Pressable testID={`reco-book-${item.book_id}`} onPress={() => setRecoBook(item)} style={[styles.pickRow, recoBook?.book_id === item.book_id && { borderColor: colors.chambray, borderWidth: 1.5 }]}>
+                  <Feather name={recoBook?.book_id === item.book_id ? 'check-circle' : 'book'} size={18} color={colors.chambray} />
+                  <Text style={styles.pickTitle} numberOfLines={1}>{item.title}</Text>
+                </Pressable>
+              )}
+              ListEmptyComponent={<Text style={styles.emptyText}>{t('Ajoute d’abord un livre à ta bibliothèque.')}</Text>}
+            />
+            <TextInput
+              testID="reco-note"
+              value={recoNote} onChangeText={setRecoNote}
+              placeholder={t('Ton petit mot (pourquoi ce livre ?)')}
+              placeholderTextColor={colors.clay}
+              style={[styles.modalInput, { minHeight: 70, textAlignVertical: 'top', marginTop: spacing.sm }]}
+              multiline
+            />
+            <View style={{ height: spacing.sm }} />
+            <PrimaryButton testID="reco-send" title={t('Envoyer la reco')} onPress={sendReco} disabled={!recoBook || !recoNote.trim()} />
+            <GhostButton title={t('Annuler')} onPress={() => setRecoModal(false)} />
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal visible={challengeModal} transparent animationType="slide" onRequestClose={() => setChallengeModal(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
           <View style={[styles.modal, { paddingBottom: insets.bottom + spacing.lg }]}>
             <View style={styles.grabber} />
-            <Text style={styles.modalTitle}>Défi de lecture</Text>
-            <TextInput testID="challenge-title" value={chTitle} onChangeText={setChTitle} placeholder="Nom du défi (ex: Finir Candide en mai)" placeholderTextColor={colors.clay} style={styles.modalInput} />
-            <TextInput testID="challenge-goal" value={chGoal} onChangeText={setChGoal} keyboardType="number-pad" placeholder="Objectif en pages (ex: 150)" placeholderTextColor={colors.clay} style={styles.modalInput} />
+            <Text style={styles.modalTitle}>{t('Défi de lecture')}</Text>
+            <TextInput testID="challenge-title" value={chTitle} onChangeText={setChTitle} placeholder={t('Nom du défi (ex: Finir Candide en mai)')} placeholderTextColor={colors.clay} style={styles.modalInput} />
+            <TextInput testID="challenge-goal" value={chGoal} onChangeText={setChGoal} keyboardType="number-pad" placeholder={t('Objectif en pages (ex: 150)')} placeholderTextColor={colors.clay} style={styles.modalInput} />
             <View style={{ height: spacing.md }} />
-            <PrimaryButton testID="challenge-save" title="Lancer le défi" onPress={saveChallenge} disabled={!chTitle.trim() || !chGoal} />
-            <GhostButton title="Annuler" onPress={() => setChallengeModal(false)} />
+            <PrimaryButton testID="challenge-save" title={t('Lancer le défi')} onPress={saveChallenge} disabled={!chTitle.trim() || !chGoal} />
+            <GhostButton title={t('Annuler')} onPress={() => setChallengeModal(false)} />
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -324,12 +392,12 @@ export default function ClubDetail() {
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
           <View style={[styles.modal, { paddingBottom: insets.bottom + spacing.lg }]}>
             <View style={styles.grabber} />
-            <Text style={styles.modalTitle}>Passage de la semaine</Text>
-            <TextInput testID="passage-text" value={passageText} onChangeText={setPassageText} placeholder="Le passage à méditer ensemble…" placeholderTextColor={colors.clay} style={[styles.modalInput, { minHeight: 100, textAlignVertical: 'top' }]} multiline />
-            <TextInput testID="passage-page" value={passagePage} onChangeText={setPassagePage} keyboardType="number-pad" placeholder="Page (optionnel)" placeholderTextColor={colors.clay} style={styles.modalInput} />
+            <Text style={styles.modalTitle}>{t('Passage de la semaine')}</Text>
+            <TextInput testID="passage-text" value={passageText} onChangeText={setPassageText} placeholder={t('Le passage à méditer ensemble…')} placeholderTextColor={colors.clay} style={[styles.modalInput, { minHeight: 100, textAlignVertical: 'top' }]} multiline />
+            <TextInput testID="passage-page" value={passagePage} onChangeText={setPassagePage} keyboardType="number-pad" placeholder={t('Page (optionnel)')} placeholderTextColor={colors.clay} style={styles.modalInput} />
             <View style={{ height: spacing.md }} />
-            <PrimaryButton testID="passage-save" title="Publier le passage" onPress={savePassage} disabled={!passageText.trim()} />
-            <GhostButton title="Annuler" onPress={() => setPassageModal(false)} />
+            <PrimaryButton testID="passage-save" title={t('Publier le passage')} onPress={savePassage} disabled={!passageText.trim()} />
+            <GhostButton title={t('Annuler')} onPress={() => setPassageModal(false)} />
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -379,6 +447,10 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   recapCard: { backgroundColor: colors.bisque, borderRadius: radius.md, padding: spacing.md },
   recapLabel: { fontFamily: fonts.bodyMedium, fontSize: 9, color: colors.clay, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 6 },
   recapText: { fontFamily: fonts.body, fontSize: 13.5, color: colors.espresso, lineHeight: 20 },
+  recoCard: { backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.chambray, padding: spacing.md },
+  recoTitle: { fontFamily: fonts.displayMedium, fontSize: 19, color: colors.espresso },
+  recoAuthor: { fontFamily: fonts.body, fontSize: 13, color: colors.clay, marginTop: 1 },
+  recoNote: { fontFamily: fonts.display, fontSize: 15, color: colors.espresso, marginTop: spacing.sm, lineHeight: 21 },
   leaveBtn: { alignSelf: 'center', marginTop: spacing.xl, paddingVertical: spacing.sm, paddingHorizontal: spacing.lg },
   leaveText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.clay },
   inputBar: { flexDirection: 'row', gap: 8, paddingHorizontal: spacing.xl, paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.borderSoft, backgroundColor: colors.glacier },

@@ -1,0 +1,44 @@
+{
+  "summary": "Iteration 9 — 'Recos entre amis' dans les clubs : TOUT PASSE. Backend 9/9 pytest (test_iteration9.py) sur POST /api/clubs/cl_e0b27822964b4fb3/reco : 200 avec is_reco=true, book={title,author}, text=note, author.pseudo populé; l'auteur optionnel (absent ou vide) est bien accepté et renvoyé à None; GET /api/clubs/{id}/messages inclut la reco et attache author.pseudo dans le listing; 403 pour un utilisateur non-membre (compte fraîchement créé); 404 pour un club inconnu; 422 pour note vide / note manquante / title vide; régression POST /api/clubs/{id}/messages continue de fonctionner (message normal, is_reco absent). Frontend e2e (mobile 390×844, compte Léa test.manent@example.com) : login via 'J'ai déjà un compte' → tab Communauté → segment Clubs → carte 'Club Candide' → écran ClubDetail affiche 4 reco-message déjà présents (dont la reco 'Reco de Léa · Candide · Voltaire · Un bijou d ironie que je relis chaque année. À découvrir absolument !' postée en curl avant le test) → tap club-reco-btn dans l'entête Discussion → modal 'Recommander un livre' avec 2 reco-book-* (O Alquimista, Candide) → sélection d'un livre coche chambray active → saisie dans reco-note ('TEST_it9 e2e — je vous le recommande vivement !') → reco-send → nouvelle carte reco-message ajoutée EN BAS avec 'RECO DE LÉA · O Alquimista · Paulo Coelho · « TEST_it9 e2e — je vous le recommande vivement ! »' → puis message normal via club-msg-input + club-msg-send OK ('TEST_it9 message normal regression' visible en bulle chambray). Sanity: recap-message ('Manent · Récap · Passage : « Il faut cultiver notre jardin. » (p. 150) · Défi Objectif Candide') visible et club-challenge (progression Léa 90 p. / 150) toujours visible. Design conforme: bord chambray sur reco-card, titre Cormorant/display, auteur en gris (clay), note en italique display entre «». Compte laissé en CLAIR, non premium, avec ses 2 livres.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration9.py",
+    "/app/test_reports/pytest/iteration9.xml"
+  ],
+  "action_items": [
+    "(cosmétique / cleanup, non-bloquant) Le club Candide contient désormais 5 recos TEST_it9 (3 générées par pytest+e2e, 2 seeds curl). Aucun impact fonctionnel mais si tu veux garder la discussion propre, purger via un script mongo ciblant club_messages avec is_reco=true et text LIKE 'TEST_%'.",
+    "(carry-over d'itérations précédentes) L'avertissement React 'props.pointerEvents is deprecated' subsiste dans /app/frontend/app/quote/[id].tsx (offscreen ShareQuoteCard). Non-bloquant, remplacer par style={{ pointerEvents: 'none' }}."
+  ],
+  "critical_code_review_comments": [
+    "server.py:1017-1020 — RecoBody utilise Field(min_length=1) pour title et note : garantit 422 côté FastAPI/Pydantic pour string vide ou clé manquante, testé et confirmé. Author reste Optional[str] et est trimé/normalisé côté handler.",
+    "server.py:1150-1165 — POST /clubs/{id}/reco appelle _club_or_404 avec member_required=True donc 403 pour non-membre / 404 pour club inconnu — comportement REST correct et testé.",
+    "server.py:1158 — book.author est stripé puis rendu None si vide après strip, ce qui est cohérent avec le rendu frontend qui masque la ligne auteur quand !!m.book?.author est false (club/[id].tsx:289).",
+    "server.py:1163-1164 — La réponse immédiate du POST attache manuellement author + is_me=True (sans re-fetch), ce qui permet au frontend d'apposer directement la carte 'Reco de Léa' en optimistic UI. Comportement identique à POST /messages.",
+    "club/[id].tsx:119-125 — openReco fetch /books uniquement si myBooks vide (cache réutilisé depuis le picker 'Livre du club') et reset recoBook+recoNote à chaque ouverture. Bonne hygiène.",
+    "club/[id].tsx:266-268 — Le lien 'Recommander un livre' (testID club-reco-btn) est placé dans l'entête Discussion à côté de 'Envoyer le récap' (masqué si non-owner ou pas de contenu). Toujours visible pour tout membre — conforme au spec.",
+    "club/[id].tsx:369 — reco-send est correctement disabled tant que recoBook ou recoNote.trim() est vide, empêchant l'envoi côté client (double-protection avec le 422 backend)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration9.py (nouveau)",
+    "/app/test_reports/pytest/iteration9.xml (junit output)",
+    "/app/test_reports/iteration_9.json (ce rapport)"
+  ],
+  "success_rate": {
+    "backend": "100% (9/9 pytest iteration_9 pass en 2.3s)",
+    "frontend": "100% (login → community → club Candide → seeded reco visible → nouvelle reco via modal → message normal → sanity récap+défi)"
+  },
+  "seed_data_creation": "1 reco 'seed' postée en curl AVANT le test e2e (POST /clubs/cl_e0b27822964b4fb3/reco, title=Candide/author=Voltaire, note='Un bijou d ironie que je relis chaque année. À découvrir absolument !') — objet créé: message_id=cm_899fb79ba09d4b8d, visible en frontend comme 4e reco-message. Le pytest a ajouté 2 autres recos (TEST_it9 lecture jubilatoire + TEST_livre_sans_auteur) + 1 message normal TEST_it9. Le e2e Playwright a ajouté 1 reco supplémentaire (O Alquimista + TEST_it9 e2e) + 1 message normal (TEST_it9 message normal regression). Compte outsider jetable (outsider_it9_xxxx@manent.app) créé pour le test 403 non-membre — laissé tel quel (non nettoyé, pas de contenu). Compte principal Léa laissé en CLAIR non premium avec ses 2 livres (Candide + O Alquimista).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Itération 9 verte de bout en bout. Endpoint stable : POST /api/clubs/{id}/reco (RecoBody: title[1..200], author?, note[1..500]) — renvoie un club_message avec is_reco=true, book={title,author}, text=note, author={pseudo,handle}. Le rendu frontend est /app/frontend/app/club/[id].tsx (styles.recoCard borderColor=colors.chambray, testID='reco-message'). Le club Candide (cl_e0b27822964b4fb3) contient maintenant plusieurs recos TEST_it9 et 2 messages normaux TEST_it9 non-purgés — sans impact fonctionnel. Défi 'Objectif Candide' 90/150 p. et passage 'Il faut cultiver notre jardin.' toujours en place ; recap-message auto-généré cette semaine visible dans la discussion.",
+  "rca_of_issue": "N/A — aucun bug détecté sur l'itération 9."
+}

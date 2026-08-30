@@ -6,8 +6,10 @@ import { fonts, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
 import { PrimaryButton, GhostButton } from '@/src/components/Button';
 import { Wordmark, Monogram } from '@/src/components/Wordmark';
+import { useT } from '@/src/i18n';
 
 export default function Welcome() {
+  const t = useT();
   const colors = useColors();
   const styles = useStyles(makeStyles);
   const router = useRouter();
@@ -19,14 +21,12 @@ export default function Welcome() {
         <Wordmark size={40} />
       </View>
       <View style={styles.middle}>
-        <Text style={styles.promise}>Ce que tes lectures{'\n'}te laissent.</Text>
-        <Text style={styles.subtext}>
-          Photographie tes passages préférés,{'\n'}construis ta bibliothèque intime,{'\n'}partage des citations qui restent.
-        </Text>
+        <Text style={styles.promise}>{t('Ce que tes lectures\nte laissent.')}</Text>
+        <Text style={styles.subtext}>{t('Photographie tes passages préférés,\nconstruis ta bibliothèque intime,\npartage des citations qui restent.')}</Text>
       </View>
       <View style={styles.bottom}>
-        <PrimaryButton testID="onb-start" title="Commencer" onPress={() => router.push('/onboarding/account')} />
-        <GhostButton testID="onb-signin" title="J'ai déjà un compte" onPress={() => router.push('/(auth)/login')} />
+        <PrimaryButton testID="onb-start" title={t('Commencer')} onPress={() => router.push('/onboarding/account')} />
+        <GhostButton testID="onb-signin" title={t("J'ai déjà un compte")} onPress={() => router.push('/(auth)/login')} />
       </View>
     </View>
   );

@@ -1,0 +1,47 @@
+{
+  "summary": "Iteration 10 — i18n FR/EN + cover fallback + RevenueCat paywall (Emergent-managed) + book search overhaul: TOUT PASSE. Backend 12/12 pytest (test_iteration10.py, 4.7s): GET /api/books/search?q=veiller sur elle → 200, 'Veiller sur elle' de Jean-Baptiste Andrea en 1er (isbn=9791040126058, cover Google Books non-null); GET /api/books/search/isbn?isbn=9782290398487 → 200 avec source='bnf' (fallback OK); isbn=9782070612758 → 200 source='google'/'openlibrary' (Le Petit Prince); 9999999999999 → 404 (checksum EAN13). Régression auth OK (register + login + wrong password 401/403), Premium status/activate/deactivate OK (persistance vérifiée par GET après chaque mutation). Frontend e2e (mobile 390×844, Léa test.manent@example.com déjà premium) : (1) Settings → chip lang-en → tous les labels passent en anglais ('Dark mode', 'Download my data', 'Language', 'Privacy', 'Delete my account'), nav /library='Library'+'Reading', /community='Your boards'+'Boards'+'Clubs' toggles, /profile='Sign out'; (2) reload page en EN → l'app reste en anglais (AsyncStorage 'manent_lang' + miroir /me/settings PATCH); (3) chip lang-fr → retour immédiat au français ('Mode sombre', 'Langue', 'Paramètres'). (4) /book/add avec 'veiller sur elle' → 3 résultats affichés dont 'Veiller sur elle · Andrea, Jean-Baptiste · 2025' en 1er + repli couverture (initiale 'V'/'L') pour les résultats sans image — aucun crash. (5) RevenueCat paywall sur NOUVEAU compte (TEST_it10_pay_128374@manent.app, onboarding Plaisir+3 thèmes) → /premium affiche plan-annuel ($79.99 par an, badge −16%) + plan-mensuel ($9.99 par mois) [prix USD Test Store — comportement attendu confirmé par E1], btn-premium-activate actif → tap → modal confirm-purchase 'Abonnement Annuel — $79.99. Continuer ?' → tap → dialog RC 'Test Store Purchase (Product: pro.annual, Type: subscription, Price: $79.99)' → 'Test valid purchase' → écran affiche premium-active ('Tu es Premium · Formule annuelle — captures IA illimitées, exports débloqués.'). (6) Miroir backend confirmé : GET /api/premium/status pour le nouveau compte renvoie {is_premium:true, plan:'annuel', captures_used:0, captures_limit:10}. (7) Bouton 'Restaurer mes achats' présent et cliquable sans crash. (8) Régression capture manuelle : /capture, saisie 'TEST_it10 citation manuelle — quotient à Manent.' + Enregistrer la citation → navigation vers /quote/q_b3e4a2016e184979 avec le texte affiché correctement. Aucune erreur console bloquante ; le seul warning est le legacy 'props.pointerEvents is deprecated' déjà signalé en itération 9 (offscreen ShareQuoteCard dans /app/frontend/app/quote/[id].tsx).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "ShareQuoteCard (offscreen)", "issue": "Warning React: 'props.pointerEvents is deprecated. Use style.pointerEvents' — carry-over d'itération précédente, non bloquant. Reference: /app/frontend/app/quote/[id].tsx"}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration10.py",
+    "/app/test_reports/pytest/iteration10.xml"
+  ],
+  "action_items": [
+    "(non-bloquant, carry-over) Remplacer `pointerEvents='none'` par `style={{ pointerEvents: 'none' }}` sur la ShareQuoteCard offscreen dans /app/frontend/app/quote/[id].tsx pour lever le warning React.",
+    "(cosmétique) Nettoyer les comptes de test créés cette itération (préfixe TEST_it10_*) si l'on veut garder la DB propre. Aucun impact fonctionnel.",
+    "(info) Le compte test.manent@example.com est resté PREMIUM comme demandé (aucun POST /premium/deactivate manuel effectué)."
+  ],
+  "critical_code_review_comments": [
+    "server.py:548-571 — /api/books/search interroge Google/OpenLibrary/BnF en parallèle via asyncio.gather (bonne perf, timeout 12s) ; l'ordre priorise correctement les éditions françaises via le tag _fr (Google FR d'abord, puis BnF, puis OL FR, puis reliquat). Dedup via _norm_key(title|last_author_word) — testé sans doublon sur 'candide voltaire'. Cap à 10 résultats.",
+    "server.py:367-448 — /api/books/search/isbn a un triple fallback Google → OpenLibrary → BnF SRU (regex XML-safe) et validation EAN13 côté serveur (fullmatch + checksum). Réponse toujours enrichie du champ 'source' — vérifié qu'un ISBN inconnu de Google+OL (9782290398487) tombe bien sur source='bnf'.",
+    "premium.tsx:42-54 — Le miroir backend RevenueCat→Mongo est réactif via useEffect [isSubscribed, customerInfo, status?.is_premium] : POST /premium/activate quand isSubscribed passe true, /deactivate sinon. Confirmé end-to-end (GET /status renvoie is_premium=true pour le nouveau compte post-purchase).",
+    "premium.tsx:56-60 — noOfferings=(!rcEnabled || (offerings définis && aucun package)) — permet d'afficher 'Les offres sont indisponibles' proprement en cas de RC indisponible.",
+    "premium.tsx:162-168 — btn-premium-activate disabled si isPurchasing || !pkg || !identityReady — protège contre double-tap et race conditions RC.logIn.",
+    "i18n.tsx:16-38 — Provider lit AsyncStorage 'manent_lang' au mount (SSR-safe) + persistance au setLang. useMemo{lang,setLang,t} évite les re-renders inutiles. Confirmé : persistance OK après reload de /settings.",
+    "settings.tsx:86-98 — PATCH /me/settings body vide au mount pour récupérer les préférences serveur (language, default_public) puis setLang si divergence — miroir bidirectionnel correct."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration10.py (nouveau)",
+    "/app/test_reports/pytest/iteration10.xml (junit output)",
+    "/app/test_reports/iteration_10.json (ce rapport)"
+  ],
+  "success_rate": {
+    "backend": "100% (12/12 pytest iteration_10 pass en 4.74s)",
+    "frontend": "100% (i18n FR/EN + persistance + nav 4 écrans EN + book search avec fallback couverture + paywall RC Test Store complet 'S'abonner→confirm→Test valid purchase→premium-active' + miroir backend is_premium=true + restore + régression capture manuelle)"
+  },
+  "seed_data_creation": "1 compte fresh 'TEST_it10_pay_128374@manent.app / Test1234!' créé pour tester le paywall — maintenant PREMIUM annuel (entitlement RC 'pro' actif + miroir Mongo is_premium=true, plan='annuel'). Compte pytest TestPremiumRegression : 1 utilisateur 'TEST_it10_xxxxx' laissé en free (activate puis deactivate). Compte pytest TestAuthRegression : 1 utilisateur 'TEST_it10_auth_xxxxx' laissé en clair. 1 citation 'TEST_it10 citation manuelle' ajoutée sur test.manent@example.com (quote_id=q_b3e4a2016e184979) — compte principal Léa toujours PREMIUM comme demandé.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Itération 10 verte de bout en bout. Endpoints stables : GET /api/books/search (Google+OL+BnF parallèle, tri FR d'abord, dedup, cap 10) et GET /api/books/search/isbn (Google→OL→BnF fallback + validation EAN13). Miroir RevenueCat opérationnel via useEffect dans premium.tsx (POST /premium/activate quand entitlement 'pro' actif). i18n : useI18n() + t() avec dictionnaire EN dans /app/frontend/src/translations.ts (399 clés), persistance AsyncStorage 'manent_lang' + miroir serveur via /me/settings. testIDs paywall clés : plan-annuel, plan-mensuel, btn-premium-activate, confirm-purchase, cancel-purchase, premium-active, btn-restore, premium-feedback, premium-unavailable, premium-identity-error. testIDs settings : lang-fr, lang-en, settings-darkmode, settings-default-public, settings-export. Test Store RC affiche prix USD ($79.99/$9.99) — attendu, prix EUR configurés pour les stores réels.",
+  "rca_of_issue": "N/A — aucun bug détecté sur l'itération 10."
+}

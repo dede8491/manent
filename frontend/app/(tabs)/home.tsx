@@ -8,8 +8,10 @@ import { useColors, useStyles } from '@/src/themeCtx';
 import { QuoteCard, Quote } from '@/src/components/QuoteCard';
 import { api } from '@/src/api';
 import { Wordmark } from '@/src/components/Wordmark';
+import { useT } from '@/src/i18n';
 
 export default function Home() {
+  const t = useT();
   const colors = useColors();
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
@@ -60,13 +62,13 @@ export default function Home() {
         <View style={styles.searchRow}>
           <Pressable testID="home-search" onPress={() => router.push('/search')} style={styles.search}>
             <Feather name="search" size={16} color={colors.clay} />
-            <Text style={styles.searchPlaceholder}>Cherche une citation, un livre…</Text>
+            <Text style={styles.searchPlaceholder}>{t('Cherche une citation, un livre…')}</Text>
           </Pressable>
         </View>
         <View style={styles.chipRow}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: spacing.xl }}>
             <View style={[styles.chip, styles.chipActive]}>
-              <Text style={[styles.chipText, styles.chipTextActive]}>Pour toi</Text>
+              <Text style={[styles.chipText, styles.chipTextActive]}>{t('Pour toi')}</Text>
             </View>
             {themes.map(t => (
               <Pressable key={t} testID={`home-chip-${t}`} onPress={() => router.push({ pathname: '/theme/[name]', params: { name: t } })} style={styles.chip}>
@@ -82,16 +84,16 @@ export default function Home() {
       >
         {daily && (
           <View style={{ marginBottom: spacing.lg }} testID="daily-quote">
-            <Text style={styles.dailyLabel}>Ta citation du matin</Text>
+            <Text style={styles.dailyLabel}>{t('Ta citation du matin')}</Text>
             <QuoteCard quote={daily} onPress={() => router.push({ pathname: '/quote/[id]', params: { id: daily.quote_id } })} />
           </View>
         )}
         {loading ? (
-          <Text style={styles.empty}>Chargement…</Text>
+          <Text style={styles.empty}>{t('Chargement…')}</Text>
         ) : shown.length === 0 ? (
           <View style={{ paddingVertical: spacing.xxxl, alignItems: 'center' }}>
-            <Text style={styles.emptyTitle}>Le fil est encore silencieux.</Text>
-            <Text style={styles.emptySub}>Ta première citation illuminera cet écran.</Text>
+            <Text style={styles.emptyTitle}>{t('Le fil est encore silencieux.')}</Text>
+            <Text style={styles.emptySub}>{t('Ta première citation illuminera cet écran.')}</Text>
           </View>
         ) : (
           <View style={{ flexDirection: 'row', gap: spacing.md }}>

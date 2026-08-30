@@ -19,7 +19,7 @@ export function QuoteCard({ quote, onPress, compact, onPressAuthor }: { quote: Q
   const isWattpad = quote.book?.type === 'wattpad';
   const label = isWattpad ? 'CHAP.' : 'PAGE';
   const num = isWattpad ? quote.chapter : quote.page;
-  const source = quote.book?.title || 'Sans titre';
+  const source = quote.book?.title || 'Sans titre'; // titre = donnée, laissé tel quel
   const authorLine = quote.book?.author ? `${quote.book.author}` : '';
   const handle = quote.author?.handle ? `@${quote.author.handle}` : '';
 

@@ -7,8 +7,10 @@ import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
 import { QuoteCard, Quote } from '@/src/components/QuoteCard';
 import { api } from '@/src/api';
+import { useT } from '@/src/i18n';
 
 export default function ThemePage() {
+  const t = useT();
   const colors = useColors();
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
@@ -39,21 +41,21 @@ export default function ThemePage() {
         <Pressable onPress={() => router.back()} testID="theme-back" style={styles.iconBtn}>
           <Feather name="chevron-left" size={22} color={colors.espresso} />
         </Pressable>
-        <Text style={styles.headerLabel}>Thème</Text>
+        <Text style={styles.headerLabel}>{t('Thème')}</Text>
         <View style={{ width: 40 }} />
       </View>
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xxl }}>
         <View style={styles.hero}>
           <Text style={styles.title} testID="theme-title">{name}</Text>
-          <Text style={styles.baseline}>Ce que les lecteurs en retiennent.</Text>
+          <Text style={styles.baseline}>{t('Ce que les lecteurs en retiennent.')}</Text>
         </View>
 
         {data ? (
           <View style={styles.statsRow} testID="theme-stats">
             {[
-              { n: data.stats.quotes, l: data.stats.quotes > 1 ? 'citations' : 'citation' },
-              { n: data.stats.readers, l: data.stats.readers > 1 ? 'lecteurs' : 'lecteur' },
-              { n: data.stats.books, l: data.stats.books > 1 ? 'livres' : 'livre' },
+              { n: data.stats.quotes, l: t(data.stats.quotes > 1 ? 'citations' : 'citation') },
+              { n: data.stats.readers, l: t(data.stats.readers > 1 ? 'lecteurs' : 'lecteur') },
+              { n: data.stats.books, l: t(data.stats.books > 1 ? 'livres' : 'livre') },
             ].map(s => (
               <View key={s.l} style={styles.statCard}>
                 <Text style={styles.statNum}>{s.n}</Text>
@@ -69,7 +71,7 @@ export default function ThemePage() {
 
         {data && (data.suggested_books?.length || 0) > 0 && (
           <View style={{ marginTop: spacing.lg }} testID="theme-books">
-            <Text style={styles.suggestLabel}>Des livres pour ce thème</Text>
+            <Text style={styles.suggestLabel}>{t('Des livres pour ce thème')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm, paddingHorizontal: spacing.xl }}>
               {data.suggested_books!.map((b: any) => (
                 <Pressable
@@ -89,7 +91,7 @@ export default function ThemePage() {
                   )}
                   <Text style={styles.suggestTitle} numberOfLines={2}>{b.title}</Text>
                   {!!b.author && <Text style={styles.suggestAuthor} numberOfLines={1}>{b.author}</Text>}
-                  <Text style={styles.suggestCta}>{b.is_mine ? 'Dans ta bibliothèque' : 'Ajouter'}</Text>
+                  <Text style={styles.suggestCta}>{b.is_mine ? t('Dans ta bibliothèque') : t('Ajouter')}</Text>
                 </Pressable>
               ))}
             </ScrollView>
@@ -100,8 +102,8 @@ export default function ThemePage() {
           <View style={{ paddingHorizontal: spacing.xl, marginTop: spacing.lg }}>
             {data.quotes.length === 0 ? (
               <View style={{ paddingVertical: spacing.xxxl, alignItems: 'center' }}>
-                <Text style={styles.emptyTitle}>Personne n&rsquo;a encore écrit ici.</Text>
-                <Text style={styles.emptySub}>Capture une citation sur ce thème et rends-la publique.</Text>
+                <Text style={styles.emptyTitle}>{t('Personne n’a encore écrit ici.')}</Text>
+                <Text style={styles.emptySub}>{t('Capture une citation sur ce thème et rends-la publique.')}</Text>
               </View>
             ) : (
               <View style={{ flexDirection: 'row', gap: spacing.md }}>

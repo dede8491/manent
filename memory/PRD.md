@@ -72,6 +72,15 @@
 - **Paramètres** (`/settings`, depuis le profil): compte, langue (fr actif / en « bientôt »), mode sombre, « Citations publiques par défaut » (`PATCH /api/me/settings`, pré-coche le toggle de la capture), export RGPD (`GET /api/me/export`, JSON sans password_hash, download web / partage natif), politique de confidentialité + conditions (modals), **suppression de compte** (`DELETE /api/me` — purge complète, transfert/suppression des clubs, déconnexion).
 - Recherche Google Books toujours en quota 429 côté conteneur; repli Open Library + BnF (SRU dublincore) opérationnels. Babelio: pas d'API publique (scraping refusé, CGU).
 
+## Ajouts session 2 septies (juin 2026) — Recos entre amis (itération 9: pytest 9/9, e2e PASS)
+- **Recos entre amis**: `POST /api/clubs/{id}/reco` {title, author?, note} → message `is_reco` avec `book`. UI club: lien « Recommander un livre » (entête Discussion) → modal sélection parmi MES livres + petit mot → carte distincte bord Chambray « Reco de {pseudo} » (titre Cormorant, note en italique). testIDs: club-reco-btn, reco-book-{id}, reco-note, reco-send, reco-message.
+
+## NON FAIT (reporté, demandes utilisateur explicites — priorité prochaine session)
+1. **Interface anglaise (i18n)**: traduire toute l'app (≈25 écrans, centaines de chaînes) pour activer le sélecteur de langue des réglages (`lang-en` actuellement désactivé « bientôt »; préférence déjà persistée via PATCH /me/settings). Approche suggérée: dictionnaire fr/en dans src/i18n.ts + hook useT() branché sur la préférence.
+2. **RevenueCat (paiement réel)**: remplacer l'activation Premium simulée (`/premium/activate`) par Emergent-managed RevenueCat — OBLIGATOIRE: passer par integration_expert, ne se teste que sur build natif après déploiement.
+3. **Widget écran d'accueil** (citation du matin en widget OS): nécessite build natif + react-native-android-widget / WidgetKit.
+
+
 
 
 
@@ -92,3 +101,13 @@
 4. Ajouter un livre via titre (ex: « Coelho »).
 5. Onglet Capture → choisir une image de la galerie → transcription IA se lance.
 6. Ouvrir une citation → épingler sur un tableau créé depuis l'onglet Communauté.
+
+## Itération 10 — Refonte base de recherche livres (juin 2026)
+- **Recherche par titre** (`GET /api/books/search`): interrogation en PARALLÈLE de Google Books + Open Library + BnF (SRU, `bib.doctype any "a"` = livres imprimés uniquement), fusion avec priorité aux éditions françaises (Google fr > BnF > OL fr > reste), déduplication titre+auteur normalisés (`_norm_key`), max 10 résultats. Titres BnF nettoyés (« / auteur », « : roman », « ([Éd. en gros caractères]) »).
+- **Recherche ISBN** (`GET /api/books/search/isbn`): 3e repli BnF ajouté (Google 429 fréquent + Open Library pauvre en ISBN français récents). Ex.: 9782290398487 introuvable avant, trouvé via BnF maintenant. Pages extraites de dc:format, auteur nettoyé des mentions de rôle.
+- Validé e2e (curl + Playwright connecté) : « veiller sur elle », « la femme de ménage », « changer l'eau des fleurs » renvoient les bons livres FR en premier avec ISBN + couverture.
+
+## Itération 10 (suite) — i18n EN + RevenueCat + couvertures
+- **Interface anglaise (i18n)** : système gettext-like maison — `src/i18n.tsx` (I18nProvider, useT/useI18n, persistance AsyncStorage `manent_lang` + sync backend /me/settings) + `src/translations.ts` (dictionnaire FR→EN ~310 clés, clé = chaîne française, interpolation {var}). Tous les écrans traduits (tabs, onboarding, login, capture, add, book, quote, club, flashcards, search, settings, premium, theme, reader, board, StudySheet). Sélecteur de langue actif dans Réglages (chips Français/English). RGPD/CGU en anglais via constantes dédiées dans settings.tsx.
+- **RevenueCat (paiement réel)** : Emergent-managed, projet provisionné (voir /app/memory/revenuecat.md — rc_project_id projfb23fe8b, entitlement `pro`, offering `default`, $rc_monthly €3.99/$rc_annual €39.99). `src/revenuecat.tsx` (SubscriptionProvider + useSubscription, react-query), init module-scope dans app/_layout.tsx, identité Purchases.logIn(user_id) dans src/auth.tsx (getAppUserID pour identityReady, invalidation react-query après logIn). Paywall codé dans app/premium.tsx : packages/prix depuis offerings, modal de confirmation custom, Restore, note "achat simulé" en preview, erreurs gérées (userCancelled silencieux). Miroir backend : entitlement actif → POST /premium/activate (quota captures serveur), inactif → deactivate. Testé e2e sur web preview (Test Store) : achat valide → "Tu es Premium". NB : prix affichés en Test Store peuvent rester en USD ($9.99) — les vrais prix (€3,99) s'appliquent via App Store/Play une fois les produits store créés par l'utilisateur (voir FAQ payments panel).
+- **Couvertures manquantes** : composant `Cover` dans book/add.tsx (repli initiale du titre sur onError), URLs covers.openlibrary avec `?default=false` côté backend pour forcer une 404 propre.

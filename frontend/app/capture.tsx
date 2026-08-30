@@ -9,8 +9,10 @@ import { useColors, useStyles } from '@/src/themeCtx';
 import { PrimaryButton, GhostButton } from '@/src/components/Button';
 import { toBase64 } from '@/src/image';
 import { api } from '@/src/api';
+import { useT } from '@/src/i18n';
 
 export default function CaptureModal() {
+  const t = useT();
   const colors = useColors();
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
@@ -100,20 +102,20 @@ export default function CaptureModal() {
         <Pressable onPress={() => router.back()} testID="capture-close" style={styles.iconBtn}>
           <Feather name="x" size={22} color={colors.espresso} />
         </Pressable>
-        <Text style={styles.h1}>Capturer un passage</Text>
+        <Text style={styles.h1}>{t('Capturer un passage')}</Text>
         <View style={{ width: 40 }} />
       </View>
       <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + spacing.xxl }} keyboardShouldPersistTaps="handled">
         {limitReached ? (
           <View style={styles.limitBox} testID="capture-limit-box">
-            <Text style={styles.limitTitle}>Limite mensuelle atteinte</Text>
-            <Text style={styles.limitText}>Tu as utilisé tes 10 captures IA gratuites ce mois-ci. Tu peux toujours saisir le texte à la main, ou passer en Premium pour des captures illimitées.</Text>
+            <Text style={styles.limitTitle}>{t('Limite mensuelle atteinte')}</Text>
+            <Text style={styles.limitText}>{t('Tu as utilisé tes 10 captures IA gratuites ce mois-ci. Tu peux toujours saisir le texte à la main, ou passer en Premium pour des captures illimitées.')}</Text>
             <Pressable testID="btn-go-premium" onPress={() => router.push('/premium')} style={styles.limitBtn}>
-              <Text style={styles.limitBtnText}>Passer en Premium</Text>
+              <Text style={styles.limitBtnText}>{t('Passer en Premium')}</Text>
             </Pressable>
           </View>
         ) : premium && !premium.is_premium ? (
-          <Text style={styles.captureQuota} testID="capture-quota">Captures IA : {premium.captures_used}/{premium.captures_limit} ce mois-ci</Text>
+          <Text style={styles.captureQuota} testID="capture-quota">{t('Captures IA : {used}/{limit} ce mois-ci', { used: premium.captures_used, limit: premium.captures_limit })}</Text>
         ) : null}
         {imageUri ? (
           <View style={styles.imgWrap}>
@@ -121,7 +123,7 @@ export default function CaptureModal() {
             {transcribing && (
               <View style={styles.transcribing}>
                 <ActivityIndicator color={colors.creme} />
-                <Text style={styles.transcribingText}>Transcription en cours…</Text>
+                <Text style={styles.transcribingText}>{t('Transcription en cours…')}</Text>
               </View>
             )}
           </View>
@@ -129,29 +131,29 @@ export default function CaptureModal() {
           <View style={styles.pickRow}>
             <Pressable testID="btn-camera" onPress={() => pickImage(true)} style={styles.pickBtn}>
               <Feather name="camera" size={26} color={colors.chambray} />
-              <Text style={styles.pickLabel}>Photographier</Text>
+              <Text style={styles.pickLabel}>{t('Photographier')}</Text>
             </Pressable>
             <Pressable testID="btn-gallery" onPress={() => pickImage(false)} style={styles.pickBtn}>
               <Feather name="image" size={26} color={colors.chambray} />
-              <Text style={styles.pickLabel}>Depuis la galerie</Text>
+              <Text style={styles.pickLabel}>{t('Depuis la galerie')}</Text>
             </Pressable>
           </View>
         )}
 
-        <Text style={styles.label}>Texte de la citation</Text>
+        <Text style={styles.label}>{t('Texte de la citation')}</Text>
         <TextInput
           testID="capture-text"
           value={text} onChangeText={setText}
-          placeholder="Transcris ou colle ton passage…"
+          placeholder={t('Transcris ou colle ton passage…')}
           placeholderTextColor={colors.clay}
           style={[styles.input, { minHeight: 120, textAlignVertical: 'top' }]}
           multiline
         />
 
-        <Text style={styles.label}>Livre de rattachement</Text>
+        <Text style={styles.label}>{t('Livre de rattachement')}</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
           <Pressable onPress={() => setBookId(null)} style={[styles.chip, !bookId && styles.chipActive]}>
-            <Text style={[styles.chipText, !bookId && styles.chipTextActive]}>Aucun</Text>
+            <Text style={[styles.chipText, !bookId && styles.chipTextActive]}>{t('Aucun')}</Text>
           </Pressable>
           {books.map(b => (
             <Pressable key={b.book_id} testID={`cap-book-${b.book_id}`} onPress={() => setBookId(b.book_id)} style={[styles.chip, bookId === b.book_id && styles.chipActive]}>
@@ -162,16 +164,16 @@ export default function CaptureModal() {
 
         <View style={{ flexDirection: 'row', gap: spacing.md }}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.label}>Page</Text>
+            <Text style={styles.label}>{t('Page')}</Text>
             <TextInput testID="capture-page" value={page} onChangeText={setPage} keyboardType="number-pad" style={styles.input} placeholder="142" placeholderTextColor={colors.clay} />
           </View>
           <View style={{ flex: 2 }}>
-            <Text style={styles.label}>Note personnelle</Text>
-            <TextInput testID="capture-note" value={note} onChangeText={setNote} style={styles.input} placeholder="Optionnel" placeholderTextColor={colors.clay} />
+            <Text style={styles.label}>{t('Note personnelle')}</Text>
+            <TextInput testID="capture-note" value={note} onChangeText={setNote} style={styles.input} placeholder={t('Optionnel')} placeholderTextColor={colors.clay} />
           </View>
         </View>
 
-        <Text style={styles.label}>Thèmes</Text>
+        <Text style={styles.label}>{t('Thèmes')}</Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           {themes.map(t => {
             const on = selectedThemes.includes(t);
@@ -182,7 +184,7 @@ export default function CaptureModal() {
             );
           })}
           <Pressable testID="cap-theme-other" onPress={() => setShowCustom(v => !v)} style={[styles.chip, styles.chipDashed]}>
-            <Text style={styles.chipText}>Autre…</Text>
+            <Text style={styles.chipText}>{t('Autre…')}</Text>
           </Pressable>
         </View>
         {showCustom && (
@@ -191,7 +193,7 @@ export default function CaptureModal() {
               testID="cap-theme-custom"
               value={customTheme} onChangeText={setCustomTheme}
               onSubmitEditing={addCustomTheme}
-              placeholder="Ta thématique (ex. mélancolie)"
+              placeholder={t('Ta thématique (ex. mélancolie)')}
               placeholderTextColor={colors.clay}
               style={[styles.input, { flex: 1, minHeight: 44 }]}
               autoFocus
@@ -204,12 +206,12 @@ export default function CaptureModal() {
 
         <Pressable testID="toggle-public" onPress={() => setIsPublic(v => !v)} style={styles.visRow}>
           <Feather name={isPublic ? 'check-square' : 'square'} size={20} color={colors.chambray} />
-          <Text style={styles.visText}>Rendre cette citation publique</Text>
+          <Text style={styles.visText}>{t('Rendre cette citation publique')}</Text>
         </Pressable>
 
         <View style={{ height: spacing.lg }} />
-        <PrimaryButton testID="btn-save-quote" title="Enregistrer la citation" onPress={save} loading={saving} disabled={!text.trim()} />
-        <GhostButton title="Annuler" onPress={() => router.back()} />
+        <PrimaryButton testID="btn-save-quote" title={t('Enregistrer la citation')} onPress={save} loading={saving} disabled={!text.trim()} />
+        <GhostButton title={t('Annuler')} onPress={() => router.back()} />
       </ScrollView>
     </KeyboardAvoidingView>
   );

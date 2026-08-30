@@ -7,6 +7,7 @@ import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
 import { api } from '@/src/api';
 import { PrimaryButton, GhostButton } from '@/src/components/Button';
+import { useT } from '@/src/i18n';
 
 type Board = {
   board_id: string;
@@ -18,6 +19,7 @@ type Board = {
 };
 
 export default function Community() {
+  const t = useT();
   const colors = useColors();
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
@@ -75,19 +77,19 @@ export default function Community() {
       await load();
       router.push({ pathname: '/club/[id]', params: { id: r.club_id } });
     } catch {
-      setJoinError('Code inconnu. Vérifie auprès du club.');
+      setJoinError(t('Code inconnu. Vérifie auprès du club.'));
     } finally { setCreating(false); }
   };
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.glacier }} testID="screen-community">
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-        <Text style={styles.h1}>{tab === 'boards' ? 'Tes tableaux' : 'Tes clubs'}</Text>
-        <Text style={styles.sub}>{tab === 'boards' ? 'Épingle les passages qui te ressemblent.' : 'Lisez ensemble, partagez vos passages.'}</Text>
+        <Text style={styles.h1}>{tab === 'boards' ? t('Tes tableaux') : t('Tes clubs')}</Text>
+        <Text style={styles.sub}>{tab === 'boards' ? t('Épingle les passages qui te ressemblent.') : t('Lisez ensemble, partagez vos passages.')}</Text>
         <View style={styles.segmentRow}>
-          {([['boards', 'Tableaux'], ['clubs', 'Clubs']] as const).map(([t, label]) => (
-            <Pressable key={t} testID={`community-tab-${t}`} onPress={() => setTab(t)} style={[styles.segment, tab === t && styles.segmentActive]}>
-              <Text style={[styles.segmentText, tab === t && styles.segmentTextActive]}>{label}</Text>
+          {([['boards', 'Tableaux'], ['clubs', 'Clubs']] as const).map(([tb, label]) => (
+            <Pressable key={tb} testID={`community-tab-${tb}`} onPress={() => setTab(tb)} style={[styles.segment, tab === tb && styles.segmentActive]}>
+              <Text style={[styles.segmentText, tab === tb && styles.segmentTextActive]}>{t(label)}</Text>
             </Pressable>
           ))}
         </View>
@@ -104,7 +106,7 @@ export default function Community() {
           <View style={{ paddingHorizontal: spacing.xl, marginBottom: spacing.md }}>
             <Pressable testID="btn-new-board" onPress={() => setModal(true)} style={styles.newCard}>
               <Feather name="plus" size={22} color={colors.chambray} />
-              <Text style={styles.newCardText}>Nouveau tableau</Text>
+              <Text style={styles.newCardText}>{t('Nouveau tableau')}</Text>
             </Pressable>
           </View>
         }
@@ -114,16 +116,16 @@ export default function Community() {
             {item.preview_quote ? (
               <Text style={styles.preview} numberOfLines={3}>&ldquo; {item.preview_quote}</Text>
             ) : (
-              <Text style={styles.previewEmpty}>Ton premier passage l'attend.</Text>
+              <Text style={styles.previewEmpty}>{t("Ton premier passage l'attend.")}</Text>
             )}
             <View style={{ flex: 1 }} />
-            <Text style={styles.meta}>{item.visibility === 'private' ? 'PRIVÉ' : item.visibility === 'public' ? 'PUBLIC' : 'COLLABORATIF'} · {item.pins_count || 0} épingles</Text>
+            <Text style={styles.meta}>{item.visibility === 'private' ? t('PRIVÉ') : item.visibility === 'public' ? t('PUBLIC') : t('COLLABORATIF')} · {t('{n} épingles', { n: item.pins_count || 0 })}</Text>
           </Pressable>
         )}
         ListEmptyComponent={(
           <View style={{ alignItems: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.xxxl }}>
-            <Text style={styles.emptyTitle}>Ton premier tableau t'attend.</Text>
-            <Text style={styles.emptySub}>Rassemble tes citations autour d'un thème.</Text>
+            <Text style={styles.emptyTitle}>{t("Ton premier tableau t'attend.")}</Text>
+            <Text style={styles.emptySub}>{t("Rassemble tes citations autour d'un thème.")}</Text>
           </View>
         )}
       />
@@ -137,11 +139,11 @@ export default function Community() {
           <View style={{ gap: spacing.sm, marginBottom: spacing.sm }}>
             <Pressable testID="btn-new-club" onPress={() => setClubModal(true)} style={styles.newCard}>
               <Feather name="plus" size={22} color={colors.chambray} />
-              <Text style={styles.newCardText}>Créer un club</Text>
+              <Text style={styles.newCardText}>{t('Créer un club')}</Text>
             </Pressable>
             <Pressable testID="btn-join-club" onPress={() => { setJoinError(''); setJoinModal(true); }} style={styles.joinRow}>
               <Feather name="key" size={16} color={colors.clay} />
-              <Text style={styles.joinRowText}>Rejoindre avec un code</Text>
+              <Text style={styles.joinRowText}>{t('Rejoindre avec un code')}</Text>
             </Pressable>
           </View>
         }
@@ -150,19 +152,19 @@ export default function Community() {
             <View style={{ flex: 1 }}>
               <Text style={styles.clubName}>{item.name}</Text>
               {item.book ? (
-                <Text style={styles.clubBook} numberOfLines={1}>Lecture : {item.book.title}</Text>
+                <Text style={styles.clubBook} numberOfLines={1}>{t('Lecture : {title}', { title: item.book.title })}</Text>
               ) : (
-                <Text style={styles.clubBookEmpty}>Pas encore de lecture commune</Text>
+                <Text style={styles.clubBookEmpty}>{t('Pas encore de lecture commune')}</Text>
               )}
-              <Text style={styles.clubMeta}>{item.members_count} MEMBRE{item.members_count > 1 ? 'S' : ''} · {item.messages_count} MESSAGE{item.messages_count > 1 ? 'S' : ''}{item.is_owner ? ' · TON CLUB' : ''}</Text>
+              <Text style={styles.clubMeta}>{item.members_count} {t(item.members_count > 1 ? 'MEMBRES' : 'MEMBRE')} · {item.messages_count} {t(item.messages_count > 1 ? 'MESSAGES' : 'MESSAGE')}{item.is_owner ? ` · ${t('TON CLUB')}` : ''}</Text>
             </View>
             <Feather name="chevron-right" size={18} color={colors.clay} />
           </Pressable>
         )}
         ListEmptyComponent={(
           <View style={{ alignItems: 'center', paddingTop: spacing.xxl }}>
-            <Text style={styles.emptyTitle}>Lire ensemble change tout.</Text>
-            <Text style={styles.emptySub}>Crée ton club ou rejoins-en un avec un code.</Text>
+            <Text style={styles.emptyTitle}>{t('Lire ensemble change tout.')}</Text>
+            <Text style={styles.emptySub}>{t('Crée ton club ou rejoins-en un avec un code.')}</Text>
           </View>
         )}
       />
@@ -172,24 +174,24 @@ export default function Community() {
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
           <View style={[styles.modal, { paddingBottom: insets.bottom + spacing.lg }]}>
             <View style={styles.grabber} />
-            <Text style={styles.modalTitle}>Nouveau tableau</Text>
-            <TextInput testID="new-board-name" value={name} onChangeText={setName} placeholder="Nom (ex: Résilience)" placeholderTextColor={colors.clay} style={styles.input} />
-            <TextInput testID="new-board-desc" value={desc} onChangeText={setDesc} placeholder="Description (optionnel)" placeholderTextColor={colors.clay} style={[styles.input, { height: 80 }]} multiline />
+            <Text style={styles.modalTitle}>{t('Nouveau tableau')}</Text>
+            <TextInput testID="new-board-name" value={name} onChangeText={setName} placeholder={t('Nom (ex: Résilience)')} placeholderTextColor={colors.clay} style={styles.input} />
+            <TextInput testID="new-board-desc" value={desc} onChangeText={setDesc} placeholder={t('Description (optionnel)')} placeholderTextColor={colors.clay} style={[styles.input, { height: 80 }]} multiline />
             <View style={{ gap: spacing.sm, marginTop: spacing.md }}>
               {(['private','public','collaborative'] as const).map(v => (
                 <Pressable key={v} testID={`visibility-${v}`} onPress={() => setVisibility(v)} style={[styles.visCard, visibility === v && styles.visCardActive]}>
                   <Text style={[styles.visLabel, visibility === v && { color: colors.creme }]}>
-                    {v === 'private' ? 'Privé' : v === 'public' ? 'Public' : 'Collaboratif'}
+                    {v === 'private' ? t('Privé') : v === 'public' ? t('Public') : t('Collaboratif')}
                   </Text>
                   <Text style={[styles.visDesc, visibility === v && { color: colors.creme, opacity: 0.9 }]}>
-                    {v === 'private' ? 'Toi seule.' : v === 'public' ? 'Sur ton profil, dans la découverte.' : 'Les invités peuvent aussi épingler.'}
+                    {v === 'private' ? t('Toi seule.') : v === 'public' ? t('Sur ton profil, dans la découverte.') : t('Les invités peuvent aussi épingler.')}
                   </Text>
                 </Pressable>
               ))}
             </View>
             <View style={{ height: spacing.lg }} />
-            <PrimaryButton testID="btn-create-board" title="Créer le tableau" onPress={create} loading={creating} disabled={!name.trim()} />
-            <GhostButton title="Annuler" onPress={() => setModal(false)} />
+            <PrimaryButton testID="btn-create-board" title={t('Créer le tableau')} onPress={create} loading={creating} disabled={!name.trim()} />
+            <GhostButton title={t('Annuler')} onPress={() => setModal(false)} />
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -198,13 +200,13 @@ export default function Community() {
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
           <View style={[styles.modal, { paddingBottom: insets.bottom + spacing.lg }]}>
             <View style={styles.grabber} />
-            <Text style={styles.modalTitle}>Nouveau club</Text>
-            <TextInput testID="new-club-name" value={clubName} onChangeText={setClubName} placeholder="Nom (ex: Les soirées Voltaire)" placeholderTextColor={colors.clay} style={styles.input} />
-            <TextInput testID="new-club-desc" value={clubDesc} onChangeText={setClubDesc} placeholder="Description (optionnel)" placeholderTextColor={colors.clay} style={[styles.input, { height: 80 }]} multiline />
-            <Text style={styles.modalHint}>Un code d&rsquo;invitation sera généré pour tes proches.</Text>
+            <Text style={styles.modalTitle}>{t('Nouveau club')}</Text>
+            <TextInput testID="new-club-name" value={clubName} onChangeText={setClubName} placeholder={t('Nom (ex: Les soirées Voltaire)')} placeholderTextColor={colors.clay} style={styles.input} />
+            <TextInput testID="new-club-desc" value={clubDesc} onChangeText={setClubDesc} placeholder={t('Description (optionnel)')} placeholderTextColor={colors.clay} style={[styles.input, { height: 80 }]} multiline />
+            <Text style={styles.modalHint}>{t('Un code d’invitation sera généré pour tes proches.')}</Text>
             <View style={{ height: spacing.md }} />
-            <PrimaryButton testID="btn-create-club" title="Créer le club" onPress={createClub} loading={creating} disabled={!clubName.trim()} />
-            <GhostButton title="Annuler" onPress={() => setClubModal(false)} />
+            <PrimaryButton testID="btn-create-club" title={t('Créer le club')} onPress={createClub} loading={creating} disabled={!clubName.trim()} />
+            <GhostButton title={t('Annuler')} onPress={() => setClubModal(false)} />
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -213,12 +215,12 @@ export default function Community() {
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
           <View style={[styles.modal, { paddingBottom: insets.bottom + spacing.lg }]}>
             <View style={styles.grabber} />
-            <Text style={styles.modalTitle}>Rejoindre un club</Text>
-            <TextInput testID="join-club-code" value={joinCode} onChangeText={t => setJoinCode(t.toUpperCase())} placeholder="Code (ex: A7K2PX)" autoCapitalize="characters" placeholderTextColor={colors.clay} style={[styles.input, styles.codeInput]} maxLength={6} />
+            <Text style={styles.modalTitle}>{t('Rejoindre un club')}</Text>
+            <TextInput testID="join-club-code" value={joinCode} onChangeText={t => setJoinCode(t.toUpperCase())} placeholder={t('Code (ex: A7K2PX)')} autoCapitalize="characters" placeholderTextColor={colors.clay} style={[styles.input, styles.codeInput]} maxLength={6} />
             {joinError ? <Text style={styles.joinError} testID="join-club-error">{joinError}</Text> : null}
             <View style={{ height: spacing.md }} />
-            <PrimaryButton testID="btn-join-club-confirm" title="Rejoindre" onPress={joinClub} loading={creating} disabled={joinCode.trim().length < 4} />
-            <GhostButton title="Annuler" onPress={() => setJoinModal(false)} />
+            <PrimaryButton testID="btn-join-club-confirm" title={t('Rejoindre')} onPress={joinClub} loading={creating} disabled={joinCode.trim().length < 4} />
+            <GhostButton title={t('Annuler')} onPress={() => setJoinModal(false)} />
           </View>
         </KeyboardAvoidingView>
       </Modal>

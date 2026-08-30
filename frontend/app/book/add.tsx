@@ -9,10 +9,25 @@ import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
 import { PrimaryButton, GhostButton } from '@/src/components/Button';
 import { api } from '@/src/api';
+import { useT } from '@/src/i18n';
 
 type Method = 'title' | 'isbn' | 'wattpad';
 
+// Couverture avec repli élégant sur l'initiale du titre si l'image manque ou échoue
+function Cover({ uri, title, style, emptyStyle, initialStyle }: { uri?: string | null; title?: string; style: any; emptyStyle: any; initialStyle: any }) {
+  const [failed, setFailed] = useState(false);
+  if (!uri || failed) {
+    return (
+      <View style={[style, emptyStyle]}>
+        <Text style={initialStyle}>{(title?.trim()?.[0] || 'M').toUpperCase()}</Text>
+      </View>
+    );
+  }
+  return <Image source={{ uri }} style={style} resizeMode="cover" onError={() => setFailed(true)} />;
+}
+
 export default function AddBook() {
+  const t = useT();
   const colors = useColors();
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
@@ -166,7 +181,7 @@ export default function AddBook() {
         <Pressable onPress={() => router.back()} testID="add-close" style={styles.iconBtn}>
           <Feather name="chevron-left" size={22} color={colors.espresso} />
         </Pressable>
-        <Text style={styles.h1}>Ajouter une lecture</Text>
+        <Text style={styles.h1}>{t('Ajouter une lecture')}</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -174,67 +189,61 @@ export default function AddBook() {
         {selected ? (
           <>
             <View style={styles.confirmCard} testID="confirm-card">
-              {selected.cover ? (
-                <Image source={{ uri: selected.cover }} style={styles.confirmCover} resizeMode="cover" />
-              ) : (
-                <View style={[styles.confirmCover, styles.confirmCoverEmpty]}>
-                  <Text style={styles.confirmInitial}>{(selected.title?.[0] || 'M').toUpperCase()}</Text>
-                </View>
-              )}
+              <Cover uri={selected.cover} title={selected.title} style={styles.confirmCover} emptyStyle={styles.confirmCoverEmpty} initialStyle={styles.confirmInitial} />
               <View style={{ flex: 1 }}>
-                {isWattpadSel ? <Text style={styles.confirmBadge}>HISTOIRE WATTPAD</Text> : null}
-                <Text style={styles.confirmTitle}>{selected.title || 'Sans titre'}</Text>
+                {isWattpadSel ? <Text style={styles.confirmBadge}>{t('HISTOIRE WATTPAD')}</Text> : null}
+                <Text style={styles.confirmTitle}>{selected.title || t('Sans titre')}</Text>
                 {!!selected.author && <Text style={styles.confirmAuthor}>{selected.author}</Text>}
                 <Text style={styles.confirmMeta}>
-                  {[selected.pages ? `${selected.pages} pages` : null, selected.chapters ? `${selected.chapters} chapitres` : null, selected.year || null].filter(Boolean).join('  ·  ') || 'Détails à compléter plus tard'}
+                  {[selected.pages ? t('{n} pages', { n: selected.pages }) : null, selected.chapters ? t('{n} chapitres', { n: selected.chapters }) : null, selected.year || null].filter(Boolean).join('  ·  ') || t('Détails à compléter plus tard')}
                 </Text>
               </View>
             </View>
             <Pressable testID="confirm-change" onPress={() => setSelected(null)} style={styles.changeRow}>
               <Feather name="rotate-ccw" size={13} color={colors.clay} />
-              <Text style={styles.changeText}>Choisir un autre livre</Text>
+              <Text style={styles.changeText}>{t('Choisir un autre livre')}</Text>
             </Pressable>
 
-            <Text style={styles.label}>Statut</Text>
+            <Text style={styles.label}>{t('Statut')}</Text>
             <View style={{ flexDirection: 'row', gap: 8 }}>
               {([['a_lire', 'À lire'], ['en_cours', 'En cours'], ['termine', 'Terminé']] as const).map(([id, lbl]) => (
                 <Pressable key={id} testID={`status-${id}`} onPress={() => setStatus(id)} style={[styles.chip, status === id && styles.chipActive]}>
-                  <Text style={[styles.chipText, status === id && styles.chipTextActive]}>{lbl}</Text>
+                  <Text style={[styles.chipText, status === id && styles.chipTextActive]}>{t(lbl)}</Text>
                 </Pressable>
               ))}
             </View>
 
             {!isWattpadSel && (
               <>
-                <Text style={styles.label}>Mode</Text>
+                <Text style={styles.label}>{t('Mode')}</Text>
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   <Pressable testID="mode-perso" onPress={() => setMode('perso')} style={[styles.chip, mode === 'perso' && styles.chipActive]}>
-                    <Text style={[styles.chipText, mode === 'perso' && styles.chipTextActive]}>Lecture perso</Text>
+                    <Text style={[styles.chipText, mode === 'perso' && styles.chipTextActive]}>{t('Lecture perso')}</Text>
                   </Pressable>
                   <Pressable testID="mode-etudes" onPress={() => setMode('etudes')} style={[styles.chip, mode === 'etudes' && styles.chipActive]}>
-                    <Text style={[styles.chipText, mode === 'etudes' && styles.chipTextActive]}>Pour mes études</Text>
+                    <Text style={[styles.chipText, mode === 'etudes' && styles.chipTextActive]}>{t('Pour mes études')}</Text>
                   </Pressable>
                 </View>
               </>
             )}
 
             <View style={{ height: spacing.xl }} />
-            <PrimaryButton testID="btn-add-book" title="Ajouter à ma bibliothèque" onPress={add} loading={saving} />
-            <GhostButton title="Annuler" onPress={() => router.back()} />
+            <PrimaryButton testID="btn-add-book" title={t('Ajouter à ma bibliothèque')} onPress={add} loading={saving} />
+            <GhostButton title={t('Annuler')} onPress={() => router.back()} />
           </>
         ) : (
           <>
             <View style={{ flexDirection: 'row', gap: 8 }}>
               {(['title', 'isbn', 'wattpad'] as Method[]).map(m => (
                 <Pressable key={m} testID={`method-${m}`} onPress={() => { setMethod(m); setScanFail(null); }} style={[styles.tab, method === m && styles.tabActive]}>
-                  <Text style={[styles.tabText, method === m && styles.tabTextActive]}>{m === 'title' ? 'Titre' : m === 'isbn' ? 'ISBN' : 'Wattpad'}</Text>
+                  <Text style={[styles.tabText, method === m && styles.tabTextActive]}>{m === 'title' ? t('Titre') : m === 'isbn' ? 'ISBN' : 'Wattpad'}</Text>
                 </Pressable>
               ))}
             </View>
 
             {method === 'title' && (
               <>
-                <Text style={styles.label}>Cherche un titre ou un auteur</Text>
+                <Text style={styles.label}>{t('Cherche un titre ou un auteur')}</Text>
                 <View style={styles.searchBox}>
                   <Feather name="search" size={16} color={colors.clay} />
                   <TextInput
@@ -251,13 +260,9 @@ export default function AddBook() {
                 <View style={{ marginTop: spacing.md, gap: spacing.sm }}>
                   {results.map((r, i) => (
                     <Pressable key={i} testID={`result-${i}`} onPress={() => setSelected(r)} style={styles.result}>
-                      {r.cover ? (
-                        <Image source={{ uri: r.cover }} style={styles.resultCover} resizeMode="cover" />
-                      ) : (
-                        <View style={[styles.resultCover, styles.resultCoverEmpty]}><Text style={styles.resultInitial}>{(r.title?.[0] || 'M').toUpperCase()}</Text></View>
-                      )}
+                      <Cover uri={r.cover} title={r.title} style={styles.resultCover} emptyStyle={styles.resultCoverEmpty} initialStyle={styles.resultInitial} />
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.resultTitle} numberOfLines={2}>{r.title || 'Sans titre'}</Text>
+                        <Text style={styles.resultTitle} numberOfLines={2}>{r.title || t('Sans titre')}</Text>
                         <Text style={styles.resultAuthor} numberOfLines={1}>{[r.author || null, r.year || null].filter(Boolean).join('  ·  ') || '—'}</Text>
                       </View>
                       <Feather name="chevron-right" size={16} color={colors.clay} />
@@ -267,24 +272,24 @@ export default function AddBook() {
 
                 {searched && !searching && results.length === 0 && !manualBook && (
                   <View style={styles.emptyBox} testID="title-empty">
-                    <Text style={styles.emptyTitle}>On n&rsquo;a rien trouvé pour « {query.trim()} ».</Text>
-                    <Text style={styles.emptySub}>Pas de panique, tu peux l&rsquo;ajouter toi-même — il rejoindra ta bibliothèque comme les autres.</Text>
+                    <Text style={styles.emptyTitle}>{t('On n’a rien trouvé pour « {q} ».', { q: query.trim() })}</Text>
+                    <Text style={styles.emptySub}>{t('Pas de panique, tu peux l’ajouter toi-même — il rejoindra ta bibliothèque comme les autres.')}</Text>
                     <Pressable testID="btn-manual-book" onPress={() => { setMTitle(query.trim()); setManualBook(true); }} style={styles.manualBtn}>
-                      <Text style={styles.manualBtnText}>Ajouter ce livre à la main</Text>
+                      <Text style={styles.manualBtnText}>{t('Ajouter ce livre à la main')}</Text>
                     </Pressable>
                   </View>
                 )}
 
                 {manualBook && (
                   <View style={styles.manualForm} testID="manual-form">
-                    <Text style={styles.label}>Titre</Text>
-                    <TextInput testID="manual-title" value={mTitle} onChangeText={setMTitle} placeholder="Titre du livre" placeholderTextColor={colors.clay} style={styles.input} />
-                    <Text style={styles.label}>Auteur</Text>
-                    <TextInput testID="manual-author" value={mAuthor} onChangeText={setMAuthor} placeholder="Optionnel" placeholderTextColor={colors.clay} style={styles.input} />
-                    <Text style={styles.label}>Nombre de pages</Text>
-                    <TextInput testID="manual-pages" value={mPages} onChangeText={setMPages} keyboardType="number-pad" placeholder="Optionnel" placeholderTextColor={colors.clay} style={styles.input} />
+                    <Text style={styles.label}>{t('Titre')}</Text>
+                    <TextInput testID="manual-title" value={mTitle} onChangeText={setMTitle} placeholder={t('Titre du livre')} placeholderTextColor={colors.clay} style={styles.input} />
+                    <Text style={styles.label}>{t('Auteur')}</Text>
+                    <TextInput testID="manual-author" value={mAuthor} onChangeText={setMAuthor} placeholder={t('Optionnel')} placeholderTextColor={colors.clay} style={styles.input} />
+                    <Text style={styles.label}>{t('Nombre de pages')}</Text>
+                    <TextInput testID="manual-pages" value={mPages} onChangeText={setMPages} keyboardType="number-pad" placeholder={t('Optionnel')} placeholderTextColor={colors.clay} style={styles.input} />
                     <View style={{ height: spacing.md }} />
-                    <PrimaryButton testID="manual-confirm" title="Continuer" onPress={confirmManualBook} disabled={!mTitle.trim()} />
+                    <PrimaryButton testID="manual-confirm" title={t('Continuer')} onPress={confirmManualBook} disabled={!mTitle.trim()} />
                   </View>
                 )}
               </>
@@ -295,34 +300,34 @@ export default function AddBook() {
                 {lookingUp ? (
                   <View style={styles.lookupBox}>
                     <ActivityIndicator color={colors.chambray} />
-                    <Text style={styles.lookupText}>Recherche du livre…</Text>
+                    <Text style={styles.lookupText}>{t('Recherche du livre…')}</Text>
                   </View>
                 ) : scanFail ? (
                   <View style={styles.emptyBox} testID="isbn-fail">
-                    <Text style={styles.emptyTitle}>Ce livre reste introuvable.</Text>
-                    <Text style={styles.emptySub}>ISBN {scanFail} — ni Google Books ni Open Library ne le connaissent. Essaie la recherche par titre, elle fait souvent des miracles.</Text>
+                    <Text style={styles.emptyTitle}>{t('Ce livre reste introuvable.')}</Text>
+                    <Text style={styles.emptySub}>{t('ISBN {code} — ni Google Books ni Open Library ne le connaissent. Essaie la recherche par titre, elle fait souvent des miracles.', { code: scanFail })}</Text>
                     <Pressable testID="btn-fail-title" onPress={() => { setMethod('title'); setScanFail(null); }} style={styles.manualBtn}>
-                      <Text style={styles.manualBtnText}>Chercher par titre</Text>
+                      <Text style={styles.manualBtnText}>{t('Chercher par titre')}</Text>
                     </Pressable>
                     <Pressable testID="btn-fail-manual" onPress={() => { setScanFail(null); setManualIsbn(true); }} style={{ marginTop: spacing.sm }}>
-                      <Text style={styles.discreteLink}>Saisir l&rsquo;ISBN à la main</Text>
+                      <Text style={styles.discreteLink}>{t('Saisir l’ISBN à la main')}</Text>
                     </Pressable>
                   </View>
                 ) : (
                   <>
                     <Pressable testID="btn-scan" onPress={startScan} style={styles.scanBtn}>
                       <Feather name="maximize" size={28} color={colors.creme} />
-                      <Text style={styles.scanBtnText}>Scanner le code-barres</Text>
-                      <Text style={styles.scanBtnHint}>Vise le code au dos du livre, le reste est automatique.</Text>
+                      <Text style={styles.scanBtnText}>{t('Scanner le code-barres')}</Text>
+                      <Text style={styles.scanBtnHint}>{t('Vise le code au dos du livre, le reste est automatique.')}</Text>
                     </Pressable>
                     {Platform.OS === 'web' && (
-                      <Text style={styles.webNote}>Le scan utilise la caméra du téléphone — sur le web, saisis l&rsquo;ISBN ci-dessous.</Text>
+                      <Text style={styles.webNote}>{t('Le scan utilise la caméra du téléphone — sur le web, saisis l’ISBN ci-dessous.')}</Text>
                     )}
                     {permDenied && (
                       <View style={styles.permBox}>
-                        <Text style={styles.emptySub}>La caméra est désactivée pour Manent. Autorise-la dans les réglages pour scanner tes livres.</Text>
+                        <Text style={styles.emptySub}>{t('La caméra est désactivée pour Manent. Autorise-la dans les réglages pour scanner tes livres.')}</Text>
                         <Pressable onPress={() => Linking.openSettings()} style={{ marginTop: spacing.sm }}>
-                          <Text style={styles.discreteLink}>Ouvrir les réglages</Text>
+                          <Text style={styles.discreteLink}>{t('Ouvrir les réglages')}</Text>
                         </Pressable>
                       </View>
                     )}
@@ -338,7 +343,7 @@ export default function AddBook() {
                       </>
                     ) : (
                       <Pressable testID="isbn-manual-toggle" onPress={() => setManualIsbn(true)} style={{ marginTop: spacing.lg, alignSelf: 'center' }}>
-                        <Text style={styles.discreteLink}>Saisir l&rsquo;ISBN à la main</Text>
+                        <Text style={styles.discreteLink}>{t('Saisir l’ISBN à la main')}</Text>
                       </Pressable>
                     )}
                   </>
@@ -348,14 +353,14 @@ export default function AddBook() {
 
             {method === 'wattpad' && (
               <>
-                <Text style={styles.label}>Lien de l&rsquo;histoire</Text>
+                <Text style={styles.label}>{t('Lien de l’histoire')}</Text>
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   <TextInput testID="wattpad-url" value={wattpadUrl} onChangeText={setWattpadUrl} placeholder="https://www.wattpad.com/story/…" placeholderTextColor={colors.clay} style={[styles.input, { flex: 1 }]} autoCapitalize="none" />
                   <Pressable testID="btn-wattpad" onPress={fetchWattpad} disabled={!wattpadUrl.trim()} style={[styles.goBtn, !wattpadUrl.trim() && { opacity: 0.5 }]}>
                     {wLoading ? <ActivityIndicator size="small" color={colors.creme} /> : <Feather name="arrow-right" size={18} color={colors.creme} />}
                   </Pressable>
                 </View>
-                {wError && <Text style={styles.emptySub}>Impossible de lire cette page Wattpad. Vérifie le lien.</Text>}
+                {wError && <Text style={styles.emptySub}>{t('Impossible de lire cette page Wattpad. Vérifie le lien.')}</Text>}
               </>
             )}
           </>
@@ -371,7 +376,7 @@ export default function AddBook() {
             onBarcodeScanned={onBarcode}
           />
           <View style={[styles.scanBand, { paddingTop: insets.top + spacing.xl }]}>
-            <Text style={styles.scanHelp}>Vise le code-barres au dos du livre</Text>
+            <Text style={styles.scanHelp}>{t('Vise le code-barres au dos du livre')}</Text>
           </View>
           <View style={styles.scanCenter}>
             <View style={styles.scanFrame} />
@@ -379,7 +384,7 @@ export default function AddBook() {
           <View style={[styles.scanBand, styles.scanBandBottom, { paddingBottom: insets.bottom + spacing.xl }]}>
             <Pressable testID="scan-close" onPress={() => setScanning(false)} style={styles.scanCloseBtn}>
               <Feather name="x" size={20} color={colors.creme} />
-              <Text style={styles.scanCloseText}>Annuler</Text>
+              <Text style={styles.scanCloseText}>{t('Annuler')}</Text>
             </Pressable>
           </View>
         </View>

@@ -6,6 +6,7 @@ import { Feather } from '@expo/vector-icons';
 import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
 import { api } from '@/src/api';
+import { useT } from '@/src/i18n';
 
 type Book = {
   book_id: string;
@@ -31,6 +32,7 @@ const FILTERS = [
 ];
 
 function BookCard({ b, onPress }: { b: Book; onPress: () => void }) {
+  const t = useT();
   const styles = useStyles(makeStyles);
   const isWattpad = b.type === 'wattpad';
   const isEtude = b.type === 'etude';
@@ -45,8 +47,8 @@ function BookCard({ b, onPress }: { b: Book; onPress: () => void }) {
       <View style={{ flex: 1 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           {isWattpad && <Text style={styles.badge}>WATTPAD</Text>}
-          {isEtude && <Text style={styles.badge}>ÉTUDES</Text>}
-          <Text style={styles.statusMeta}>{b.status === 'en_cours' ? 'EN COURS' : b.status === 'termine' ? 'TERMINÉ' : 'À LIRE'}</Text>
+          {isEtude && <Text style={styles.badge}>{t('ÉTUDES')}</Text>}
+          <Text style={styles.statusMeta}>{b.status === 'en_cours' ? t('EN COURS') : b.status === 'termine' ? t('TERMINÉ') : t('À LIRE')}</Text>
         </View>
         <Text style={styles.title} numberOfLines={2}>{b.title}</Text>
         {b.author ? <Text style={styles.author} numberOfLines={1}>{b.author}</Text> : null}
@@ -58,13 +60,14 @@ function BookCard({ b, onPress }: { b: Book; onPress: () => void }) {
             <Text style={styles.progressText}>{progress || 0} / {total} {isWattpad ? 'chap.' : 'p.'} · {pct}%</Text>
           </View>
         ) : null}
-        <Text style={styles.footer}>{b.quotes_count || 0} citation{(b.quotes_count || 0) > 1 ? 's' : ''}</Text>
+        <Text style={styles.footer}>{t((b.quotes_count || 0) > 1 ? '{n} citations' : '{n} citation', { n: b.quotes_count || 0 })}</Text>
       </View>
     </Pressable>
   );
 }
 
 export default function Library() {
+  const t = useT();
   const colors = useColors();
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
@@ -85,7 +88,7 @@ export default function Library() {
     <View style={{ flex: 1, backgroundColor: colors.glacier }} testID="screen-library">
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
         <View style={styles.headerRow}>
-          <Text style={styles.h1}>Bibliothèque</Text>
+          <Text style={styles.h1}>{t('Bibliothèque')}</Text>
           <Pressable testID="btn-library-add" onPress={() => router.push('/book/add')} style={styles.addBtn}>
             <Feather name="plus" size={22} color={colors.creme} />
           </Pressable>
@@ -94,7 +97,7 @@ export default function Library() {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: spacing.xl }}>
             {FILTERS.map(f => (
               <Pressable key={String(f.id)} testID={`lib-filter-${f.id ?? 'all'}`} onPress={() => setFilter(f.id)} style={[styles.chip, filter === f.id && styles.chipActive]}>
-                <Text style={[styles.chipText, filter === f.id && styles.chipTextActive]}>{f.label}</Text>
+                <Text style={[styles.chipText, filter === f.id && styles.chipTextActive]}>{t(f.label)}</Text>
               </Pressable>
             ))}
           </ScrollView>
@@ -108,8 +111,8 @@ export default function Library() {
         ItemSeparatorComponent={() => <View style={{ height: spacing.md }} />}
         ListEmptyComponent={loading ? null : (
           <View style={{ alignItems: 'center', paddingVertical: spacing.xxxl }}>
-            <Text style={styles.emptyTitle}>Ta bibliothèque t'attend.</Text>
-            <Text style={styles.emptySub}>Ajoute ton premier livre ou une histoire Wattpad.</Text>
+            <Text style={styles.emptyTitle}>{t("Ta bibliothèque t'attend.")}</Text>
+            <Text style={styles.emptySub}>{t('Ajoute ton premier livre ou une histoire Wattpad.')}</Text>
             <Pressable testID="empty-add-book" onPress={() => router.push('/book/add')} style={[styles.addBtn, { marginTop: spacing.lg }]}>
               <Feather name="plus" size={22} color={colors.creme} />
             </Pressable>

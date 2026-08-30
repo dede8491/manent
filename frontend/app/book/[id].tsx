@@ -13,8 +13,10 @@ import { StudySheet } from '@/src/components/StudySheet';
 import { toBase64 } from '@/src/image';
 import { buildSheetHtml } from '@/src/sheetPdf';
 import { api } from '@/src/api';
+import { useT } from '@/src/i18n';
 
 export default function BookDetail() {
+  const t = useT();
   const colors = useColors();
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
@@ -58,11 +60,11 @@ export default function BookDetail() {
   // ---- Progression par photo de page (Claude Vision) ----
   const openCameraSettings = () => {
     Alert.alert(
-      "Accès à l'appareil photo",
-      'Autorise la caméra dans les réglages pour photographier ta page.',
+      t("Accès à l'appareil photo"),
+      t('Autorise la caméra dans les réglages pour photographier ta page.'),
       [
-        { text: 'Annuler', style: 'cancel' },
-        { text: 'Ouvrir les réglages', onPress: () => Linking.openSettings() },
+        { text: t('Annuler'), style: 'cancel' },
+        { text: t('Ouvrir les réglages'), onPress: () => Linking.openSettings() },
       ],
     );
   };
@@ -123,11 +125,11 @@ export default function BookDetail() {
       } else {
         const { uri } = await Print.printToFileAsync({ html });
         if (await Sharing.isAvailableAsync()) {
-          await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Fiche d’études PDF' });
+          await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: t('Fiche d’études PDF') });
         }
       }
     } catch {
-      Alert.alert('Export impossible', 'La génération du PDF a échoué. Réessaie.');
+      Alert.alert(t('Export impossible'), t('La génération du PDF a échoué. Réessaie.'));
     } finally { setExportingPdf(false); }
   };
 
@@ -139,7 +141,7 @@ export default function BookDetail() {
       const f = await api<{ total: number; due: number }>(`/flashcards?book_id=${id}`);
       setFc({ total: f.total, due: f.due });
     } catch {
-      Alert.alert('Génération impossible', 'Réessaie dans un instant.');
+      Alert.alert(t('Génération impossible'), t('Réessaie dans un instant.'));
     } finally { setGenerating(false); }
   };
 
@@ -161,7 +163,7 @@ export default function BookDetail() {
         <View style={styles.top}>
           <View style={styles.cover}><Text style={styles.coverInitial}>{(book.title[0] || 'M').toUpperCase()}</Text></View>
           <View style={{ flex: 1, gap: 4 }}>
-            {isWattpad ? <Text style={styles.badge}>HISTOIRE WATTPAD</Text> : isEtude ? <Text style={styles.badge}>ÉTUDES</Text> : null}
+            {isWattpad ? <Text style={styles.badge}>{t('HISTOIRE WATTPAD')}</Text> : isEtude ? <Text style={styles.badge}>{t('ÉTUDES')}</Text> : null}
             <Text style={styles.title}>{book.title}</Text>
             {book.author ? <Text style={styles.author}>{book.author}</Text> : null}
             <View style={{ flexDirection: 'row', gap: 4, marginTop: 4 }}>
@@ -188,24 +190,24 @@ export default function BookDetail() {
                 {detecting
                   ? <ActivityIndicator size="small" color={colors.creme} />
                   : <Feather name="camera" size={16} color={colors.creme} />}
-                <Text style={styles.photoBtnText}>{detecting ? 'Analyse de la page…' : 'Photographier ma dernière page lue'}</Text>
+                <Text style={styles.photoBtnText}>{detecting ? t('Analyse de la page…') : t('Photographier ma dernière page lue')}</Text>
               </Pressable>
             ) : detectedPage === -1 ? (
               <View style={styles.detectBox}>
-                <Text style={styles.detectText}>Aucun numéro de page détecté. Réessaie avec une photo nette du coin de la page.</Text>
+                <Text style={styles.detectText}>{t('Aucun numéro de page détecté. Réessaie avec une photo nette du coin de la page.')}</Text>
                 <Pressable testID="btn-page-close" onPress={() => setDetectedPage(null)} style={[styles.detectGhost, { marginTop: spacing.sm }]}>
-                  <Text style={styles.detectGhostText}>Fermer</Text>
+                  <Text style={styles.detectGhostText}>{t('Fermer')}</Text>
                 </Pressable>
               </View>
             ) : (
               <View style={styles.detectBox} testID="page-detected-box">
-                <Text style={styles.detectText}>Page détectée : <Text style={styles.detectNum}>{detectedPage}</Text></Text>
+                <Text style={styles.detectText}>{t('Page détectée : ')}<Text style={styles.detectNum}>{detectedPage}</Text></Text>
                 <View style={{ flexDirection: 'row', gap: 8, marginTop: spacing.sm }}>
                   <Pressable testID="btn-page-confirm" onPress={confirmDetectedPage} style={styles.detectConfirm}>
-                    <Text style={styles.photoBtnText}>Mettre à jour</Text>
+                    <Text style={styles.photoBtnText}>{t('Mettre à jour')}</Text>
                   </Pressable>
                   <Pressable testID="btn-page-cancel" onPress={() => setDetectedPage(null)} style={styles.detectGhost}>
-                    <Text style={styles.detectGhostText}>Annuler</Text>
+                    <Text style={styles.detectGhostText}>{t('Annuler')}</Text>
                   </Pressable>
                 </View>
               </View>
@@ -215,49 +217,49 @@ export default function BookDetail() {
 
         {isEtude && (
           <>
-            <Text style={styles.sectionLabel}>Fiche scolaire</Text>
+            <Text style={styles.sectionLabel}>{t('Fiche scolaire')}</Text>
             <StudySheet key={book.book_id} sheet={book.sheet} onSave={(s) => saveField({ sheet: s })} />
             <Pressable testID="btn-export-pdf" onPress={exportPdf} disabled={exportingPdf} style={styles.pdfBtn}>
               {exportingPdf
                 ? <ActivityIndicator size="small" color={colors.espresso} />
                 : <Feather name="file-text" size={16} color={colors.espresso} />}
-              <Text style={styles.pdfBtnText}>{exportingPdf ? 'Génération…' : 'Exporter la fiche en PDF'}</Text>
+              <Text style={styles.pdfBtnText}>{exportingPdf ? t('Génération…') : t('Exporter la fiche en PDF')}</Text>
             </Pressable>
 
-            <Text style={styles.sectionLabel}>Flashcards de révision</Text>
+            <Text style={styles.sectionLabel}>{t('Flashcards de révision')}</Text>
             <View style={styles.fcBox} testID="flashcards-box">
               <Text style={styles.fcCount}>
-                {fc ? `${fc.total} carte${fc.total > 1 ? 's' : ''} · ${fc.due} à réviser` : 'Chargement…'}
+                {fc ? t(fc.total > 1 ? '{n} cartes · {due} à réviser' : '{n} carte · {due} à réviser', { n: fc.total, due: fc.due }) : t('Chargement…')}
               </Text>
               <View style={{ flexDirection: 'row', gap: 8, marginTop: spacing.sm }}>
                 <Pressable testID="btn-generate-cards" onPress={generateCards} disabled={generating || quotes.length === 0} style={[styles.fcGhost, (generating || quotes.length === 0) && { opacity: 0.5 }]}>
                   {generating
                     ? <ActivityIndicator size="small" color={colors.espresso} />
-                    : <Text style={styles.fcGhostText}>Générer avec l&rsquo;IA</Text>}
+                    : <Text style={styles.fcGhostText}>{t('Générer avec l’IA')}</Text>}
                 </Pressable>
                 <Pressable testID="btn-review-cards" onPress={() => router.push({ pathname: '/flashcards/[bookId]', params: { bookId: String(id) } })} disabled={!fc || fc.due === 0} style={[styles.fcPrimary, (!fc || fc.due === 0) && { opacity: 0.5 }]}>
-                  <Text style={styles.fcPrimaryText}>Réviser{fc && fc.due > 0 ? ` (${fc.due})` : ''}</Text>
+                  <Text style={styles.fcPrimaryText}>{t('Réviser')}{fc && fc.due > 0 ? ` (${fc.due})` : ''}</Text>
                 </Pressable>
               </View>
               {quotes.length === 0 && (
-                <Text style={styles.fcHint}>Capture d&rsquo;abord des citations de ce livre — l&rsquo;IA les transformera en questions de révision.</Text>
+                <Text style={styles.fcHint}>{t('Capture d’abord des citations de ce livre — l’IA les transformera en questions de révision.')}</Text>
               )}
             </View>
           </>
         )}
 
-        <Text style={styles.sectionLabel}>Mon récapitulatif</Text>
+        <Text style={styles.sectionLabel}>{t('Mon récapitulatif')}</Text>
         <TextInput
           testID="book-recap"
           value={recap} onChangeText={setRecap}
           onEndEditing={() => saveField({ recap })}
-          placeholder="Ce que ce livre te laisse en tête…"
+          placeholder={t('Ce que ce livre te laisse en tête…')}
           placeholderTextColor={colors.clay}
           style={[styles.input, { minHeight: 90, textAlignVertical: 'top' }]}
           multiline
         />
 
-        <Text style={styles.sectionLabel}>Enseignements tirés</Text>
+        <Text style={styles.sectionLabel}>{t('Enseignements tirés')}</Text>
         <View style={{ gap: 8 }}>
           {lessons.map((l, i) => (
             <View key={i} style={styles.lessonRow}>
@@ -266,14 +268,14 @@ export default function BookDetail() {
             </View>
           ))}
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            <TextInput testID="book-new-lesson" value={newLesson} onChangeText={setNewLesson} placeholder="Ajoute un enseignement…" placeholderTextColor={colors.clay} style={[styles.input, { flex: 1 }]} />
+            <TextInput testID="book-new-lesson" value={newLesson} onChangeText={setNewLesson} placeholder={t('Ajoute un enseignement…')} placeholderTextColor={colors.clay} style={[styles.input, { flex: 1 }]} />
             <Pressable testID="btn-add-lesson" onPress={addLesson} style={styles.plusBtn}><Feather name="plus" size={20} color={colors.creme} /></Pressable>
           </View>
         </View>
 
         {!isWattpad && (
           <>
-            <Text style={styles.sectionLabel}>Où trouver ce livre</Text>
+            <Text style={styles.sectionLabel}>{t('Où trouver ce livre')}</Text>
             <View style={{ gap: 8 }}>
               {[
                 { name: 'Librairies indépendantes', tag: 'leslibraires.fr', url: `https://www.leslibraires.fr/recherche/?q=${encodeURIComponent(book.isbn || `${book.title} ${book.author || ''}`.trim())}` },
@@ -288,14 +290,14 @@ export default function BookDetail() {
                   <Feather name="external-link" size={18} color={colors.chambray} />
                 </Pressable>
               ))}
-              <Text style={styles.linkNote}>Commission reversée à Manent, sans surcoût pour toi.</Text>
+              <Text style={styles.linkNote}>{t('Commission reversée à Manent, sans surcoût pour toi.')}</Text>
             </View>
           </>
         )}
 
         <Text style={styles.sectionLabel}>Citations du livre ({quotes.length})</Text>
         {quotes.length === 0 ? (
-          <Text style={styles.emptyQuotes}>Aucune citation pour l'instant. Utilise la capture pour en ajouter.</Text>
+          <Text style={styles.emptyQuotes}>{t("Aucune citation pour l'instant. Utilise la capture pour en ajouter.")}</Text>
         ) : quotes.map(q => (
           <QuoteCard key={q.quote_id} quote={q} onPress={() => router.push({ pathname: '/quote/[id]', params: { id: q.quote_id } })} />
         ))}

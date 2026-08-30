@@ -7,8 +7,10 @@ import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
 import { QuoteCard, Quote } from '@/src/components/QuoteCard';
 import { api } from '@/src/api';
+import { useT } from '@/src/i18n';
 
 export default function BoardDetail() {
+  const t = useT();
   const colors = useColors();
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
@@ -30,13 +32,13 @@ export default function BoardDetail() {
         <View style={{ width: 40 }} />
       </View>
       <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + spacing.xxl }}>
-        <Text style={styles.meta}>{board.visibility === 'private' ? 'PRIVÉ' : board.visibility === 'public' ? 'PUBLIC' : 'COLLABORATIF'}  ·  {board.quotes?.length || 0} épingles</Text>
+        <Text style={styles.meta}>{board.visibility === 'private' ? t('PRIVÉ') : board.visibility === 'public' ? t('PUBLIC') : t('COLLABORATIF')}  ·  {t('{n} épingles', { n: board.quotes?.length || 0 })}</Text>
         {board.description ? <Text style={styles.desc}>{board.description}</Text> : null}
         <View style={{ height: spacing.lg }} />
         {(!board.quotes || board.quotes.length === 0) ? (
           <View style={{ alignItems: 'center', paddingVertical: spacing.xxxl }}>
-            <Text style={styles.emptyTitle}>Ton premier passage l'attend.</Text>
-            <Text style={styles.emptySub}>Ouvre une citation et épingle-la ici.</Text>
+            <Text style={styles.emptyTitle}>{t("Ton premier passage l'attend.")}</Text>
+            <Text style={styles.emptySub}>{t('Ouvre une citation et épingle-la ici.')}</Text>
           </View>
         ) : board.quotes.map((q: Quote) => (
           <QuoteCard key={q.quote_id} quote={q} onPress={() => router.push({ pathname: '/quote/[id]', params: { id: q.quote_id } })} />

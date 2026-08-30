@@ -7,8 +7,10 @@ import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
 import { PrimaryButton, GhostButton } from '@/src/components/Button';
 import { useAuth } from '@/src/auth';
+import { useT } from '@/src/i18n';
 
 export default function Account() {
+  const t = useT();
   const colors = useColors();
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
@@ -26,7 +28,7 @@ export default function Account() {
       await signUp(email.trim(), password, pseudo.trim());
       router.replace('/onboarding/themes');
     } catch (e: any) {
-      setErr(e.detail?.detail === 'email_taken' ? 'Cette adresse est déjà utilisée.' : 'Impossible de créer ton compte.');
+      setErr(e.detail?.detail === 'email_taken' ? t('Cette adresse est déjà utilisée.') : t('Impossible de créer ton compte.'));
     } finally { setLoading(false); }
   };
 
@@ -36,22 +38,22 @@ export default function Account() {
         <Pressable onPress={() => router.back()} testID="onb-back" style={styles.back}>
           <Feather name="chevron-left" size={22} color={colors.espresso} />
         </Pressable>
-        <Text style={styles.title}>Créer ton compte</Text>
-        <Text style={styles.sub}>Rejoins Manent en quelques secondes.</Text>
+        <Text style={styles.title}>{t('Créer ton compte')}</Text>
+        <Text style={styles.sub}>{t('Rejoins Manent en quelques secondes.')}</Text>
 
         <View style={{ height: spacing.xl }} />
-        <Text style={styles.label}>Pseudo</Text>
+        <Text style={styles.label}>{t('Pseudo')}</Text>
         <TextInput testID="input-pseudo" value={pseudo} onChangeText={setPseudo} placeholder="Léa" placeholderTextColor={colors.clay} style={styles.input} autoCapitalize="none" />
-        <Text style={styles.label}>E-mail</Text>
+        <Text style={styles.label}>{t('E-mail')}</Text>
         <TextInput testID="input-email" value={email} onChangeText={setEmail} placeholder="toi@exemple.com" placeholderTextColor={colors.clay} style={styles.input} autoCapitalize="none" keyboardType="email-address" />
-        <Text style={styles.label}>Mot de passe</Text>
-        <TextInput testID="input-password" value={password} onChangeText={setPassword} placeholder="6 caractères minimum" placeholderTextColor={colors.clay} style={styles.input} secureTextEntry />
+        <Text style={styles.label}>{t('Mot de passe')}</Text>
+        <TextInput testID="input-password" value={password} onChangeText={setPassword} placeholder={t('6 caractères minimum')} placeholderTextColor={colors.clay} style={styles.input} secureTextEntry />
 
         {err && <Text style={styles.err}>{err}</Text>}
 
         <View style={{ height: spacing.xl }} />
-        <PrimaryButton testID="btn-signup" title="Créer mon compte" onPress={submit} loading={loading} disabled={!pseudo || !email || password.length < 6} />
-        <GhostButton testID="btn-goto-login" title="J'ai déjà un compte" onPress={() => router.push('/(auth)/login')} />
+        <PrimaryButton testID="btn-signup" title={t('Créer mon compte')} onPress={submit} loading={loading} disabled={!pseudo || !email || password.length < 6} />
+        <GhostButton testID="btn-goto-login" title={t("J'ai déjà un compte")} onPress={() => router.push('/(auth)/login')} />
       </ScrollView>
     </KeyboardAvoidingView>
   );

@@ -7,10 +7,12 @@ import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
 import { api } from '@/src/api';
 import { PrimaryButton } from '@/src/components/Button';
+import { useT } from '@/src/i18n';
 
 type Card = { card_id: string; question: string; answer: string; due: string };
 
 export default function FlashcardsReview() {
+  const t = useT();
   const colors = useColors();
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
@@ -52,7 +54,7 @@ export default function FlashcardsReview() {
         <Pressable onPress={() => router.back()} testID="fc-back" style={styles.iconBtn}>
           <Feather name="x" size={22} color={colors.espresso} />
         </Pressable>
-        <Text style={styles.headerLabel}>Révision</Text>
+        <Text style={styles.headerLabel}>{t('Révision')}</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -61,24 +63,24 @@ export default function FlashcardsReview() {
       ) : !current ? (
         <View style={styles.center} testID="fc-done">
           <Feather name="check-circle" size={40} color={colors.chambray} />
-          <Text style={styles.doneTitle}>{done > 0 ? 'Session terminée.' : 'Rien à réviser pour le moment.'}</Text>
+          <Text style={styles.doneTitle}>{done > 0 ? t('Session terminée.') : t('Rien à réviser pour le moment.')}</Text>
           <Text style={styles.doneSub}>
             {done > 0
-              ? `${done} carte${done > 1 ? 's' : ''} révisée${done > 1 ? 's' : ''}. Les prochaines reviendront au bon moment.`
-              : 'Reviens quand tes cartes seront dues — la répétition espacée fait le reste.'}
+              ? t(done > 1 ? '{n} cartes révisées. Les prochaines reviendront au bon moment.' : '{n} carte révisée. Les prochaines reviendront au bon moment.', { n: done })
+              : t('Reviens quand tes cartes seront dues — la répétition espacée fait le reste.')}
           </Text>
           <View style={{ width: '100%', marginTop: spacing.xl }}>
-            <PrimaryButton testID="fc-close" title="Retour au livre" onPress={() => router.back()} />
+            <PrimaryButton testID="fc-close" title={t('Retour au livre')} onPress={() => router.back()} />
           </View>
         </View>
       ) : (
         <View style={{ flex: 1, padding: spacing.xl }}>
           <Text style={styles.progress}>{done + 1} / {done + (queue.length - index)}</Text>
           <Pressable testID="fc-card" onPress={() => setRevealed(true)} style={styles.card}>
-            <Text style={styles.cardLabel}>{revealed ? 'RÉPONSE' : 'QUESTION'}</Text>
+            <Text style={styles.cardLabel}>{revealed ? t('RÉPONSE') : t('QUESTION')}</Text>
             <Text style={styles.cardText}>{revealed ? current.answer : current.question}</Text>
             {!revealed && (
-              <Text style={styles.tapHint}>Touche la carte pour révéler la réponse</Text>
+              <Text style={styles.tapHint}>{t('Touche la carte pour révéler la réponse')}</Text>
             )}
           </Pressable>
 
@@ -91,13 +93,13 @@ export default function FlashcardsReview() {
                 ['easy', 'Facile', colors.chambray],
               ] as const).map(([g, label, color]) => (
                 <Pressable key={g} testID={`fc-grade-${g}`} onPress={() => grade(g)} style={[styles.gradeBtn, { borderColor: color }, (g === 'good' || g === 'easy') && { backgroundColor: color }]}>
-                  <Text style={[styles.gradeText, { color }, (g === 'good' || g === 'easy') && { color: colors.creme }]}>{label}</Text>
+                  <Text style={[styles.gradeText, { color }, (g === 'good' || g === 'easy') && { color: colors.creme }]}>{t(label)}</Text>
                 </Pressable>
               ))}
             </View>
           ) : (
             <Pressable testID="fc-reveal" onPress={() => setRevealed(true)} style={styles.revealBtn}>
-              <Text style={styles.revealText}>Voir la réponse</Text>
+              <Text style={styles.revealText}>{t('Voir la réponse')}</Text>
             </Pressable>
           )}
         </View>

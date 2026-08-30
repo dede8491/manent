@@ -8,8 +8,37 @@ import * as Sharing from 'expo-sharing';
 import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles, useScheme, useToggleScheme } from '@/src/themeCtx';
 import { useAuth } from '@/src/auth';
+import { useI18n } from '@/src/i18n';
 import { api } from '@/src/api';
 import { PrimaryButton, GhostButton } from '@/src/components/Button';
+
+const PRIVACY_EN = `Manent complies with the GDPR (General Data Protection Regulation).
+
+What we collect: your email, username, books, quotes, boards, clubs and reading statistics. Nothing else.
+
+What we do with it: only run the app. Your quotes stay private by default; you alone decide to make them public.
+
+What we never do: sell your data, share it with advertisers, or analyze your reading for advertising purposes.
+
+Your rights (GDPR articles 15 to 21): access, rectification, portability ("Download my data" button) and erasure ("Delete my account" button — immediate and permanent deletion).
+
+Hosting: your data is stored securely; page photos only pass through for transcription and are not kept by the AI model.
+
+Contact: bonjour@manent.app`;
+
+const TERMS_EN = `Terms of use — the essentials, no jargon.
+
+1. Manent helps you keep what your readings leave with you. Your content belongs to you; you only grant us the technical right to display it in the app.
+
+2. Quotes you make public remain short excerpts under fair quotation rights. You agree to credit the work and not to publish entire passages.
+
+3. Respect between readers: no hateful, illegal or off-topic content in clubs and public profiles. We may remove reported content.
+
+4. Premium is an optional subscription, cancellable at any time.
+
+5. Bookstore links are affiliated: we receive a commission, at no extra cost to you.
+
+6. We may evolve the app; important changes will be announced to you.`;
 
 const PRIVACY = `Manent respecte le RGPD (Règlement général sur la protection des données).
 
@@ -47,7 +76,7 @@ export default function Settings() {
   const { user, signOut } = useAuth();
   const scheme = useScheme();
   const toggleScheme = useToggleScheme();
-  const [language, setLanguage] = useState<'fr' | 'en'>('fr');
+  const { lang, setLang, t } = useI18n();
   const [defaultPublic, setDefaultPublic] = useState(false);
   const [doc, setDoc] = useState<null | 'privacy' | 'terms'>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -58,7 +87,8 @@ export default function Settings() {
     (async () => {
       try {
         const s = await api<{ language: 'fr' | 'en'; default_public: boolean }>('/me/settings', { method: 'PATCH', body: JSON.stringify({}) });
-        setLanguage(s.language); setDefaultPublic(s.default_public);
+        if (s.language === 'en' || s.language === 'fr') setLang(s.language);
+        setDefaultPublic(s.default_public);
       } catch {}
     })();
   }, []);
@@ -78,16 +108,16 @@ export default function Settings() {
         a.href = URL.createObjectURL(blob);
         a.download = 'manent-mes-donnees.json';
         document.body.appendChild(a); a.click(); a.remove();
-        setFeedback('Données téléchargées.');
+        setFeedback(t('Données téléchargées.'));
       } else {
         const path = `${FileSystem.cacheDirectory}manent-mes-donnees.json`;
         await FileSystem.writeAsStringAsync(path, json);
         if (await Sharing.isAvailableAsync()) {
-          await Sharing.shareAsync(path, { mimeType: 'application/json', dialogTitle: 'Mes données Manent' });
+          await Sharing.shareAsync(path, { mimeType: 'application/json', dialogTitle: t('Mes données Manent') });
         }
       }
     } catch {
-      setFeedback("L'export a échoué. Réessaie.");
+      setFeedback(t("L'export a échoué. Réessaie."));
     } finally { setBusy(null); }
   };
 
@@ -99,7 +129,7 @@ export default function Settings() {
       signOut();
     } catch {
       setBusy(null);
-      Alert.alert('Suppression impossible', 'Réessaie dans un instant.');
+      Alert.alert(t('Suppression impossible'), t('Réessaie dans un instant.'));
     }
   };
 
@@ -118,32 +148,31 @@ export default function Settings() {
         <Pressable onPress={() => router.back()} testID="settings-back" style={styles.iconBtn}>
           <Feather name="chevron-left" size={22} color={colors.espresso} />
         </Pressable>
-        <Text style={styles.h1}>Paramètres</Text>
+        <Text style={styles.h1}>{t('Paramètres')}</Text>
         <View style={{ width: 40 }} />
       </View>
       <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + spacing.xxl, gap: spacing.sm }}>
-        <Text style={styles.section}>Compte</Text>
+        <Text style={styles.section}>{t('Compte')}</Text>
         <View style={styles.card}>
           <Text style={styles.accountName}>{user?.pseudo}</Text>
           <Text style={styles.accountMail}>{user?.email}</Text>
         </View>
 
-        <Text style={styles.section}>Langue</Text>
+        <Text style={styles.section}>{t('Langue')}</Text>
         <View style={{ flexDirection: 'row', gap: 8 }}>
-          <Pressable testID="lang-fr" onPress={() => { setLanguage('fr'); saveSettings({ language: 'fr' }); }} style={[styles.langChip, language === 'fr' && styles.langActive]}>
-            <Text style={[styles.langText, language === 'fr' && styles.langTextActive]}>Français</Text>
+          <Pressable testID="lang-fr" onPress={() => { setLang('fr'); saveSettings({ language: 'fr' }); }} style={[styles.langChip, lang === 'fr' && styles.langActive]}>
+            <Text style={[styles.langText, lang === 'fr' && styles.langTextActive]}>Français</Text>
           </Pressable>
-          <View style={[styles.langChip, { opacity: 0.5 }]} testID="lang-en">
-            <Text style={styles.langText}>English</Text>
-            <Text style={styles.langSoon}>bientôt</Text>
-          </View>
+          <Pressable testID="lang-en" onPress={() => { setLang('en'); saveSettings({ language: 'en' }); }} style={[styles.langChip, lang === 'en' && styles.langActive]}>
+            <Text style={[styles.langText, lang === 'en' && styles.langTextActive]}>English</Text>
+          </Pressable>
         </View>
 
-        <Text style={styles.section}>Apparence</Text>
+        <Text style={styles.section}>{t('Apparence')}</Text>
         <Row
           testID="settings-darkmode"
           icon={scheme === 'dark' ? 'sun' : 'moon'}
-          label="Mode sombre"
+          label={t('Mode sombre')}
           onPress={toggleScheme}
           right={
             <View style={[styles.switch, scheme === 'dark' && { backgroundColor: colors.chambray }]}>
@@ -152,11 +181,11 @@ export default function Settings() {
           }
         />
 
-        <Text style={styles.section}>Confidentialité</Text>
+        <Text style={styles.section}>{t('Confidentialité')}</Text>
         <Row
           testID="settings-default-public"
           icon="eye"
-          label="Citations publiques par défaut"
+          label={t('Citations publiques par défaut')}
           onPress={() => { const v = !defaultPublic; setDefaultPublic(v); saveSettings({ default_public: v }); }}
           right={
             <View style={[styles.switch, defaultPublic && { backgroundColor: colors.chambray }]}>
@@ -164,14 +193,14 @@ export default function Settings() {
             </View>
           }
         />
-        <Row testID="settings-export" icon="download" label={busy === 'export' ? 'Export en cours…' : 'Télécharger mes données'} onPress={exportData} right={busy === 'export' ? <ActivityIndicator size="small" color={colors.chambray} /> : <Feather name="chevron-right" size={18} color={colors.clay} />} />
+        <Row testID="settings-export" icon="download" label={busy === 'export' ? t('Export en cours…') : t('Télécharger mes données')} onPress={exportData} right={busy === 'export' ? <ActivityIndicator size="small" color={colors.chambray} /> : <Feather name="chevron-right" size={18} color={colors.clay} />} />
         {feedback ? <Text style={styles.feedback} testID="settings-feedback">{feedback}</Text> : null}
-        <Row testID="settings-privacy" icon="shield" label="Politique de confidentialité (RGPD)" onPress={() => setDoc('privacy')} right={<Feather name="chevron-right" size={18} color={colors.clay} />} />
-        <Row testID="settings-terms" icon="file-text" label="Conditions d'utilisation" onPress={() => setDoc('terms')} right={<Feather name="chevron-right" size={18} color={colors.clay} />} />
+        <Row testID="settings-privacy" icon="shield" label={t('Politique de confidentialité (RGPD)')} onPress={() => setDoc('privacy')} right={<Feather name="chevron-right" size={18} color={colors.clay} />} />
+        <Row testID="settings-terms" icon="file-text" label={t("Conditions d'utilisation")} onPress={() => setDoc('terms')} right={<Feather name="chevron-right" size={18} color={colors.clay} />} />
 
-        <Text style={styles.section}>Zone sensible</Text>
-        <Row testID="settings-delete" icon="trash-2" label="Supprimer mon compte" danger onPress={() => setConfirmDelete(true)} />
-        <Text style={styles.note}>Suppression immédiate et définitive de toutes tes données (RGPD, droit à l&rsquo;effacement).</Text>
+        <Text style={styles.section}>{t('Zone sensible')}</Text>
+        <Row testID="settings-delete" icon="trash-2" label={t('Supprimer mon compte')} danger onPress={() => setConfirmDelete(true)} />
+        <Text style={styles.note}>{t('Suppression immédiate et définitive de toutes tes données (RGPD, droit à l’effacement).')}</Text>
 
         <Text style={styles.about}>Manent · verba volant, scripta manent</Text>
       </ScrollView>
@@ -180,12 +209,12 @@ export default function Settings() {
         <View style={styles.modalOverlay}>
           <View style={[styles.modal, { paddingBottom: insets.bottom + spacing.lg }]}>
             <View style={styles.grabber} />
-            <Text style={styles.modalTitle}>{doc === 'privacy' ? 'Confidentialité' : 'Conditions d\u2019utilisation'}</Text>
+            <Text style={styles.modalTitle}>{doc === 'privacy' ? t('Confidentialité') : t("Conditions d'utilisation")}</Text>
             <ScrollView style={{ maxHeight: 420 }} testID="doc-content">
-              <Text style={styles.docText}>{doc === 'privacy' ? PRIVACY : TERMS}</Text>
+              <Text style={styles.docText}>{doc === 'privacy' ? (lang === 'en' ? PRIVACY_EN : PRIVACY) : (lang === 'en' ? TERMS_EN : TERMS)}</Text>
             </ScrollView>
             <View style={{ height: spacing.md }} />
-            <GhostButton testID="doc-close" title="Fermer" onPress={() => setDoc(null)} />
+            <GhostButton testID="doc-close" title={t('Fermer')} onPress={() => setDoc(null)} />
           </View>
         </View>
       </Modal>
@@ -193,11 +222,11 @@ export default function Settings() {
       <Modal visible={confirmDelete} animationType="fade" transparent onRequestClose={() => setConfirmDelete(false)}>
         <View style={[styles.modalOverlay, { justifyContent: 'center', padding: spacing.xl }]}>
           <View style={[styles.modal, { borderRadius: 20 }]}>
-            <Text style={styles.modalTitle}>Tu es sûr ?</Text>
-            <Text style={styles.docText}>Tes livres, citations, tableaux et clubs seront supprimés définitivement. Cette action est irréversible.</Text>
+            <Text style={styles.modalTitle}>{t('Tu es sûr ?')}</Text>
+            <Text style={styles.docText}>{t('Tes livres, citations, tableaux et clubs seront supprimés définitivement. Cette action est irréversible.')}</Text>
             <View style={{ height: spacing.lg }} />
-            <PrimaryButton testID="delete-confirm" title={busy === 'delete' ? 'Suppression…' : 'Supprimer définitivement'} onPress={deleteAccount} style={{ backgroundColor: '#B3552F' }} />
-            <GhostButton testID="delete-cancel" title="Garder mon compte" onPress={() => setConfirmDelete(false)} />
+            <PrimaryButton testID="delete-confirm" title={busy === 'delete' ? t('Suppression…') : t('Supprimer définitivement')} onPress={deleteAccount} style={{ backgroundColor: '#B3552F' }} />
+            <GhostButton testID="delete-cancel" title={t('Garder mon compte')} onPress={() => setConfirmDelete(false)} />
           </View>
         </View>
       </Modal>

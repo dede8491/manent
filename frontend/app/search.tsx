@@ -7,10 +7,12 @@ import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
 import { QuoteCard, Quote } from '@/src/components/QuoteCard';
 import { api } from '@/src/api';
+import { useT } from '@/src/i18n';
 
 type Scope = 'all' | 'quotes' | 'books';
 
 export default function SearchScreen() {
+  const t = useT();
   const colors = useColors();
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
@@ -76,7 +78,7 @@ export default function SearchScreen() {
               testID="search-input"
               value={q} onChangeText={setQ}
               autoFocus
-              placeholder="Une phrase, un livre, un auteur…"
+              placeholder={t('Une phrase, un livre, un auteur…')}
               placeholderTextColor={colors.clay}
               style={styles.searchInput}
               returnKeyType="search"
@@ -92,14 +94,14 @@ export default function SearchScreen() {
         <View style={styles.segmentRow}>
           {([['all', 'Tout'], ['quotes', 'Citations'], ['books', 'Livres']] as [Scope, string][]).map(([s, label]) => (
             <Pressable key={s} testID={`search-scope-${s}`} onPress={() => setScope(s)} style={[styles.segment, scope === s && styles.segmentActive]}>
-              <Text style={[styles.segmentText, scope === s && styles.segmentTextActive]}>{label}</Text>
+              <Text style={[styles.segmentText, scope === s && styles.segmentTextActive]}>{t(label)}</Text>
             </Pressable>
           ))}
         </View>
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xxl }} keyboardShouldPersistTaps="handled">
-        <Text style={styles.filterLabel}>Par thème</Text>
+        <Text style={styles.filterLabel}>{t('Par thème')}</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipScroll}>
           {themes.map(t => (
             <Pressable key={t} testID={`search-theme-${t}`} onPress={() => setTheme(theme === t ? null : t)} style={[styles.chip, theme === t && styles.chipActive]}>
@@ -110,7 +112,7 @@ export default function SearchScreen() {
 
         {myBooks.length > 0 && (
           <>
-            <Text style={styles.filterLabel}>Par livre</Text>
+            <Text style={styles.filterLabel}>{t('Par livre')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipScroll}>
               {myBooks.map(b => (
                 <Pressable key={b.book_id} testID={`search-book-${b.book_id}`} onPress={() => setBookId(bookId === b.book_id ? null : b.book_id)} style={[styles.chip, bookId === b.book_id && styles.chipActive]}>
@@ -128,14 +130,14 @@ export default function SearchScreen() {
             </View>
           ) : total === 0 ? (
             <View style={{ paddingVertical: spacing.xxxl, alignItems: 'center' }}>
-              <Text style={styles.emptyTitle}>Rien pour l&rsquo;instant.</Text>
-              <Text style={styles.emptySub}>Essaie un autre mot, ou retire un filtre.</Text>
+              <Text style={styles.emptyTitle}>{t('Rien pour l’instant.')}</Text>
+              <Text style={styles.emptySub}>{t('Essaie un autre mot, ou retire un filtre.')}</Text>
             </View>
           ) : (
             <>
               {showBooks && results.books.length > 0 && (
                 <>
-                  <Text style={styles.sectionLabel}>Livres ({results.books.length})</Text>
+                  <Text style={styles.sectionLabel}>{t('Livres ({n})', { n: results.books.length })}</Text>
                   {results.books.map((b: any) => (
                     <Pressable key={b.book_id} testID={`search-result-book-${b.book_id}`} onPress={() => router.push({ pathname: '/book/[id]', params: { id: b.book_id } })} style={styles.bookRow}>
                       <View style={styles.bookCover}><Text style={styles.bookInitial}>{(b.title?.[0] || 'M').toUpperCase()}</Text></View>
@@ -150,7 +152,7 @@ export default function SearchScreen() {
               )}
               {showQuotes && results.quotes.length > 0 && (
                 <>
-                  <Text style={styles.sectionLabel}>Citations ({results.quotes.length})</Text>
+                  <Text style={styles.sectionLabel}>{t('Citations ({n})', { n: results.quotes.length })}</Text>
                   {results.quotes.map(x => (
                     <QuoteCard key={x.quote_id} quote={x} onPress={() => router.push({ pathname: '/quote/[id]', params: { id: x.quote_id } })} />
                   ))}

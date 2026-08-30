@@ -101,3 +101,12 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+## Itération 10 — À tester (juin 2026)
+user_problem_statement: 1) Interface anglaise (i18n FR/EN, sélecteur dans Réglages), 2) Couvertures manquantes (repli initiale dans résultats de recherche livre), 3) Paiement réel RevenueCat (€3,99/mois, €39,99/an, Test Store en preview), 4) (déjà validé manuellement) Refonte recherche livres multi-sources (Google+OpenLibrary+BnF en parallèle, repli BnF pour ISBN).
+
+Notes pour le testing agent:
+- Compte test test.manent@example.com / Test1234! est DÉJÀ PREMIUM (achat Test Store fait). Pour tester le paywall non-premium, créer un compte neuf.
+- RevenueCat marche en web preview via Test Store (purchases-js). Flux: /premium → choisir plan → S'abonner → modal custom → "Test valid purchase" (dialog RevenueCat) → écran "Tu es Premium".
+- i18n: Réglages → chip English → toute l'app passe en anglais (persisté AsyncStorage + PATCH /me/settings).
+- Backend: GET /api/books/search?q=... renvoie {results:[...]} FR en premier; GET /api/books/search/isbn?isbn=9782290398487 doit renvoyer un livre (source bnf).
+- Prix affichés en Test Store peuvent être $9.99/$79.99 (USD) — connu, pas un bug bloquant.

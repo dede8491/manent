@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Modal, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { colors, fonts, radius, spacing } from '@/src/theme';
 import { Monogram } from '@/src/components/Wordmark';
 import { api } from '@/src/api';
+import { useT } from '@/src/i18n';
+import { useAuth } from '@/src/auth';
+import { useSubscription, rcEnabled } from '@/src/revenuecat';
 
 type Status = { is_premium: boolean; plan?: string | null; captures_used: number; captures_limit: number };
 
@@ -17,32 +20,68 @@ const FEATURES = [
   'Soutien à une app calme, sans publicité',
 ];
 
+const isTestStore = Platform.OS === 'web' || __DEV__;
+
 export default function Premium() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const t = useT();
+  const { rcIdentityError } = useAuth();
+  const { customerInfo, offerings, purchase, restore, isSubscribed, identityReady, isPurchasing, isRestoring } = useSubscription();
   const [status, setStatus] = useState<Status | null>(null);
   const [plan, setPlan] = useState<'mensuel' | 'annuel'>('annuel');
-  const [busy, setBusy] = useState(false);
+  const [confirm, setConfirm] = useState(false);
+  const [errMsg, setErrMsg] = useState('');
+  const [feedback, setFeedback] = useState('');
 
-  const load = async () => {
-    try { setStatus(await api<Status>('/premium/status')); } catch {}
-  };
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    (async () => { try { setStatus(await api<Status>('/premium/status')); } catch {} })();
+  }, []);
 
-  const activate = async () => {
-    setBusy(true);
+  // Miroir backend : le droit "pro" RevenueCat (source de vérité) pilote le quota de captures côté serveur.
+  useEffect(() => {
+    if (!status || customerInfo === undefined) return;
+    (async () => {
+      try {
+        if (isSubscribed && !status.is_premium) {
+          setStatus(await api<Status>('/premium/activate', { method: 'POST', body: JSON.stringify({ plan }) }));
+        } else if (!isSubscribed && status.is_premium) {
+          setStatus(await api<Status>('/premium/deactivate', { method: 'POST' }));
+        }
+      } catch {}
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSubscribed, customerInfo, status?.is_premium]);
+
+  const current = offerings?.current;
+  const monthlyPkg = current?.monthly ?? current?.availablePackages?.find((p: any) => p.packageType === 'MONTHLY') ?? null;
+  const annualPkg = current?.annual ?? current?.availablePackages?.find((p: any) => p.packageType === 'ANNUAL') ?? null;
+  const pkg = plan === 'annuel' ? (annualPkg ?? monthlyPkg) : (monthlyPkg ?? annualPkg);
+  const noOfferings = !rcEnabled || (offerings !== undefined && (!current || (current.availablePackages || []).length === 0));
+
+  const buy = async () => {
+    setConfirm(false);
+    if (!pkg) return;
+    setErrMsg('');
     try {
-      const r = await api<Status>('/premium/activate', { method: 'POST', body: JSON.stringify({ plan }) });
-      setStatus(r);
-    } finally { setBusy(false); }
+      await purchase(pkg);
+    } catch (e: any) {
+      if (!e?.userCancelled) setErrMsg(t('Le paiement n’a pas abouti. Réessaie.'));
+    }
   };
-  const deactivate = async () => {
-    setBusy(true);
+
+  const doRestore = async () => {
+    setErrMsg(''); setFeedback('');
     try {
-      const r = await api<Status>('/premium/deactivate', { method: 'POST' });
-      setStatus(r);
-    } finally { setBusy(false); }
+      const info = await restore();
+      const active = info?.entitlements?.active?.pro !== undefined;
+      setFeedback(active ? t('Achats restaurés.') : t('Aucun achat à restaurer.'));
+    } catch {
+      setErrMsg(t('Le paiement n’a pas abouti. Réessaie.'));
+    }
   };
+
+  const premiumActive = isSubscribed || !!status?.is_premium;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.espresso }} testID="screen-premium">
@@ -55,17 +94,19 @@ export default function Premium() {
         <View style={{ alignItems: 'center', marginBottom: spacing.xl }}>
           <Monogram size={64} />
           <Text style={styles.title}>Manent Premium</Text>
-          <Text style={styles.baseline}>Ce que tes lectures te laissent, sans limite.</Text>
+          <Text style={styles.baseline}>{t('Ce que tes lectures te laissent, sans limite.')}</Text>
         </View>
 
-        {status?.is_premium ? (
+        {premiumActive ? (
           <View style={styles.activeBox} testID="premium-active">
             <Feather name="check-circle" size={22} color={colors.chambray} />
-            <Text style={styles.activeTitle}>Tu es Premium</Text>
-            <Text style={styles.activeSub}>Formule {status.plan === 'annuel' ? 'annuelle' : 'mensuelle'} — captures IA illimitées, exports débloqués.</Text>
-            <Pressable testID="btn-premium-deactivate" onPress={deactivate} disabled={busy} style={styles.ghostBtn}>
-              <Text style={styles.ghostBtnText}>Désactiver (test)</Text>
+            <Text style={styles.activeTitle}>{t('Tu es Premium')}</Text>
+            <Text style={styles.activeSub}>{t('Formule {plan} — captures IA illimitées, exports débloqués.', { plan: t(status?.plan === 'annuel' ? 'annuelle' : 'mensuelle') })}</Text>
+            <Text style={styles.note}>{t('Abonnement géré par l’App Store / Google Play. Résiliable à tout moment.')}</Text>
+            <Pressable testID="btn-restore" onPress={doRestore} disabled={isRestoring} style={styles.ghostBtn}>
+              {isRestoring ? <ActivityIndicator size="small" color={colors.bisque} /> : <Text style={styles.ghostBtnText}>{t('Restaurer mes achats')}</Text>}
             </Pressable>
+            {feedback ? <Text style={styles.feedback} testID="premium-feedback">{feedback}</Text> : null}
           </View>
         ) : (
           <>
@@ -73,38 +114,92 @@ export default function Premium() {
               {FEATURES.map(f => (
                 <View key={f} style={styles.featureRow}>
                   <Feather name="check" size={16} color={colors.chambray} />
-                  <Text style={styles.featureText}>{f}</Text>
+                  <Text style={styles.featureText}>{t(f)}</Text>
                 </View>
               ))}
             </View>
 
             {status && !status.is_premium ? (
-              <Text style={styles.usage}>Ce mois-ci : {status.captures_used}/{status.captures_limit} captures IA utilisées</Text>
+              <Text style={styles.usage}>{t('Ce mois-ci : {used}/{limit} captures IA utilisées', { used: status.captures_used, limit: status.captures_limit })}</Text>
             ) : null}
 
-            <View style={{ gap: spacing.sm, marginTop: spacing.lg }}>
-              <Pressable testID="plan-annuel" onPress={() => setPlan('annuel')} style={[styles.plan, plan === 'annuel' && styles.planActive]}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.planName}>Annuel</Text>
-                  <Text style={styles.planPrice}>34,99 € / an — soit 2,92 €/mois</Text>
-                </View>
-                <View style={styles.badge}><Text style={styles.badgeText}>−27%</Text></View>
-              </Pressable>
-              <Pressable testID="plan-mensuel" onPress={() => setPlan('mensuel')} style={[styles.plan, plan === 'mensuel' && styles.planActive]}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.planName}>Mensuel</Text>
-                  <Text style={styles.planPrice}>3,99 € / mois, sans engagement</Text>
-                </View>
-              </Pressable>
-            </View>
+            {rcIdentityError ? (
+              <View style={styles.errBox} testID="premium-identity-error">
+                <Text style={styles.errText}>{t('Connexion au compte en cours — réessaie dans un instant.')}</Text>
+              </View>
+            ) : null}
 
-            <Pressable testID="btn-premium-activate" onPress={activate} disabled={busy} style={styles.cta}>
-              {busy ? <ActivityIndicator color={colors.creme} /> : <Text style={styles.ctaText}>Activer Premium</Text>}
-            </Pressable>
-            <Text style={styles.note}>Paiement in-app bientôt disponible — pendant la bêta, l&rsquo;activation est immédiate et gratuite.</Text>
+            {noOfferings ? (
+              <View style={[styles.features, { marginTop: spacing.lg }]} testID="premium-unavailable">
+                <Text style={styles.featureText}>{t('Les offres sont indisponibles pour le moment. Réessaie plus tard.')}</Text>
+              </View>
+            ) : !offerings ? (
+              <View style={{ marginTop: spacing.xl, alignItems: 'center' }}>
+                <ActivityIndicator color={colors.chambray} />
+              </View>
+            ) : (
+              <>
+                <View style={{ gap: spacing.sm, marginTop: spacing.lg }}>
+                  {annualPkg ? (
+                    <Pressable testID="plan-annuel" onPress={() => setPlan('annuel')} style={[styles.plan, plan === 'annuel' && styles.planActive]}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.planName}>{t('Annuel')}</Text>
+                        <Text style={styles.planPrice}>{annualPkg.product.priceString} {t('par an')}</Text>
+                      </View>
+                      <View style={styles.badge}><Text style={styles.badgeText}>−16%</Text></View>
+                    </Pressable>
+                  ) : null}
+                  {monthlyPkg ? (
+                    <Pressable testID="plan-mensuel" onPress={() => setPlan('mensuel')} style={[styles.plan, plan === 'mensuel' && styles.planActive]}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.planName}>{t('Mensuel')}</Text>
+                        <Text style={styles.planPrice}>{monthlyPkg.product.priceString} {t('par mois, sans engagement')}</Text>
+                      </View>
+                    </Pressable>
+                  ) : null}
+                </View>
+
+                <Pressable
+                  testID="btn-premium-activate"
+                  onPress={() => setConfirm(true)}
+                  disabled={isPurchasing || !pkg || !identityReady}
+                  style={[styles.cta, (isPurchasing || !pkg || !identityReady) && { opacity: 0.6 }]}
+                >
+                  {isPurchasing ? <ActivityIndicator color={colors.creme} /> : <Text style={styles.ctaText}>{t("S'abonner")}</Text>}
+                </Pressable>
+                {errMsg ? <Text style={[styles.feedback, { marginTop: spacing.sm }]} testID="premium-error">{errMsg}</Text> : null}
+                {feedback ? <Text style={[styles.feedback, { marginTop: spacing.sm }]} testID="premium-feedback">{feedback}</Text> : null}
+                <Pressable testID="btn-restore" onPress={doRestore} disabled={isRestoring} style={{ alignSelf: 'center', marginTop: spacing.md, padding: spacing.xs }}>
+                  {isRestoring ? <ActivityIndicator size="small" color={colors.bisque} /> : <Text style={styles.restoreLink}>{t('Restaurer mes achats')}</Text>}
+                </Pressable>
+                <Text style={styles.note}>
+                  {isTestStore
+                    ? t('Achat simulé (Test Store) dans cet aperçu — le vrai paiement s’active dans l’app publiée.')
+                    : t('Abonnement géré par l’App Store / Google Play. Résiliable à tout moment.')}
+                </Text>
+              </>
+            )}
           </>
         )}
       </ScrollView>
+
+      <Modal visible={confirm} transparent animationType="fade" onRequestClose={() => setConfirm(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modal}>
+            <Text style={styles.modalTitle}>{t('Confirmer l’achat')}</Text>
+            <Text style={styles.modalText}>
+              {t('Abonnement {name} — {price}. Continuer ?', { name: t(plan === 'annuel' ? 'Annuel' : 'Mensuel'), price: pkg?.product.priceString || '' })}
+            </Text>
+            {isTestStore ? <Text style={styles.modalHint}>{t('Environnement de test : l’achat sera simulé (Test Store RevenueCat), aucun débit réel.')}</Text> : null}
+            <Pressable testID="confirm-purchase" onPress={buy} style={styles.cta}>
+              <Text style={styles.ctaText}>{t("S'abonner")}</Text>
+            </Pressable>
+            <Pressable testID="cancel-purchase" onPress={() => setConfirm(false)} style={{ alignSelf: 'center', marginTop: spacing.md, padding: spacing.xs }}>
+              <Text style={styles.restoreLink}>{t('Annuler')}</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -132,4 +227,13 @@ const styles = StyleSheet.create({
   activeSub: { fontFamily: fonts.body, fontSize: 14, color: colors.bisque, textAlign: 'center', lineHeight: 20 },
   ghostBtn: { marginTop: spacing.md, height: 44, paddingHorizontal: spacing.lg, borderRadius: radius.md, borderWidth: 1, borderColor: colors.clay, alignItems: 'center', justifyContent: 'center' },
   ghostBtnText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.bisque },
+  restoreLink: { fontFamily: fonts.body, fontSize: 13, color: colors.bisque, textDecorationLine: 'underline' },
+  feedback: { fontFamily: fonts.body, fontSize: 12.5, color: colors.bisque, textAlign: 'center' },
+  errBox: { marginTop: spacing.md, backgroundColor: colors.darkCard, borderRadius: radius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.clay },
+  errText: { fontFamily: fonts.body, fontSize: 13, color: colors.bisque, textAlign: 'center' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(58,33,25,0.6)', justifyContent: 'center', padding: spacing.xl },
+  modal: { backgroundColor: colors.espresso, borderRadius: 20, padding: spacing.xl, borderWidth: 1, borderColor: colors.clay },
+  modalTitle: { fontFamily: fonts.displayMedium, fontSize: 24, color: colors.creme },
+  modalText: { fontFamily: fonts.body, fontSize: 14, color: colors.bisque, marginTop: spacing.sm, lineHeight: 20 },
+  modalHint: { fontFamily: fonts.body, fontSize: 12, color: colors.clay, marginTop: spacing.sm, fontStyle: 'italic', lineHeight: 17 },
 });
