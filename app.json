@@ -1,0 +1,81 @@
+{
+  "expo": {
+    "name": "Manent",
+    "slug": "manent",
+    "scheme": "manent",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F5F4EF"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "app.manent.mobile",
+      "usesAppleSignIn": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Manent utilise l'appareil photo pour photographier les pages de tes livres et transcrire tes citations.",
+        "NSPhotoLibraryUsageDescription": "Manent accède à tes photos pour importer une page ou une capture d'écran Wattpad à transcrire.",
+        "NSPhotoLibraryAddUsageDescription": "Manent enregistre tes quote cards dans ta photothèque.",
+        "CFBundleAllowMixedLocalizations": true
+      }
+    },
+    "android": {
+      "package": "app.manent.mobile",
+      "edgeToEdgeEnabled": true,
+      "adaptiveIcon": {
+        "backgroundColor": "#275C4B",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "permissions": ["CAMERA", "READ_MEDIA_IMAGES"],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [{ "scheme": "https", "host": "manent.app" }],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-secure-store",
+      "expo-apple-authentication",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Manent utilise l'appareil photo pour photographier les pages de tes livres et scanner les codes-barres ISBN."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Manent accède à tes photos pour importer une page ou une capture d'écran Wattpad."
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "savePhotosPermission": "Manent enregistre tes quote cards dans ta photothèque.",
+          "isAccessMediaLocationEnabled": false
+        }
+      ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": { "projectId": "00000000-0000-0000-0000-000000000000" }
+    },
+    "experiments": { "typedRoutes": false }
+  }
+}
