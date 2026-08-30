@@ -1,5 +1,4 @@
 import * as Clipboard from 'expo-clipboard';
-import * as FileSystem from 'expo-file-system';
 import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
 import { Alert, Linking, Platform, Share } from 'react-native';
@@ -63,10 +62,4 @@ export async function shareTo(
     return;
   }
   await shareImage(uri, caption);
-}
-
-/** Encode une image locale en base64 pour l'envoyer à la fonction edge OCR. */
-export async function toBase64(uri: string): Promise<string> {
-  const file = new FileSystem.File(uri);
-  return file.base64();
 }

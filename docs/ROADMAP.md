@@ -81,9 +81,11 @@ pluriel) et porte le vocabulaire partagé — statuts, visibilités, unités,
 décomptes. Les libellés propres à chaque écran sont encore écrits en français
 dans le JSX ; les migrer clé par clé est mécanique.
 
-**Tests.** 128 cas couvrent le store, les services, le moteur de synchronisation
-et le design system. Il manque des tests d'écran (parcours de capture, parcours
-d'ajout d'une lecture) et un test d'intégration contre un Supabase local.
+**Tests.** 148 cas couvrent le store, les services, le moteur de synchronisation,
+le design system et les deux parcours critiques — capture d'une citation et ajout
+d'une lecture. La CI GitHub Actions les rejoue à chaque PR, avec le typecheck, le
+lint et un bundle Metro. Il manque un test d'intégration contre un Supabase
+local, seul moyen de vérifier les politiques RLS pour de bon.
 
 ## Comment fonctionne la synchronisation
 

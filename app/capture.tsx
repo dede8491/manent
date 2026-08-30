@@ -10,7 +10,7 @@ import {
 import { Button, Chip, Field, Pill, ScreenHeader, Segmented, Text } from '@/components';
 import { normalizeTheme } from '@/lib/format';
 import { OCR_FALLBACK_MESSAGE, transcribe } from '@/services/ocr';
-import { toBase64 } from '@/services/share';
+import { toBase64 } from '@/lib/file';
 import { FREE_MONTHLY_CAPTURES, useStore } from '@/store/useStore';
 import { colors, radii, spacing } from '@/theme';
 import type { Visibility } from '@/types';

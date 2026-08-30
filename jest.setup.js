@@ -16,3 +16,30 @@ jest.mock('@expo-google-fonts/public-sans', () => ({
   PublicSans_500Medium: 'PublicSans_500Medium',
   PublicSans_700Bold: 'PublicSans_700Bold',
 }));
+
+// Modules natifs sans implémentation JS exploitable sous Jest.
+jest.mock('expo-media-library', () => ({
+  requestPermissionsAsync: jest.fn().mockResolvedValue({ granted: true }),
+  saveToLibraryAsync: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock('expo-sharing', () => ({
+  isAvailableAsync: jest.fn().mockResolvedValue(true),
+  shareAsync: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock('react-native-view-shot', () => ({
+  captureRef: jest.fn().mockResolvedValue('file:///tmp/quote-card.png'),
+}));
+
+jest.mock('expo-file-system', () => ({
+  File: class {
+    async base64() {
+      return 'YmFzZTY0';
+    }
+    async bytes() {
+      return new Uint8Array([1, 2, 3]);
+    }
+  },
+  Paths: { cache: '/tmp' },
+}));

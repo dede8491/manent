@@ -35,7 +35,7 @@ dernière écriture. Le détail est dans [`docs/ROADMAP.md`](docs/ROADMAP.md).
 | `npm run android`   | build de développement Android           |
 | `npm run typecheck` | TypeScript en mode strict                |
 | `npm run lint`      | ESLint (config Expo)                     |
-| `npm test`          | Jest — 128 cas                           |
+| `npm test`          | Jest — 148 cas                           |
 
 Les fonctionnalités natives — appareil photo, scan de code-barres, partage
 d'image, PDF, notifications — nécessitent un *development build*

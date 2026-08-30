@@ -2,7 +2,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Alert } from 'react-native';
 
 import { readPageNumber } from '@/services/ocr';
-import { toBase64 } from '@/services/share';
+import { toBase64 } from '@/lib/file';
 
 /**
  * Prend une photo de la page en cours et en extrait le numéro imprimé.
