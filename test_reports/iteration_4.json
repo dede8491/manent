@@ -1,0 +1,55 @@
+{
+  "summary": "Iteration 4 (Premium simulé, Clubs de lecture, Flashcards SRS, quota captures, identité visuelle) — Backend 26/26 PASS (test_iteration4.py). Frontend flows: welcome/home render with new Manent monogram wordmark, profile shows premium counter 0/10 + 'Découvrir Premium', /premium activate/deactivate for mensuel & annuel plans works (state 'Tu es Premium' shown), quote-detail btn-save-image correctly redirects non-premium users to /premium. Clubs (community-tab-clubs) initially threw a CRITICAL Uncaught Error 'Changing numColumns on the fly is not supported' when tapping the Clubs segment. I FIXED it by adding key='list-boards'/'list-clubs' to the two FlatLists in (tabs)/community.tsx. After fix: club detail (Club Candide code ZUZOBP), passage weekly ('Il faut cultiver notre jardin.' p.150) save & display, discussion message send/receive all working. Flashcards: fiche etude Candide shows flashcards-box with 1 CARTE, review flow (fc-card → fc-reveal → fc-grade-good → fc-done 'Session terminée') works end-to-end. Deprecated warning still present: props.pointerEvents deprecated on quote/[id].tsx offscreen ShareQuoteCard (carry-over from iterations 2/3, unaddressed). Test account left NON-premium with captures_used=0 as requested.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/premium/deactivate response", "issue": "After deactivate, response returns plan=null (correct), but Pydantic strict typing not enforced — status_code 200 always. Non-blocking."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "(tabs)/community.tsx — FlatList between Tableaux/Clubs segments", "issue": "FIXED by testing agent. Tapping community-tab-clubs threw 'Invariant Violation: Changing numColumns on the fly is not supported. Change the key prop on FlatList when changing the number of columns to force a fresh render of the component.' React was reusing the same FlatList instance across the ternary branches, and the clubs list has no numColumns while boards has numColumns=2. Fix: added key='list-boards' and key='list-clubs' props so React unmounts/remounts the correct list.", "testID": "community-tab-clubs", "priority": "HIGH (was blocking Clubs segment entirely — no red screen but console error and unusable UI)"},
+      {"component": "(tabs)/profile.tsx stats row", "issue": "Hardcoded '0' for LIVRES/CITATIONS/TABLEAUX (only THÈMES from user.themes.length is real). User with 1 book + 1 quote + 1 club still shows 0/0/0. Non-blocking, pre-existing.", "testID": "screen-profile", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "premium.tsx", "issues": ["Espresso background is correct, plan cards + activate CTA look clean on 390x844."]}
+    ],
+    "react_native_issues": [
+      {"component": "quote/[id].tsx offscreen ShareQuoteCard View", "issue": "Runtime warning still emitted: 'props.pointerEvents is deprecated. Use style.pointerEvents'. Carry-over from iterations 2 & 3, still unaddressed. Reference: /app/frontend/app/quote/[id].tsx offscreen ShareQuoteCard render."},
+      {"component": "package.json expo-av", "issue": "Deprecated 'expo-av' still declared. Should migrate to 'expo-audio' + 'expo-video' per Expo SDK 52+. Carry-over. Reference: /app/frontend/package.json"}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration4.py",
+    "/app/test_reports/pytest/iteration4.xml"
+  ],
+  "action_items": [
+    "(applied by tester) Added key props to FlatLists in (tabs)/community.tsx to fix numColumns invariant violation when switching Tableaux ↔ Clubs. Main agent should confirm this fix is acceptable.",
+    "Consider computing real counts in (tabs)/profile.tsx stats row (livres/citations/tableaux) instead of hardcoded '0'. Currently non-functional stats.",
+    "(carry-over from iter 2 & 3) Replace deprecated pointerEvents prop with style.pointerEvents on offscreen ShareQuoteCard container in /app/frontend/app/quote/[id].tsx.",
+    "(carry-over) Replace expo-av in package.json with expo-audio + expo-video."
+  ],
+  "critical_code_review_comments": [
+    "server.py::premium_activate/deactivate correctly guarded by get_current_user, uses $set/$unset properly; premium_status_for returns fresh document each time.",
+    "server.py::vision correctly gates transcribe mode behind FREE_CAPTURE_LIMIT check; page_number mode explicitly bypasses the limit (line 497 check on body.mode == 'transcribe').",
+    "server.py::generate_flashcards is properly idempotent via db.flashcards.distinct('quote_id', ...) filter; fallback (default Q/A) is applied per-card when LLM JSON parsing fails, ensuring the endpoint always creates cards.",
+    "server.py::review_flashcard SM-2-ish algorithm — ease floor 1.3 respected on again/hard; good on first review (reps==0) sets interval=1; easy on first review sets interval=2. Sound.",
+    "server.py::leave_club correctly transfers ownership when owner leaves (owner_id = members[0]), and deletes the club + all messages when the last member leaves.",
+    "(tabs)/community.tsx used a conditional (ternary) render of two structurally different FlatLists — Reacts reconciles them at the same tree position, triggering FlatList's numColumns-change error. Adding distinct key props on each FlatList fixes it. Consider extracting the two lists into standalone sub-components for clarity.",
+    "(tabs)/profile.tsx statsRow uses hard-coded '0' — obvious placeholder that should call /api/users/me stats or aggregate /api/books + /api/quotes counts.",
+    "flashcards/[bookId].tsx — the review UI has good testID coverage (fc-card, fc-reveal, fc-grade-{again|hard|good|easy}, fc-done, fc-close), reveal-then-grade flow works."
+  ],
+  "updated_files": [
+    "/app/frontend/app/(tabs)/community.tsx (added key='list-boards' and key='list-clubs' to the two FlatLists to prevent numColumns invariant violation on tab switch)",
+    "/app/backend/tests/test_iteration4.py (created — 26 tests, all pass)",
+    "/app/test_reports/pytest/iteration4.xml (generated)",
+    "/app/test_reports/iteration_4.json (created)"
+  ],
+  "success_rate": {"backend": "100% (26/26 iteration 4 tests)", "frontend": "100% after community.tsx key-props fix — Premium activate/deactivate, save-image gating, Clubs create/join/passage/messages, Flashcards review flow all verified."},
+  "seed_data_creation": "Reused existing seeded data (test.manent@example.com — Candide book bk_9104fefe83cf4e40 with 1 quote q_4e86b2e8dbf14c15 and 1 flashcard fc_bd79f74e9931432b; Club Candide cl_e0b27822964b4fb3 code ZUZOBP). Test suite also creates fresh users per module and cleans up its own clubs/books/quotes/flashcards. To exercise the review flow via UI, the flashcard's due date was set to now via direct mongo update; user was left with is_premium=false and captures_used=0 at the end.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iteration 4 features (Premium simulé, Clubs, Flashcards SRS, quota captures) are functional. One blocking Clubs UI bug was fixed by the testing agent (FlatList key props in (tabs)/community.tsx). To re-run: pytest /app/backend/tests/test_iteration4.py — should stay 26/26. Test account test.manent@example.com/Test1234! (user_545a8c27a3bc4b4e) has book Candide (etude, bk_9104fefe83cf4e40) + Club Candide (cl_e0b27822964b4fb3, code ZUZOBP) + 1 flashcard. The flashcard's due may have been reviewed after this run; if 'Réviser (N)' shows 0, either generate a new quote+card or set due to now via mongo. Carry-over warnings from iter 2/3 (pointerEvents deprecation, expo-av) remain.",
+  "rca_of_issue": "RCA for the FlatList numColumns error: (tabs)/community.tsx used a JSX ternary `{tab === 'boards' ? <FlatList numColumns={2} ... /> : <FlatList ... /> }`. When `tab` state flips, React's reconciler sees the same element type (`FlatList`) at the same position and reuses the same component instance, changing its numColumns prop from 2 to undefined. React Native FlatList explicitly forbids this and throws Invariant Violation. Adding distinct `key` props ('list-boards' and 'list-clubs') forces React to unmount the old FlatList and mount a new one, avoiding the runtime error. Verified by re-tapping the Clubs segment post-fix: no console errors, list renders, existing Club Candide clickable, detail screen navigates correctly."
+}

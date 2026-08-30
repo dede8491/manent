@@ -19,15 +19,24 @@ type Board = {
 export default function Community() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const [tab, setTab] = useState<'boards' | 'clubs'>('boards');
   const [boards, setBoards] = useState<Board[]>([]);
+  const [clubs, setClubs] = useState<any[]>([]);
   const [modal, setModal] = useState(false);
   const [name, setName] = useState('');
   const [desc, setDesc] = useState('');
   const [visibility, setVisibility] = useState<'private'|'public'|'collaborative'>('private');
   const [creating, setCreating] = useState(false);
+  const [clubModal, setClubModal] = useState(false);
+  const [clubName, setClubName] = useState('');
+  const [clubDesc, setClubDesc] = useState('');
+  const [joinModal, setJoinModal] = useState(false);
+  const [joinCode, setJoinCode] = useState('');
+  const [joinError, setJoinError] = useState('');
 
   const load = useCallback(async () => {
     const r = await api<{ boards: Board[] }>('/boards'); setBoards(r.boards);
+    try { const c = await api<{ clubs: any[] }>('/clubs'); setClubs(c.clubs); } catch {}
   }, []);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -42,13 +51,47 @@ export default function Community() {
     } finally { setCreating(false); }
   };
 
+  const createClub = async () => {
+    if (!clubName.trim()) return;
+    setCreating(true);
+    try {
+      const c = await api<any>('/clubs', { method: 'POST', body: JSON.stringify({ name: clubName.trim(), description: clubDesc }) });
+      setClubModal(false); setClubName(''); setClubDesc('');
+      await load();
+      router.push({ pathname: '/club/[id]', params: { id: c.club_id } });
+    } finally { setCreating(false); }
+  };
+
+  const joinClub = async () => {
+    if (!joinCode.trim()) return;
+    setJoinError('');
+    setCreating(true);
+    try {
+      const r = await api<{ club_id: string }>('/clubs/join', { method: 'POST', body: JSON.stringify({ code: joinCode.trim() }) });
+      setJoinModal(false); setJoinCode('');
+      await load();
+      router.push({ pathname: '/club/[id]', params: { id: r.club_id } });
+    } catch {
+      setJoinError('Code inconnu. Vérifie auprès du club.');
+    } finally { setCreating(false); }
+  };
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.glacier }} testID="screen-community">
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-        <Text style={styles.h1}>Tes tableaux</Text>
-        <Text style={styles.sub}>Épingle les passages qui te ressemblent.</Text>
+        <Text style={styles.h1}>{tab === 'boards' ? 'Tes tableaux' : 'Tes clubs'}</Text>
+        <Text style={styles.sub}>{tab === 'boards' ? 'Épingle les passages qui te ressemblent.' : 'Lisez ensemble, partagez vos passages.'}</Text>
+        <View style={styles.segmentRow}>
+          {([['boards', 'Tableaux'], ['clubs', 'Clubs']] as const).map(([t, label]) => (
+            <Pressable key={t} testID={`community-tab-${t}`} onPress={() => setTab(t)} style={[styles.segment, tab === t && styles.segmentActive]}>
+              <Text style={[styles.segmentText, tab === t && styles.segmentTextActive]}>{label}</Text>
+            </Pressable>
+          ))}
+        </View>
       </View>
+      {tab === 'boards' ? (
       <FlatList
+        key="list-boards"
         data={boards}
         keyExtractor={x => x.board_id}
         numColumns={2}
@@ -81,6 +124,46 @@ export default function Community() {
           </View>
         )}
       />
+      ) : (
+      <FlatList
+        key="list-clubs"
+        data={clubs}
+        keyExtractor={(x: any) => x.club_id}
+        contentContainerStyle={{ paddingTop: spacing.md, paddingBottom: insets.bottom + 80, paddingHorizontal: spacing.xl, gap: spacing.md }}
+        ListHeaderComponent={
+          <View style={{ gap: spacing.sm, marginBottom: spacing.sm }}>
+            <Pressable testID="btn-new-club" onPress={() => setClubModal(true)} style={styles.newCard}>
+              <Feather name="plus" size={22} color={colors.chambray} />
+              <Text style={styles.newCardText}>Créer un club</Text>
+            </Pressable>
+            <Pressable testID="btn-join-club" onPress={() => { setJoinError(''); setJoinModal(true); }} style={styles.joinRow}>
+              <Feather name="key" size={16} color={colors.clay} />
+              <Text style={styles.joinRowText}>Rejoindre avec un code</Text>
+            </Pressable>
+          </View>
+        }
+        renderItem={({ item }: any) => (
+          <Pressable testID={`club-${item.club_id}`} onPress={() => router.push({ pathname: '/club/[id]', params: { id: item.club_id } })} style={styles.clubCard}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.clubName}>{item.name}</Text>
+              {item.book ? (
+                <Text style={styles.clubBook} numberOfLines={1}>Lecture : {item.book.title}</Text>
+              ) : (
+                <Text style={styles.clubBookEmpty}>Pas encore de lecture commune</Text>
+              )}
+              <Text style={styles.clubMeta}>{item.members_count} MEMBRE{item.members_count > 1 ? 'S' : ''} · {item.messages_count} MESSAGE{item.messages_count > 1 ? 'S' : ''}{item.is_owner ? ' · TON CLUB' : ''}</Text>
+            </View>
+            <Feather name="chevron-right" size={18} color={colors.clay} />
+          </Pressable>
+        )}
+        ListEmptyComponent={(
+          <View style={{ alignItems: 'center', paddingTop: spacing.xxl }}>
+            <Text style={styles.emptyTitle}>Lire ensemble change tout.</Text>
+            <Text style={styles.emptySub}>Crée ton club ou rejoins-en un avec un code.</Text>
+          </View>
+        )}
+      />
+      )}
 
       <Modal visible={modal} animationType="slide" transparent onRequestClose={() => setModal(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
@@ -107,6 +190,35 @@ export default function Community() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      <Modal visible={clubModal} animationType="slide" transparent onRequestClose={() => setClubModal(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
+          <View style={[styles.modal, { paddingBottom: insets.bottom + spacing.lg }]}>
+            <View style={styles.grabber} />
+            <Text style={styles.modalTitle}>Nouveau club</Text>
+            <TextInput testID="new-club-name" value={clubName} onChangeText={setClubName} placeholder="Nom (ex: Les soirées Voltaire)" placeholderTextColor={colors.clay} style={styles.input} />
+            <TextInput testID="new-club-desc" value={clubDesc} onChangeText={setClubDesc} placeholder="Description (optionnel)" placeholderTextColor={colors.clay} style={[styles.input, { height: 80 }]} multiline />
+            <Text style={styles.modalHint}>Un code d&rsquo;invitation sera généré pour tes proches.</Text>
+            <View style={{ height: spacing.md }} />
+            <PrimaryButton testID="btn-create-club" title="Créer le club" onPress={createClub} loading={creating} disabled={!clubName.trim()} />
+            <GhostButton title="Annuler" onPress={() => setClubModal(false)} />
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal visible={joinModal} animationType="slide" transparent onRequestClose={() => setJoinModal(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
+          <View style={[styles.modal, { paddingBottom: insets.bottom + spacing.lg }]}>
+            <View style={styles.grabber} />
+            <Text style={styles.modalTitle}>Rejoindre un club</Text>
+            <TextInput testID="join-club-code" value={joinCode} onChangeText={t => setJoinCode(t.toUpperCase())} placeholder="Code (ex: A7K2PX)" autoCapitalize="characters" placeholderTextColor={colors.clay} style={[styles.input, styles.codeInput]} maxLength={6} />
+            {joinError ? <Text style={styles.joinError} testID="join-club-error">{joinError}</Text> : null}
+            <View style={{ height: spacing.md }} />
+            <PrimaryButton testID="btn-join-club-confirm" title="Rejoindre" onPress={joinClub} loading={creating} disabled={joinCode.trim().length < 4} />
+            <GhostButton title="Annuler" onPress={() => setJoinModal(false)} />
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -115,6 +227,21 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: spacing.xl, paddingBottom: spacing.md, backgroundColor: colors.glacier },
   h1: { fontFamily: fonts.displayMedium, fontSize: 30, color: colors.espresso },
   sub: { fontFamily: fonts.body, fontSize: 14, color: colors.clay, marginTop: 4 },
+  segmentRow: { flexDirection: 'row', gap: 8, marginTop: spacing.md },
+  segment: { flex: 1, height: 36, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center' },
+  segmentActive: { backgroundColor: colors.espresso, borderColor: colors.espresso },
+  segmentText: { fontFamily: fonts.body, fontSize: 13, color: colors.espresso },
+  segmentTextActive: { color: colors.creme, fontFamily: fonts.bodyMedium },
+  joinRow: { height: 44, borderRadius: radius.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.creme, borderWidth: 1, borderColor: colors.borderSoft },
+  joinRowText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.espresso },
+  clubCard: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.bisque, borderRadius: radius.md, padding: spacing.lg },
+  clubName: { fontFamily: fonts.displayMedium, fontSize: 21, color: colors.espresso },
+  clubBook: { fontFamily: fonts.body, fontSize: 13, color: colors.espresso, marginTop: 2 },
+  clubBookEmpty: { fontFamily: fonts.body, fontSize: 13, color: colors.clay, marginTop: 2, fontStyle: 'italic' },
+  clubMeta: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.clay, letterSpacing: 1.5, marginTop: spacing.sm },
+  modalHint: { fontFamily: fonts.body, fontSize: 12, color: colors.clay },
+  codeInput: { textAlign: 'center', letterSpacing: 6, fontFamily: fonts.bodyMedium, fontSize: 20 },
+  joinError: { fontFamily: fonts.body, fontSize: 13, color: colors.clay },
   newCard: { height: 72, borderRadius: radius.md, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.chambray, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.creme },
   newCardText: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.chambray },
   card: { flex: 1, minHeight: 180, backgroundColor: colors.bisque, borderRadius: radius.md, padding: spacing.md, gap: spacing.sm },

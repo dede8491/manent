@@ -23,10 +23,13 @@ export default function CaptureModal() {
   const [books, setBooks] = useState<{ book_id: string; title: string; type: string }[]>([]);
   const [bookId, setBookId] = useState<string | null>(null);
   const [themes] = useState<string[]>(['résilience','amour','argent','foi','leadership','famille','confiance','deuil','spiritualité','santé','voyage','entrepreneuriat']);
+  const [premium, setPremium] = useState<{ is_premium: boolean; captures_used: number; captures_limit: number } | null>(null);
+  const [limitReached, setLimitReached] = useState(false);
 
   React.useEffect(() => {
     (async () => {
       try { const r = await api<{ books: any[] }>('/books'); setBooks(r.books.map(b => ({ book_id: b.book_id, title: b.title, type: b.type }))); } catch {}
+      try { setPremium(await api('/premium/status')); } catch {}
     })();
   }, []);
 
@@ -46,7 +49,9 @@ export default function CaptureModal() {
       const b64 = await toBase64(uri);
       const r = await api<{ text: string }>('/vision', { method: 'POST', body: JSON.stringify({ image_base64: b64, mode: 'transcribe' }) });
       setText(r.text || '');
+      setPremium(p => p && !p.is_premium ? { ...p, captures_used: p.captures_used + 1 } : p);
     } catch (e: any) {
+      if (e?.status === 402) setLimitReached(true);
       // still allow manual entry
     } finally { setTranscribing(false); }
   };
@@ -80,6 +85,17 @@ export default function CaptureModal() {
         <View style={{ width: 40 }} />
       </View>
       <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + spacing.xxl }} keyboardShouldPersistTaps="handled">
+        {limitReached ? (
+          <View style={styles.limitBox} testID="capture-limit-box">
+            <Text style={styles.limitTitle}>Limite mensuelle atteinte</Text>
+            <Text style={styles.limitText}>Tu as utilisé tes 10 captures IA gratuites ce mois-ci. Tu peux toujours saisir le texte à la main, ou passer en Premium pour des captures illimitées.</Text>
+            <Pressable testID="btn-go-premium" onPress={() => router.push('/premium')} style={styles.limitBtn}>
+              <Text style={styles.limitBtnText}>Passer en Premium</Text>
+            </Pressable>
+          </View>
+        ) : premium && !premium.is_premium ? (
+          <Text style={styles.captureQuota} testID="capture-quota">Captures IA : {premium.captures_used}/{premium.captures_limit} ce mois-ci</Text>
+        ) : null}
         {imageUri ? (
           <View style={styles.imgWrap}>
             <Image source={{ uri: imageUri }} style={styles.img} resizeMode="cover" />
@@ -180,4 +196,10 @@ const styles = StyleSheet.create({
   chipTextActive: { color: colors.creme, fontFamily: fonts.bodyMedium },
   visRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: spacing.lg },
   visText: { fontFamily: fonts.body, fontSize: 14, color: colors.espresso },
+  captureQuota: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: spacing.md },
+  limitBox: { backgroundColor: colors.bisque, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.md },
+  limitTitle: { fontFamily: fonts.displayMedium, fontSize: 20, color: colors.espresso },
+  limitText: { fontFamily: fonts.body, fontSize: 13, color: colors.espresso, lineHeight: 19, marginTop: 4 },
+  limitBtn: { marginTop: spacing.md, alignSelf: 'flex-start', height: 42, paddingHorizontal: 18, borderRadius: radius.md, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },
+  limitBtnText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.creme },
 });

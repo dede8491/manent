@@ -46,7 +46,9 @@ export default function Home() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.glacier }} testID="screen-home">
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-        <Wordmark size={28} />
+        <View style={{ paddingHorizontal: spacing.xl }}>
+          <Wordmark size={19} variant="horizontal" />
+        </View>
         <View style={styles.searchRow}>
           <Pressable testID="home-search" onPress={() => router.push('/search')} style={styles.search}>
             <Feather name="search" size={16} color={colors.clay} />

@@ -427,6 +427,57 @@ async def scrape_wattpad(url: str):
         raise HTTPException(status_code=500, detail="scrape_failed")
 
 
+# ============ Premium (activation simulée) ============
+FREE_CAPTURE_LIMIT = 10
+
+
+def month_key():
+    return now_utc().strftime("%Y-%m")
+
+
+async def premium_status_for(user_id: str) -> dict:
+    u = await db.users.find_one(
+        {"user_id": user_id},
+        {"_id": 0, "is_premium": 1, "premium_plan": 1, "captures_month": 1, "captures_used": 1},
+    ) or {}
+    mk = month_key()
+    used = u.get("captures_used", 0) if u.get("captures_month") == mk else 0
+    return {
+        "is_premium": bool(u.get("is_premium")),
+        "plan": u.get("premium_plan"),
+        "captures_used": used,
+        "captures_limit": FREE_CAPTURE_LIMIT,
+        "month": mk,
+    }
+
+
+class PremiumActivate(BaseModel):
+    plan: Literal['mensuel', 'annuel'] = 'mensuel'
+
+
+@api.get("/premium/status")
+async def premium_status(user=Depends(get_current_user)):
+    return await premium_status_for(user["user_id"])
+
+
+@api.post("/premium/activate")
+async def premium_activate(body: PremiumActivate, user=Depends(get_current_user)):
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {"is_premium": True, "premium_plan": body.plan, "premium_since": now_utc()}},
+    )
+    return await premium_status_for(user["user_id"])
+
+
+@api.post("/premium/deactivate")
+async def premium_deactivate(user=Depends(get_current_user)):
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {"is_premium": False}, "$unset": {"premium_plan": "", "premium_since": ""}},
+    )
+    return await premium_status_for(user["user_id"])
+
+
 # ============ Vision (Claude Sonnet 4.6) ============
 class VisionBody(BaseModel):
     image_base64: str  # data URL or plain base64
@@ -442,6 +493,11 @@ def _strip_data_url(b64: str) -> str:
 @api.post("/vision")
 async def vision(body: VisionBody, user=Depends(get_current_user)):
     from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
+
+    if body.mode == 'transcribe':
+        status = await premium_status_for(user["user_id"])
+        if not status["is_premium"] and status["captures_used"] >= FREE_CAPTURE_LIMIT:
+            raise HTTPException(status_code=402, detail="capture_limit_reached")
 
     if body.mode == 'page_number':
         system = (
@@ -477,6 +533,13 @@ async def vision(body: VisionBody, user=Depends(get_current_user)):
         m = re.search(r'\d+', text)
         page = int(m.group(0)) if m else 0
         return {"page_number": page, "raw": text}
+    # incrémente le compteur mensuel de captures IA
+    mk = month_key()
+    u = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "captures_month": 1})
+    if u and u.get("captures_month") == mk:
+        await db.users.update_one({"user_id": user["user_id"]}, {"$inc": {"captures_used": 1}})
+    else:
+        await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"captures_month": mk, "captures_used": 1}})
     return {"text": text}
 
 
@@ -702,6 +765,278 @@ async def unpin(board_id: str, quote_id: str, user=Depends(get_current_user)):
 async def delete_board(board_id: str, user=Depends(get_current_user)):
     await db.boards.delete_one({"board_id": board_id, "user_id": user["user_id"]})
     await db.board_quotes.delete_many({"board_id": board_id})
+    return {"ok": True}
+
+
+# ============ Clubs de lecture ============
+class ClubCreate(BaseModel):
+    name: str
+    description: Optional[str] = ""
+
+
+class ClubPatch(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    book: Optional[dict] = None  # {book_id?, title, author?}
+    weekly_passage: Optional[dict] = None  # {text, page?, book_title?}
+
+
+class ClubJoin(BaseModel):
+    code: str
+
+
+class ClubMessageBody(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+
+
+def _club_code():
+    import random, string
+    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+
+
+async def _club_or_404(club_id: str, user_id: str, member_required: bool = True) -> dict:
+    club = await db.clubs.find_one({"club_id": club_id}, {"_id": 0})
+    if not club:
+        raise HTTPException(status_code=404, detail="not_found")
+    if member_required and user_id not in club.get("members", []):
+        raise HTTPException(status_code=403, detail="not_a_member")
+    return club
+
+
+@api.post("/clubs")
+async def create_club(body: ClubCreate, user=Depends(get_current_user)):
+    club_id = new_id("cl")
+    code = _club_code()
+    while await db.clubs.find_one({"code": code}):
+        code = _club_code()
+    doc = {
+        "club_id": club_id,
+        "name": body.name.strip(),
+        "description": (body.description or "").strip(),
+        "code": code,
+        "owner_id": user["user_id"],
+        "members": [user["user_id"]],
+        "book": None,
+        "weekly_passage": None,
+        "created_at": now_utc(),
+    }
+    await db.clubs.insert_one(doc.copy())
+    return clean_doc(doc)
+
+
+@api.get("/clubs")
+async def list_clubs(user=Depends(get_current_user)):
+    clubs = await db.clubs.find({"members": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    for c in clubs:
+        c["members_count"] = len(c.get("members", []))
+        c["messages_count"] = await db.club_messages.count_documents({"club_id": c["club_id"]})
+        c["is_owner"] = c["owner_id"] == user["user_id"]
+        c.pop("members", None)
+    return {"clubs": clubs}
+
+
+@api.post("/clubs/join")
+async def join_club(body: ClubJoin, user=Depends(get_current_user)):
+    club = await db.clubs.find_one({"code": body.code.strip().upper()}, {"_id": 0})
+    if not club:
+        raise HTTPException(status_code=404, detail="unknown_code")
+    if user["user_id"] not in club.get("members", []):
+        await db.clubs.update_one({"club_id": club["club_id"]}, {"$addToSet": {"members": user["user_id"]}})
+    return {"club_id": club["club_id"]}
+
+
+@api.get("/clubs/{club_id}")
+async def get_club(club_id: str, user=Depends(get_current_user)):
+    club = await _club_or_404(club_id, user["user_id"])
+    member_ids = club.get("members", [])
+    users = await db.users.find(
+        {"user_id": {"$in": member_ids}},
+        {"_id": 0, "user_id": 1, "pseudo": 1, "handle": 1},
+    ).to_list(200)
+    club["members"] = users
+    club["members_count"] = len(member_ids)
+    club["is_owner"] = club["owner_id"] == user["user_id"]
+    return club
+
+
+@api.patch("/clubs/{club_id}")
+async def patch_club(club_id: str, body: ClubPatch, user=Depends(get_current_user)):
+    club = await _club_or_404(club_id, user["user_id"])
+    if club["owner_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="owner_only")
+    upd = {k: v for k, v in body.dict().items() if v is not None}
+    if "weekly_passage" in upd:
+        upd["weekly_passage"] = {**upd["weekly_passage"], "set_at": now_utc().isoformat(), "set_by": user["pseudo"]}
+    if upd:
+        await db.clubs.update_one({"club_id": club_id}, {"$set": upd})
+    return await get_club(club_id, user)
+
+
+@api.post("/clubs/{club_id}/leave")
+async def leave_club(club_id: str, user=Depends(get_current_user)):
+    club = await _club_or_404(club_id, user["user_id"])
+    members = [m for m in club.get("members", []) if m != user["user_id"]]
+    if not members:
+        await db.clubs.delete_one({"club_id": club_id})
+        await db.club_messages.delete_many({"club_id": club_id})
+        return {"ok": True, "deleted": True}
+    upd = {"members": members}
+    if club["owner_id"] == user["user_id"]:
+        upd["owner_id"] = members[0]
+    await db.clubs.update_one({"club_id": club_id}, {"$set": upd})
+    return {"ok": True}
+
+
+@api.get("/clubs/{club_id}/messages")
+async def club_messages(club_id: str, user=Depends(get_current_user)):
+    await _club_or_404(club_id, user["user_id"])
+    msgs = await db.club_messages.find({"club_id": club_id}, {"_id": 0}).sort("created_at", 1).to_list(200)
+    uids = list({m["user_id"] for m in msgs})
+    umap = {}
+    if uids:
+        ul = await db.users.find({"user_id": {"$in": uids}}, {"_id": 0, "user_id": 1, "pseudo": 1, "handle": 1}).to_list(200)
+        umap = {u["user_id"]: u for u in ul}
+    for m in msgs:
+        m["author"] = umap.get(m["user_id"], {"pseudo": "Lecteur", "handle": "lecteur"})
+        m["is_me"] = m["user_id"] == user["user_id"]
+    return {"messages": msgs}
+
+
+@api.post("/clubs/{club_id}/messages")
+async def post_club_message(club_id: str, body: ClubMessageBody, user=Depends(get_current_user)):
+    await _club_or_404(club_id, user["user_id"])
+    doc = {
+        "message_id": new_id("cm"),
+        "club_id": club_id,
+        "user_id": user["user_id"],
+        "text": body.text.strip(),
+        "created_at": now_utc(),
+    }
+    await db.club_messages.insert_one(doc.copy())
+    doc["author"] = {"pseudo": user["pseudo"], "handle": user["handle"]}
+    doc["is_me"] = True
+    return clean_doc(doc)
+
+
+# ============ Flashcards (répétition espacée) ============
+class FlashReview(BaseModel):
+    grade: Literal['again', 'hard', 'good', 'easy']
+
+
+@api.post("/books/{book_id}/flashcards/generate")
+async def generate_flashcards(book_id: str, user=Depends(get_current_user)):
+    book = await db.books.find_one({"book_id": book_id, "user_id": user["user_id"]}, {"_id": 0})
+    if not book:
+        raise HTTPException(status_code=404, detail="not_found")
+    quotes = await db.quotes.find({"book_id": book_id, "user_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(20)
+    existing = await db.flashcards.distinct("quote_id", {"book_id": book_id, "user_id": user["user_id"]})
+    pending = [q for q in quotes if q["quote_id"] not in existing]
+    if not pending:
+        return {"created": 0}
+
+    cards_data = []
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        numbered = "\n".join(
+            f"{i+1}. « {q['text'][:500]} »" + (f" (page {q['page']})" if q.get('page') else "")
+            for i, q in enumerate(pending)
+        )
+        prompt = (
+            f"Livre : {book['title']}" + (f" — {book['author']}" if book.get('author') else "") + ".\n"
+            f"Voici des passages relevés par un étudiant :\n{numbered}\n\n"
+            "Pour CHAQUE passage, crée une flashcard de révision : une question précise "
+            "(compréhension, thème, personnage, style ou mémorisation) et sa réponse concise (2-3 phrases max). "
+            "Tutoie l'étudiant. Réponds UNIQUEMENT avec un tableau JSON valide, sans texte autour : "
+            '[{"index": 1, "question": "...", "answer": "..."}]'
+        )
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"fc_{user['user_id']}_{uuid.uuid4().hex[:8]}",
+            system_message="Tu es un professeur de lettres bienveillant qui crée des flashcards de révision en français.",
+        ).with_model("anthropic", "claude-sonnet-4-6")
+        raw = await chat.send_message(UserMessage(text=prompt))
+        m = re.search(r'\[.*\]', raw or '', re.DOTALL)
+        if m:
+            import json as _json
+            cards_data = _json.loads(m.group(0))
+    except Exception:
+        logger.exception("flashcard LLM generation failed, using fallback")
+
+    by_index = {c.get("index"): c for c in cards_data if isinstance(c, dict)}
+    created = []
+    for i, q in enumerate(pending):
+        c = by_index.get(i + 1) or {}
+        question = (c.get("question") or "").strip() or f"À quel livre appartient ce passage, et que t'apprend-il ?\n« {q['text'][:180]}… »"
+        answer = (c.get("answer") or "").strip() or (
+            f"{book['title']}" + (f" — {book['author']}" if book.get('author') else "") + (f", page {q['page']}" if q.get('page') else "") + "."
+        )
+        doc = {
+            "card_id": new_id("fc"),
+            "user_id": user["user_id"],
+            "book_id": book_id,
+            "quote_id": q["quote_id"],
+            "question": question,
+            "answer": answer,
+            "ease": 2.5,
+            "interval": 0,
+            "reps": 0,
+            "due": now_utc(),
+            "created_at": now_utc(),
+        }
+        await db.flashcards.insert_one(doc.copy())
+        created.append(clean_doc(doc))
+    return {"created": len(created), "cards": created}
+
+
+@api.get("/flashcards")
+async def list_flashcards(book_id: Optional[str] = None, user=Depends(get_current_user)):
+    q: dict = {"user_id": user["user_id"]}
+    if book_id:
+        q["book_id"] = book_id
+    cards = await db.flashcards.find(q, {"_id": 0}).sort("due", 1).to_list(500)
+    now = now_utc()
+    due = 0
+    for c in cards:
+        d = c.get("due")
+        if d is not None and (d.replace(tzinfo=timezone.utc) if d.tzinfo is None else d) <= now:
+            due += 1
+    return {"cards": cards, "total": len(cards), "due": due}
+
+
+@api.post("/flashcards/{card_id}/review")
+async def review_flashcard(card_id: str, body: FlashReview, user=Depends(get_current_user)):
+    c = await db.flashcards.find_one({"card_id": card_id, "user_id": user["user_id"]}, {"_id": 0})
+    if not c:
+        raise HTTPException(status_code=404, detail="not_found")
+    ease = c.get("ease", 2.5)
+    interval = c.get("interval", 0)
+    reps = c.get("reps", 0)
+    now = now_utc()
+    if body.grade == 'again':
+        reps, interval, ease = 0, 0, max(1.3, ease - 0.2)
+        due = now + timedelta(minutes=10)
+    elif body.grade == 'hard':
+        interval = max(1, round(interval * 1.2)) if interval else 1
+        ease = max(1.3, ease - 0.15)
+        reps += 1
+        due = now + timedelta(days=interval)
+    elif body.grade == 'good':
+        interval = 1 if reps == 0 else max(2, round(interval * ease))
+        reps += 1
+        due = now + timedelta(days=interval)
+    else:  # easy
+        interval = 2 if reps == 0 else max(3, round(interval * ease * 1.3))
+        ease = ease + 0.15
+        reps += 1
+        due = now + timedelta(days=interval)
+    upd = {"ease": ease, "interval": interval, "reps": reps, "due": due, "last_grade": body.grade, "last_reviewed": now}
+    await db.flashcards.update_one({"card_id": card_id}, {"$set": upd})
+    return {**c, **upd}
+
+
+@api.delete("/flashcards/{card_id}")
+async def delete_flashcard(card_id: str, user=Depends(get_current_user)):
+    await db.flashcards.delete_one({"card_id": card_id, "user_id": user["user_id"]})
     return {"ok": True}
 
 

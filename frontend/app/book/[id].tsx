@@ -26,6 +26,8 @@ export default function BookDetail() {
   const [detecting, setDetecting] = useState(false);
   const [detectedPage, setDetectedPage] = useState<number | null>(null);
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [fc, setFc] = useState<{ total: number; due: number } | null>(null);
+  const [generating, setGenerating] = useState(false);
 
   useFocusEffect(useCallback(() => {
     (async () => {
@@ -33,6 +35,12 @@ export default function BookDetail() {
       setRating(b.rating || 0); setRecap(b.recap || ''); setLessons(b.lessons || []);
       const q = await api<{ quotes: Quote[] }>(`/quotes?book_id=${id}`);
       setQuotes(q.quotes);
+      if (b.type === 'etude') {
+        try {
+          const f = await api<{ total: number; due: number }>(`/flashcards?book_id=${id}`);
+          setFc({ total: f.total, due: f.due });
+        } catch {}
+      }
     })();
   }, [id]));
 
@@ -90,10 +98,15 @@ export default function BookDetail() {
     setDetectedPage(null);
   };
 
-  // ---- Export PDF de la fiche ----
+  // ---- Export PDF de la fiche (Premium) ----
   const exportPdf = async () => {
     setExportingPdf(true);
     try {
+      const st = await api<{ is_premium: boolean }>('/premium/status');
+      if (!st.is_premium) {
+        router.push('/premium');
+        return;
+      }
       const fresh = await api<any>(`/books/${id}`);
       const html = buildSheetHtml(fresh, quotes);
       if (Platform.OS === 'web') {
@@ -113,6 +126,18 @@ export default function BookDetail() {
     } catch {
       Alert.alert('Export impossible', 'La génération du PDF a échoué. Réessaie.');
     } finally { setExportingPdf(false); }
+  };
+
+  // ---- Flashcards ----
+  const generateCards = async () => {
+    setGenerating(true);
+    try {
+      await api(`/books/${id}/flashcards/generate`, { method: 'POST' });
+      const f = await api<{ total: number; due: number }>(`/flashcards?book_id=${id}`);
+      setFc({ total: f.total, due: f.due });
+    } catch {
+      Alert.alert('Génération impossible', 'Réessaie dans un instant.');
+    } finally { setGenerating(false); }
   };
 
   if (!book) return <View style={{ flex: 1, backgroundColor: colors.glacier }} />;
@@ -195,6 +220,26 @@ export default function BookDetail() {
                 : <Feather name="file-text" size={16} color={colors.espresso} />}
               <Text style={styles.pdfBtnText}>{exportingPdf ? 'Génération…' : 'Exporter la fiche en PDF'}</Text>
             </Pressable>
+
+            <Text style={styles.sectionLabel}>Flashcards de révision</Text>
+            <View style={styles.fcBox} testID="flashcards-box">
+              <Text style={styles.fcCount}>
+                {fc ? `${fc.total} carte${fc.total > 1 ? 's' : ''} · ${fc.due} à réviser` : 'Chargement…'}
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: spacing.sm }}>
+                <Pressable testID="btn-generate-cards" onPress={generateCards} disabled={generating || quotes.length === 0} style={[styles.fcGhost, (generating || quotes.length === 0) && { opacity: 0.5 }]}>
+                  {generating
+                    ? <ActivityIndicator size="small" color={colors.espresso} />
+                    : <Text style={styles.fcGhostText}>Générer avec l&rsquo;IA</Text>}
+                </Pressable>
+                <Pressable testID="btn-review-cards" onPress={() => router.push({ pathname: '/flashcards/[bookId]', params: { bookId: String(id) } })} disabled={!fc || fc.due === 0} style={[styles.fcPrimary, (!fc || fc.due === 0) && { opacity: 0.5 }]}>
+                  <Text style={styles.fcPrimaryText}>Réviser{fc && fc.due > 0 ? ` (${fc.due})` : ''}</Text>
+                </Pressable>
+              </View>
+              {quotes.length === 0 && (
+                <Text style={styles.fcHint}>Capture d&rsquo;abord des citations de ce livre — l&rsquo;IA les transformera en questions de révision.</Text>
+              )}
+            </View>
           </>
         )}
 
@@ -275,6 +320,13 @@ const styles = StyleSheet.create({
   detectGhostText: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.espresso },
   pdfBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 48, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, backgroundColor: colors.creme, marginTop: spacing.md },
   pdfBtnText: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.espresso },
+  fcBox: { backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },
+  fcCount: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1, textTransform: 'uppercase' },
+  fcGhost: { flex: 1, height: 46, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.glacier },
+  fcGhostText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.espresso },
+  fcPrimary: { flex: 1, height: 46, borderRadius: radius.md, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },
+  fcPrimaryText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.creme },
+  fcHint: { fontFamily: fonts.body, fontSize: 12, color: colors.clay, marginTop: spacing.sm, lineHeight: 17 },
   sectionLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase', marginTop: spacing.xl, marginBottom: spacing.sm },
   input: { minHeight: 44, borderWidth: 1, borderColor: colors.borderSoft, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontFamily: fonts.body, fontSize: 15, color: colors.espresso, backgroundColor: colors.creme },
   lessonRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start', paddingVertical: 4 },

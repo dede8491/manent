@@ -110,6 +110,12 @@ export default function QuoteDetail() {
     setFeedback('');
     setBusy('save');
     try {
+      const st = await api<{ is_premium: boolean }>('/premium/status');
+      if (!st.is_premium) {
+        setFeedback("L'enregistrement en galerie est réservé au Premium.");
+        router.push('/premium');
+        return;
+      }
       if (Platform.OS === 'web') {
         const uri = await capture();
         downloadWeb(uri);

@@ -40,7 +40,15 @@
 - **Recherche fine**: écran `/search` (barre de recherche de l'accueil = bouton) — plein texte sur MES citations (text, note) et MES livres (titre, auteur, récap), segments Tout/Citations/Livres, filtres par thème et par livre. Backend `GET /api/search?q=&theme=&book_id=&scope=`.
 
 ## En attente utilisateur
-- Visuels d'identité: repo GitHub fourni **https://github.com/dede8491/manent** mais PRIVÉ (404 via API publique). Demander à l'utilisateur de le passer en public temporairement OU d'uploader les fichiers (logo-manent-principal.svg, icone-manent-1024.png, logo-manent-horizontal.svg, logo-manent-fond-sombre.svg, icone-manent-*.svg, identite-de-marque-manent.md, loader_manent_ecriture_epure.html) directement dans le chat. À intégrer ensuite: icône d'app (app.json), splash, wordmark/monogramme dans l'app.
+- (résolu) Visuels d'identité intégrés depuis https://github.com/dede8491/manent (public).
+
+## Ajouts session 2 ter (juin 2026) — Identité, Premium, Clubs, Flashcards (itération 4: backend 26/26, frontend OK)
+- **Identité visuelle officielle**: SVG du repo utilisateur embarqués dans `src/brand.ts` (monogramme, wordmark principal avec baseline latine, lockup horizontal, wordmark crème). `Wordmark`/`Monogram` (react-native-svg) utilisés sur welcome + header accueil + écran Premium. `assets/images/icon.png`, `adaptive-icon.png` (fond espresso plein), `splash-image.png`, `favicon.png` remplacés par l'icône 1024 officielle.
+- **Premium (activation simulée, choix utilisateur)**: écran `/premium` fond Espresso, plans 3,99 €/mois et 34,99 €/an (−27%). `POST /api/premium/activate|deactivate`, `GET /api/premium/status`. Limites gratuites: **10 captures IA (transcription)/mois** (compteur mensuel `captures_month`/`captures_used` sur users, 402 `capture_limit_reached` au-delà, bannière + CTA dans Capture), **enregistrement galerie** et **export PDF** redirigent vers /premium si non premium. Carte Premium du profil dynamique (compteur, statut) + vraies stats (livres/citations/tableaux).
+- **Clubs de lecture**: segments Tableaux|Clubs dans Communauté. `clubs` (code d'invitation 6 chars, membres, owner) + `club_messages`. Détail `/club/[id]`: code partageable, lecture commune (owner choisit parmi ses livres), passage de la semaine (carte Bisque, set_by), discussion (messages, bulles), quitter (transfert owner / suppression si vide). Endpoints: POST/GET /clubs, /clubs/join, GET/PATCH /clubs/{id}, /leave, /messages.
+- **Flashcards répétition espacée**: `POST /api/books/{id}/flashcards/generate` — Claude génère des Q/R depuis les citations (idempotent, fallback déterministe). SM-2 allégé: grades again/hard/good/easy, ease 1.3+, due date. Écran révision `/flashcards/[bookId]` (carte question → révéler → noter, again remet en fin de file). Section sur la fiche livre études (compteur total/dues, Générer avec l'IA, Réviser (N)).
+- Note testing agent: fix FlatList `key` (numColumns) dans community.tsx appliqué par l'agent de test.
+
 
 ## Ajouts session 2 bis (juin 2026) — Pages Thèmes, Profils Publics, Export PDF (testés, itération 3: backend 16/16, frontend 6/6)
 - **Pages Thèmes** (`/theme/[name]`): chips thème de l'accueil naviguent vers une page dédiée — titre Cormorant, 3 stat-cards (citations/lecteurs/livres), fil masonry des citations publiques. Backend `GET /api/themes/{theme}/page`.
