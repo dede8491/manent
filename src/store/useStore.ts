@@ -8,6 +8,10 @@ import {
 } from '@/data/seed';
 import { normalizeTheme } from '@/lib/format';
 import { slug, uid } from '@/lib/id';
+import { supabaseGateway, type SyncGateway } from '@/sync/gateway';
+import { synchronize } from '@/sync/engine';
+import { enqueue } from '@/sync/outbox';
+import type { SyncEntity, SyncOp, SyncOperation, SyncReport } from '@/sync/types';
 import type {
   AppNotification, Badge, Board, BoardPin, BoardVisibility, Book, BookStatus, Challenge,
   Club, ClubPost, Flashcard, Quote, ReadingMode, StudySheetSection, User,
@@ -15,6 +19,12 @@ import type {
 
 /** Quota de transcriptions IA du plan gratuit. */
 export const FREE_MONTHLY_CAPTURES = 15;
+
+/** Ce que l'écran de capture fournit : le reste est rempli par le store. */
+export type NewQuoteInput = Omit<
+  Quote,
+  'id' | 'userId' | 'createdAt' | 'updatedAt' | 'sourceImagePath'
+>;
 
 export interface NewBookInput {
   kind: Book['kind'];
@@ -48,6 +58,11 @@ interface AppState {
   /** Nombre de transcriptions IA consommées sur le mois en cours. */
   captureCount: number;
   captureMonth: string;
+  /** Mutations locales en attente d'envoi au backend. */
+  outbox: SyncOperation[];
+  lastSyncedAt: string | null;
+  syncing: boolean;
+  lastSyncReport: SyncReport | null;
 
   // — Onboarding & compte —
   setReadingMode: (mode: ReadingMode) => void;
@@ -66,7 +81,7 @@ interface AppState {
   updateStudySection: (bookId: string, key: StudySheetSection['key'], content: string) => void;
 
   // — Citations —
-  addQuote: (input: Omit<Quote, 'id' | 'userId' | 'createdAt'>) => Quote;
+  addQuote: (input: NewQuoteInput) => Quote;
   updateQuote: (id: string, patch: Partial<Quote>) => void;
   removeQuote: (id: string) => void;
 
@@ -95,6 +110,9 @@ interface AppState {
   // — Notifications —
   markNotificationsRead: () => void;
 
+  // — Synchronisation —
+  sync: (gateway?: SyncGateway | null) => Promise<SyncReport>;
+
   // — Premium & quota —
   startPremium: (plan: 'mensuel' | 'annuel') => void;
   cancelPremium: () => void;
@@ -121,11 +139,26 @@ const initial = () => ({
   stats: seedStats,
   captureCount: 0,
   captureMonth: monthKey(),
+  outbox: [] as SyncOperation[],
+  lastSyncedAt: null as string | null,
+  syncing: false,
+  lastSyncReport: null as SyncReport | null,
 });
+
+const now = () => new Date().toISOString();
 
 export const useStore = create<AppState>()(
   persist(
-    (set, get) => ({
+    (set, get) => {
+      /**
+       * Enregistre une mutation locale dans l'outbox. Toute action qui touche
+       * une entité synchronisée doit passer par là, sinon la modification ne
+       * quittera jamais l'appareil.
+       */
+      const track = (entity: SyncEntity, op: SyncOp, rowId: string) =>
+        set((s) => ({ outbox: enqueue(s.outbox, entity, op, rowId) }));
+
+      return {
       ...initial(),
 
       setReadingMode: (mode) => set((s) => ({ user: { ...s.user, readingMode: mode } })),
@@ -182,22 +215,34 @@ export const useStore = create<AppState>()(
           classClubId: null,
           notifyNewChapters: input.kind === 'wattpad',
           userId: ME_ID,
-          createdAt: new Date().toISOString(),
+          createdAt: now(),
+          updatedAt: now(),
         };
         set((s) => ({ books: [book, ...s.books] }));
+        track('books', 'upsert', book.id);
         return book;
       },
 
-      updateBook: (id, patch) =>
-        set((s) => ({ books: s.books.map((b) => (b.id === id ? { ...b, ...patch } : b)) })),
+      updateBook: (id, patch) => {
+        set((s) => ({
+          books: s.books.map((b) => (b.id === id ? { ...b, ...patch, updatedAt: now() } : b)),
+        }));
+        track('books', 'upsert', id);
+      },
 
-      removeBook: (id) =>
+      removeBook: (id) => {
+        // Les citations du livre partent avec lui, ici comme dans Postgres.
+        const orphans = get().quotes.filter((q) => q.bookId === id);
         set((s) => ({
           books: s.books.filter((b) => b.id !== id),
           quotes: s.quotes.filter((q) => q.bookId !== id),
-        })),
+          pins: s.pins.filter((p) => !orphans.some((q) => q.id === p.quoteId)),
+        }));
+        orphans.forEach((q) => track('quotes', 'delete', q.id));
+        track('books', 'delete', id);
+      },
 
-      setProgress: (id, units) =>
+      setProgress: (id, units) => {
         set((s) => ({
           books: s.books.map((b) => {
             if (b.id !== id) return b;
@@ -205,25 +250,33 @@ export const useStore = create<AppState>()(
             const next = Math.max(0, Math.min(units, max));
             const status: BookStatus =
               b.totalUnits && next >= b.totalUnits ? 'termine' : next > 0 ? 'en-cours' : b.status;
-            return { ...b, progressUnits: next, status };
+            return { ...b, progressUnits: next, status, updatedAt: now() };
           }),
-        })),
+        }));
+        track('books', 'upsert', id);
+      },
 
-      addLesson: (id, lesson) =>
+      addLesson: (id, lesson) => {
         set((s) => ({
           books: s.books.map((b) =>
-            b.id === id ? { ...b, lessons: [...b.lessons, lesson.trim()] } : b,
+            b.id === id ? { ...b, lessons: [...b.lessons, lesson.trim()], updatedAt: now() } : b,
           ),
-        })),
+        }));
+        track('books', 'upsert', id);
+      },
 
-      removeLesson: (id, index) =>
+      removeLesson: (id, index) => {
         set((s) => ({
           books: s.books.map((b) =>
-            b.id === id ? { ...b, lessons: b.lessons.filter((_, i) => i !== index) } : b,
+            b.id === id
+              ? { ...b, lessons: b.lessons.filter((_, i) => i !== index), updatedAt: now() }
+              : b,
           ),
-        })),
+        }));
+        track('books', 'upsert', id);
+      },
 
-      updateStudySection: (bookId, key, content) =>
+      updateStudySection: (bookId, key, content) => {
         set((s) => ({
           books: s.books.map((b) =>
             b.id === bookId
@@ -232,30 +285,46 @@ export const useStore = create<AppState>()(
                   studySheet: b.studySheet.map((sec) =>
                     sec.key === key ? { ...sec, content, done: content.trim().length > 0 } : sec,
                   ),
+                  updatedAt: now(),
                 }
               : b,
           ),
-        })),
+        }));
+        track('books', 'upsert', bookId);
+      },
 
       addQuote: (input) => {
         const quote: Quote = {
           ...input,
+          // La photo n'est téléversée qu'à la synchronisation : tant qu'elle
+          // n'est que locale, elle n'a pas de chemin côté serveur.
+          sourceImagePath: null,
           id: uid('quote'),
           userId: ME_ID,
-          createdAt: new Date().toISOString(),
+          createdAt: now(),
+          updatedAt: now(),
         };
         set((s) => ({ quotes: [quote, ...s.quotes] }));
+        track('quotes', 'upsert', quote.id);
         return quote;
       },
 
-      updateQuote: (id, patch) =>
-        set((s) => ({ quotes: s.quotes.map((q) => (q.id === id ? { ...q, ...patch } : q)) })),
+      updateQuote: (id, patch) => {
+        set((s) => ({
+          quotes: s.quotes.map((q) => (q.id === id ? { ...q, ...patch, updatedAt: now() } : q)),
+        }));
+        track('quotes', 'upsert', id);
+      },
 
-      removeQuote: (id) =>
+      removeQuote: (id) => {
+        const orphanPins = get().pins.filter((p) => p.quoteId === id);
         set((s) => ({
           quotes: s.quotes.filter((q) => q.id !== id),
           pins: s.pins.filter((p) => p.quoteId !== id),
-        })),
+        }));
+        orphanPins.forEach((p) => track('board_quotes', 'delete', p.id));
+        track('quotes', 'delete', id);
+      },
 
       addBoard: (name, description, visibility) => {
         const board: Board = {
@@ -266,35 +335,42 @@ export const useStore = create<AppState>()(
           shareSlug: slug(),
           memberIds: [ME_ID],
           ownerId: ME_ID,
-          createdAt: new Date().toISOString(),
+          createdAt: now(),
+          updatedAt: now(),
         };
         set((s) => ({ boards: [board, ...s.boards] }));
+        track('boards', 'upsert', board.id);
         return board;
       },
 
-      removeBoard: (id) =>
+      removeBoard: (id) => {
+        // Le tableau disparaît, ses épingles aussi — mais pas les citations.
+        const orphanPins = get().pins.filter((p) => p.boardId === id);
         set((s) => ({
           boards: s.boards.filter((b) => b.id !== id),
           pins: s.pins.filter((p) => p.boardId !== id),
-        })),
+        }));
+        orphanPins.forEach((p) => track('board_quotes', 'delete', p.id));
+        track('boards', 'delete', id);
+      },
 
-      togglePin: (boardId, quoteId) =>
-        set((s) => {
-          const existing = s.pins.find((p) => p.boardId === boardId && p.quoteId === quoteId);
-          if (existing) return { pins: s.pins.filter((p) => p.id !== existing.id) };
-          return {
-            pins: [
-              {
-                id: uid('pin'),
-                boardId,
-                quoteId,
-                pinnedBy: ME_ID,
-                pinnedAt: new Date().toISOString(),
-              },
-              ...s.pins,
-            ],
-          };
-        }),
+      togglePin: (boardId, quoteId) => {
+        const existing = get().pins.find((p) => p.boardId === boardId && p.quoteId === quoteId);
+        if (existing) {
+          set((s) => ({ pins: s.pins.filter((p) => p.id !== existing.id) }));
+          track('board_quotes', 'delete', existing.id);
+          return;
+        }
+        const pin: BoardPin = {
+          id: uid('pin'),
+          boardId,
+          quoteId,
+          pinnedBy: ME_ID,
+          pinnedAt: now(),
+        };
+        set((s) => ({ pins: [pin, ...s.pins] }));
+        track('board_quotes', 'upsert', pin.id);
+      },
 
       joinClub: (id) =>
         set((s) => ({
@@ -407,6 +483,39 @@ export const useStore = create<AppState>()(
       markNotificationsRead: () =>
         set((s) => ({ notifications: s.notifications.map((n) => ({ ...n, read: true })) })),
 
+      sync: async (gateway) => {
+        if (get().syncing) {
+          return { pushed: 0, pulled: 0, deleted: 0, rejected: [], skipped: null };
+        }
+        set({ syncing: true });
+        try {
+          const state = get();
+          const { snapshot, report } = await synchronize(
+            gateway === undefined ? supabaseGateway() : gateway,
+            {
+              books: state.books,
+              quotes: state.quotes,
+              boards: state.boards,
+              pins: state.pins,
+              outbox: state.outbox,
+              lastSyncedAt: state.lastSyncedAt,
+            },
+          );
+          set({
+            books: snapshot.books,
+            quotes: snapshot.quotes,
+            boards: snapshot.boards,
+            pins: snapshot.pins,
+            outbox: snapshot.outbox,
+            lastSyncedAt: snapshot.lastSyncedAt,
+            lastSyncReport: report,
+          });
+          return report;
+        } finally {
+          set({ syncing: false });
+        }
+      },
+
       startPremium: (plan) =>
         set((s) => ({
           user: {
@@ -435,7 +544,8 @@ export const useStore = create<AppState>()(
         if (s.captureMonth !== monthKey()) return FREE_MONTHLY_CAPTURES;
         return Math.max(0, FREE_MONTHLY_CAPTURES - s.captureCount);
       },
-    }),
+      };
+    },
     {
       name: 'manent-store-v1',
       storage: createJSONStorage(() => AsyncStorage),
@@ -456,6 +566,10 @@ export const useStore = create<AppState>()(
         stats: s.stats,
         captureCount: s.captureCount,
         captureMonth: s.captureMonth,
+        // L'outbox doit survivre à la fermeture de l'app : c'est ce qui rend
+        // le travail hors ligne sûr.
+        outbox: s.outbox,
+        lastSyncedAt: s.lastSyncedAt,
       }),
       // Quel que soit le résultat (stockage vide, JSON corrompu), on lève le
       // drapeau : l'app ne doit jamais rester bloquée sur l'écran de chargement.

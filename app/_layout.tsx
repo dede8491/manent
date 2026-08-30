@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { useStore } from '@/store/useStore';
+import { useAutoSync } from '@/sync/useAutoSync';
 import { colors, useAppFonts } from '@/theme';
 
 SplashScreen.preventAutoHideAsync().catch(() => {
@@ -16,6 +17,8 @@ export default function RootLayout() {
   const fontsReady = useAppFonts();
   const hydrated = useStore((s) => s.hydrated);
   const ready = fontsReady && hydrated;
+
+  useAutoSync();
 
   useEffect(() => {
     if (ready) SplashScreen.hideAsync().catch(() => {});

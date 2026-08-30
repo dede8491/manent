@@ -6,6 +6,8 @@ import { Alert, Pressable, StyleSheet, Switch, View } from 'react-native';
 
 import { Button, Card, Chip, Field, Screen, ScreenHeader, SectionHeader, Segmented, Text } from '@/components';
 import { ONBOARDING_THEMES } from '@/data/themes';
+import { timeAgo } from '@/lib/format';
+import { hasBackend } from '@/services/supabase';
 import { useStore } from '@/store/useStore';
 import { colors, spacing } from '@/theme';
 import type { Visibility } from '@/types';
@@ -91,6 +93,9 @@ export default function Parametres() {
         />
         <Text variant="small">{user.email ?? 'Connexion sans e-mail (compte local)'}</Text>
       </Card>
+
+      <SectionHeader title="Synchronisation" />
+      <SyncCard />
 
       <SectionHeader title="Abonnement" />
       <Card onPress={() => router.push('/premium')}>
@@ -210,6 +215,66 @@ export default function Parametres() {
   );
 }
 
+/** État de la synchronisation, et déclenchement manuel. */
+function SyncCard() {
+  const outbox = useStore((s) => s.outbox);
+  const lastSyncedAt = useStore((s) => s.lastSyncedAt);
+  const syncing = useStore((s) => s.syncing);
+  const sync = useStore((s) => s.sync);
+  const configured = hasBackend();
+
+  const run = async () => {
+    const report = await sync();
+    if (report.skipped === 'hors-ligne') {
+      Alert.alert('Pas de backend', "Cette installation fonctionne en local : rien à synchroniser.");
+      return;
+    }
+    if (report.skipped === 'non-connecte') {
+      Alert.alert('Connexion requise', 'Connecte-toi pour retrouver tes lectures sur tes appareils.');
+      return;
+    }
+    if (report.rejected.length > 0) {
+      Alert.alert(
+        'Synchronisation partielle',
+        `${report.rejected.length} modification(s) n'ont pas pu partir. Elles repartiront au prochain passage.`,
+      );
+      return;
+    }
+    Alert.alert(
+      'À jour',
+      `${report.pushed} envoyée(s), ${report.pulled} reçue(s).`,
+    );
+  };
+
+  return (
+    <Card>
+      <Text variant="label">
+        {configured ? 'Sauvegarde et partage entre appareils' : 'Mode local'}
+      </Text>
+      <Text variant="small" style={styles.syncLine}>
+        {configured
+          ? lastSyncedAt
+            ? `Dernier passage ${timeAgo(lastSyncedAt)}.`
+            : 'Jamais synchronisé pour l’instant.'
+          : 'Tes données restent sur cet appareil. Configure un backend pour les retrouver ailleurs.'}
+      </Text>
+      {outbox.length > 0 ? (
+        <Text variant="small" color={colors.amber} style={styles.syncLine}>
+          {outbox.length} modification(s) en attente d’envoi.
+        </Text>
+      ) : null}
+      <Button
+        label="Synchroniser maintenant"
+        variant="secondary"
+        loading={syncing}
+        disabled={!configured}
+        onPress={run}
+        style={styles.syncButton}
+      />
+    </Card>
+  );
+}
+
 function Toggle({
   label, value, onChange, last,
 }: {
@@ -240,6 +305,8 @@ function Toggle({
 
 const styles = StyleSheet.create({
   label: { marginBottom: spacing.sm },
+  syncLine: { marginTop: spacing.xs },
+  syncButton: { marginTop: spacing.md },
   toggleRow: {
     flexDirection: 'row',
     alignItems: 'center',

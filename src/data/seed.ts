@@ -67,6 +67,7 @@ export const seedBooks: Book[] = [
     notifyNewChapters: false,
     userId: ME_ID,
     createdAt: iso(120),
+    updatedAt: iso(120),
   },
   {
     id: 'book_atelier',
@@ -93,6 +94,7 @@ export const seedBooks: Book[] = [
     notifyNewChapters: false,
     userId: ME_ID,
     createdAt: iso(38),
+    updatedAt: iso(38),
   },
   {
     id: 'book_petitprince',
@@ -116,6 +118,7 @@ export const seedBooks: Book[] = [
     notifyNewChapters: false,
     userId: ME_ID,
     createdAt: iso(210),
+    updatedAt: iso(210),
   },
   {
     id: 'book_bamako',
@@ -139,6 +142,7 @@ export const seedBooks: Book[] = [
     notifyNewChapters: true,
     userId: ME_ID,
     createdAt: iso(21),
+    updatedAt: iso(21),
   },
   {
     id: 'book_rouge',
@@ -190,6 +194,7 @@ export const seedBooks: Book[] = [
     notifyNewChapters: false,
     userId: ME_ID,
     createdAt: iso(64),
+    updatedAt: iso(64),
   },
   {
     id: 'book_lignes',
@@ -213,6 +218,7 @@ export const seedBooks: Book[] = [
     notifyNewChapters: false,
     userId: ME_ID,
     createdAt: iso(9),
+    updatedAt: iso(9),
   },
 ];
 
@@ -224,10 +230,12 @@ export const seedQuotes: Quote[] = [
     note: 'À relire les jours où je veux tout contrôler.',
     themes: ['confiance', 'résilience'],
     sourceImageUri: null,
+    sourceImagePath: null,
     isPublic: true,
     bookId: 'book_essais',
     userId: ME_ID,
     createdAt: iso(4),
+    updatedAt: iso(4),
   },
   {
     id: 'quote_2',
@@ -236,10 +244,12 @@ export const seedQuotes: Quote[] = [
     note: '',
     themes: ['confiance', 'spiritualité'],
     sourceImageUri: null,
+    sourceImagePath: null,
     isPublic: true,
     bookId: 'book_essais',
     userId: ME_ID,
     createdAt: iso(11),
+    updatedAt: iso(11),
   },
   {
     id: 'quote_3',
@@ -249,10 +259,12 @@ export const seedQuotes: Quote[] = [
     note: 'La phrase qui m’a fait reprendre le carnet du matin.',
     themes: ['entrepreneuriat', 'confiance'],
     sourceImageUri: null,
+    sourceImagePath: null,
     isPublic: true,
     bookId: 'book_atelier',
     userId: ME_ID,
     createdAt: iso(2),
+    updatedAt: iso(2),
   },
   {
     id: 'quote_4',
@@ -261,10 +273,12 @@ export const seedQuotes: Quote[] = [
     note: '',
     themes: ['amour', 'famille'],
     sourceImageUri: null,
+    sourceImagePath: null,
     isPublic: true,
     bookId: 'book_petitprince',
     userId: ME_ID,
     createdAt: iso(60),
+    updatedAt: iso(60),
   },
   {
     id: 'quote_5',
@@ -273,10 +287,12 @@ export const seedQuotes: Quote[] = [
     note: 'Lue à voix haute au club en juin.',
     themes: ['amour', 'famille'],
     sourceImageUri: null,
+    sourceImagePath: null,
     isPublic: true,
     bookId: 'book_petitprince',
     userId: ME_ID,
     createdAt: iso(58),
+    updatedAt: iso(58),
   },
   {
     id: 'quote_6',
@@ -285,10 +301,12 @@ export const seedQuotes: Quote[] = [
     note: 'Chapitre 12, le passage du départ.',
     themes: ['voyage', 'confiance'],
     sourceImageUri: null,
+    sourceImagePath: null,
     isPublic: true,
     bookId: 'book_bamako',
     userId: ME_ID,
     createdAt: iso(1),
+    updatedAt: iso(1),
   },
   {
     id: 'quote_7',
@@ -297,10 +315,12 @@ export const seedQuotes: Quote[] = [
     note: 'Axe 2 de l’oral : le réalisme revendiqué.',
     themes: ['études', 'leadership'],
     sourceImageUri: null,
+    sourceImagePath: null,
     isPublic: false,
     bookId: 'book_rouge',
     userId: ME_ID,
     createdAt: iso(6),
+    updatedAt: iso(6),
   },
   {
     id: 'quote_8',
@@ -309,10 +329,12 @@ export const seedQuotes: Quote[] = [
     note: 'À citer sur l’ambition de Julien.',
     themes: ['études'],
     sourceImageUri: null,
+    sourceImagePath: null,
     isPublic: false,
     bookId: 'book_rouge',
     userId: ME_ID,
     createdAt: iso(6),
+    updatedAt: iso(6),
   },
   {
     id: 'quote_9',
@@ -321,10 +343,12 @@ export const seedQuotes: Quote[] = [
     note: '',
     themes: ['entrepreneuriat'],
     sourceImageUri: null,
+    sourceImagePath: null,
     isPublic: false,
     bookId: 'book_atelier',
     userId: ME_ID,
     createdAt: iso(3),
+    updatedAt: iso(3),
   },
 ];
 
@@ -338,6 +362,7 @@ export const seedBoards: Board[] = [
     memberIds: [ME_ID],
     ownerId: ME_ID,
     createdAt: iso(90),
+    updatedAt: iso(90),
   },
   {
     id: 'board_argent',
@@ -348,6 +373,7 @@ export const seedBoards: Board[] = [
     memberIds: [ME_ID],
     ownerId: ME_ID,
     createdAt: iso(70),
+    updatedAt: iso(70),
   },
   {
     id: 'board_oral',
@@ -358,6 +384,7 @@ export const seedBoards: Board[] = [
     memberIds: [ME_ID, 'user_lina', 'user_theo'],
     ownerId: ME_ID,
     createdAt: iso(40),
+    updatedAt: iso(40),
   },
 ];
 

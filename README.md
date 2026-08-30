@@ -24,6 +24,10 @@ un jeu de données de démonstration. Renseigner `EXPO_PUBLIC_SUPABASE_URL` et
 `EXPO_PUBLIC_SUPABASE_ANON_KEY` active l'authentification, la synchronisation, la
 transcription IA et l'import Wattpad.
 
+La synchronisation est **hors ligne d'abord** : les mutations s'empilent dans une
+outbox persistée et repartent au retour du réseau, les conflits se tranchent à la
+dernière écriture. Le détail est dans [`docs/ROADMAP.md`](docs/ROADMAP.md).
+
 | Commande            | Effet                                    |
 | ------------------- | ---------------------------------------- |
 | `npm start`         | serveur de développement Expo            |
@@ -31,6 +35,7 @@ transcription IA et l'import Wattpad.
 | `npm run android`   | build de développement Android           |
 | `npm run typecheck` | TypeScript en mode strict                |
 | `npm run lint`      | ESLint (config Expo)                     |
+| `npm test`          | Jest — 120 cas                           |
 
 Les fonctionnalités natives — appareil photo, scan de code-barres, partage
 d'image, PDF, notifications — nécessitent un *development build*
@@ -60,7 +65,8 @@ src/
   components/              design system (fiche-citation, quote card, boutons…)
   features/                écrans composés : book/, capture/, community/
   store/                   zustand + persistance AsyncStorage, sélecteurs dérivés
-  services/                Google Books, Wattpad, OCR, affiliation, partage, Supabase
+  sync/                    moteur hors ligne : outbox, fusion, passerelle Supabase
+  services/                Google Books, Wattpad, OCR, affiliation, partage, auth
   lib/                     formatage français, identifiants
   i18n/                    dictionnaires et `t()` — le français est la référence
   data/                    thèmes et jeu de données de démarrage

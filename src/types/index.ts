@@ -59,6 +59,8 @@ export interface Book {
   notifyNewChapters: boolean;
   userId: string;
   createdAt: string;
+  /** Dernière modification locale — arbitre les conflits de synchronisation. */
+  updatedAt: string;
 }
 
 export interface Quote {
@@ -68,12 +70,15 @@ export interface Quote {
   locator: number | null;
   note: string;
   themes: string[];
-  /** Photo d'origine : toujours privée (droit de courte citation). */
+  /** Photo d'origine sur cet appareil : toujours privée (droit de courte citation). */
   sourceImageUri: string | null;
+  /** Chemin de la photo dans le bucket privé, quand elle a été téléversée. */
+  sourceImagePath: string | null;
   isPublic: boolean;
   bookId: string;
   userId: string;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface Board {
@@ -85,6 +90,7 @@ export interface Board {
   memberIds: string[];
   ownerId: string;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface BoardPin {

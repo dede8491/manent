@@ -48,6 +48,7 @@ identifiants ou le déploiement.
 | Import Wattpad | `supabase functions deploy wattpad-import` | `supabase/functions/wattpad-import` |
 | Pages web publiques | déployer `public-page` et router `manent.app/q`, `/b`, `/@` dessus | `supabase/functions/public-page` |
 | Auth Google / Apple | `GOOGLE_CLIENT_ID`, `APPLE_CLIENT_ID`… dans Supabase Auth | `supabase/config.toml` |
+| Synchronisation multi-appareils | un projet Supabase et les deux migrations appliquées | `src/sync`, `supabase/migrations` |
 | Achats intégrés | intégration RevenueCat + produits App Store / Play Store | `app/premium.tsx` |
 | Notifications push | jetons Expo Notifications, envoi côté serveur | `app/notifications.tsx` |
 | Affiliation | identifiants Amazon Partenaires, Awin, leslibraires.fr | `.env`, `src/services/affiliate.ts` |
@@ -57,10 +58,20 @@ manuelle, l'import Wattpad pré-remplit depuis l'URL, Premium s'active localemen
 
 ## Ce qui reste à faire
 
-**Synchronisation.** Le store zustand est aujourd'hui purement local. Le schéma
-Postgres (`supabase/migrations`) reflète exactement `src/types`, mais la couche de
-synchronisation (lecture/écriture Supabase, résolution de conflits, mode hors
-ligne) n'est pas écrite. C'est le principal chantier avant une mise en production.
+**Synchronisation.** Le moteur (`src/sync`) est écrit et testé
+contre une passerelle en mémoire, mais il n'a jamais tourné contre un vrai
+Supabase : c'est ce qu'il faut vérifier en premier. Trois manques connus :
+
+- Les **photos de pages ne sont pas téléversées**. `sourceImagePath` existe dans
+  le modèle et le schéma, mais rien n'écrit encore dans le bucket privé
+  `page-photos` ; une photo reste sur l'appareil qui l'a prise.
+- **Clubs, notifications, badges et challenges ne sont pas synchronisés.** Ils
+  restent servis par le jeu de données local ; seuls les livres, citations,
+  tableaux et épingles font l'aller-retour.
+- **Aucune reprise sur conflit d'identifiant.** Deux appareils hors ligne qui
+  créent chacun une ligne produisent deux identifiants distincts : c'est le
+  comportement voulu, mais il n'y a pas de déduplication si la même citation est
+  capturée deux fois.
 
 **Fil communautaire réel.** Le fil, les lecteurs suggérés et les épingles
 sponsorisées viennent de `src/data/seed.ts`. Les citations publiques de
@@ -76,9 +87,38 @@ dans le JSX ; les migrer clé par clé est mécanique.
 données. Leur génération depuis la fiche de lecture et les citations de l'élève
 passera par la même fonction edge que l'OCR, avec une troisième consigne.
 
-**Tests.** Aucun test automatisé. Les priorités : le store (progression, quotas,
-répétition espacée), les services (parsing Google Books, détection d'URL Wattpad)
-et le formatage français.
+**Tests.** 120 cas couvrent le store, les services, le moteur de synchronisation
+et le design system. Il manque des tests d'écran (parcours de capture, parcours
+d'ajout d'une lecture) et un test d'intégration contre un Supabase local.
+
+## Comment fonctionne la synchronisation
+
+Le store local est la source de vérité pendant l'usage ; le serveur arbitre
+entre appareils.
+
+1. **Outbox.** Chaque mutation d'une entité synchronisée (livre, citation,
+   tableau, épingle) inscrit une opération dans une file persistée. Une seule
+   opération est retenue par ligne : l'envoi transmet l'état courant, pas un
+   diff. La file survit à la fermeture de l'app — c'est ce qui rend le travail
+   hors ligne sûr.
+2. **Envoi.** Au retour du réseau, la file est rejouée par entité, dans l'ordre
+   des dépendances (livres, citations, tableaux, puis épingles). Une entité qui
+   échoue laisse ses opérations en file sans bloquer les autres.
+3. **Réception.** On tire les lignes modifiées depuis la dernière borne, en se
+   limitant aux siennes : les politiques RLS autorisent aussi la lecture des
+   citations publiques d'autrui, qui n'ont rien à faire dans le miroir local.
+   Les épingles passent par la fonction `my_board_quotes`, qui rend aussi celles
+   posées par d'autres sur un tableau collaboratif.
+4. **Conflits.** Dernière écriture gagnante, sur le `updated_at` écrit par le
+   client. À égalité stricte, la version distante l'emporte.
+5. **Suppressions.** Douces côté serveur (`deleted_at`), pour qu'un appareil
+   resté hors ligne apprenne la disparition au lieu de faire réapparaître la
+   ligne à son prochain envoi.
+
+La borne `lastSyncedAt` n'avance que si tout est parti : un envoi partiel doit
+repartir du même point. La synchronisation se déclenche au lancement et à chaque
+retour au premier plan, au plus une fois par minute, et se pilote à la main
+depuis les paramètres.
 
 ## Priorités d'origine
 
