@@ -33,6 +33,16 @@
 - **Phase 2** : citations publiques ouvertes, profils publics, pages thèmes dédiées, liens affiliés dynamiques, Premium (paiement in-app), export PDF fiche.
 - **Phase 3** : clubs de lecture complets (lectures communes, passages de la semaine, visios, challenges), flashcards répétition espacée, groupes de classe, notifications push, badges/gamification.
 
+## Ajouts session 2 (juin 2026) — construits et testés
+- **Partage image**: quote card 1080×1350 exportée (react-native-view-shot en natif, html2canvas direct sur web car `findNodeHandle` non supporté). Boutons « Galerie » (expo-media-library, permissions gérées avec canAskAgain + Ouvrir les réglages) et « Partager l'image » (expo-sharing natif / Web Share API ou téléchargement PNG sur web). 3 styles: Papier/Encre/Glacier. Rendu offscreen `ShareQuoteCard.tsx`.
+- **Progression par photo**: bouton « Photographier ma dernière page lue » sur la fiche livre (non-Wattpad) → caméra (natif) ou galerie (web) → `POST /api/vision` mode `page_number` (Claude Vision) → confirmation « Page détectée : N » → PATCH progress_page (+ statut en_cours/termine auto).
+- **Fiche scolaire** (livres type `etude`): composant `StudySheet.tsx` — sections L'auteur, Personnages (nom+rôle), Résumé, Thèmes de l'œuvre + % de complétion (25%/section). Persisté dans `books.sheet` (PATCH /api/books/{id}).
+- **Recherche fine**: écran `/search` (barre de recherche de l'accueil = bouton) — plein texte sur MES citations (text, note) et MES livres (titre, auteur, récap), segments Tout/Citations/Livres, filtres par thème et par livre. Backend `GET /api/search?q=&theme=&book_id=&scope=`.
+
+## En attente utilisateur
+- Visuels d'identité (logos SVG, icône 1024, loader HTML, identite-de-marque-manent.md) uploadés sur le GitHub de l'utilisateur mais PAS encore dans cet environnement — demander le lien du repo ou un upload direct dans le chat pour intégrer icône/splash/wordmark.
+
+
 ## Comment tester (aperçu web)
 1. Ouvrir l'aperçu → écran de bienvenue.
 2. « Commencer » → créer un compte.

@@ -55,7 +55,7 @@ export default function BookDetail() {
   const photoProgress = async () => {
     let res: ImagePicker.ImagePickerResult;
     if (Platform.OS === 'web') {
-      res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
+      res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
     } else {
       const current = await ImagePicker.getCameraPermissionsAsync();
       if (!current.granted) {
@@ -63,7 +63,7 @@ export default function BookDetail() {
         const req = await ImagePicker.requestCameraPermissionsAsync();
         if (!req.granted) { if (!req.canAskAgain) openCameraSettings(); return; }
       }
-      res = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
+      res = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.8 });
     }
     if (res.canceled || !res.assets?.[0]?.uri) return;
     setDetecting(true);

@@ -44,12 +44,24 @@ export default function QuoteDetail() {
 
   // ---- Export image 1080×1350 ----
   const capture = async (): Promise<string> => {
+    if (Platform.OS === 'web') {
+      // react-native-view-shot captureRef appelle findNodeHandle (non supporté sur web) :
+      // on utilise html2canvas directement sur le nœud DOM du rendu offscreen.
+      const mod = require('html2canvas');
+      const html2canvas = mod.default || mod;
+      const node = shareRef.current as any;
+      const canvas = await html2canvas(node, { backgroundColor: null });
+      const out = document.createElement('canvas');
+      out.width = 1080; out.height = 1350;
+      out.getContext('2d')!.drawImage(canvas, 0, 0, 1080, 1350);
+      return out.toDataURL('image/png');
+    }
     return await captureRef(shareRef, {
       format: 'png',
       quality: 1,
       width: 1080,
       height: 1350,
-      result: Platform.OS === 'web' ? 'data-uri' : 'tmpfile',
+      result: 'tmpfile',
     });
   };
 
@@ -109,7 +121,8 @@ export default function QuoteDetail() {
         await MediaLibrary.saveToLibraryAsync(uri);
         setFeedback('Enregistrée dans ta galerie.');
       }
-    } catch {
+    } catch (e) {
+      console.error('capture/save failed', e);
       setFeedback("Impossible de générer l'image. Réessaie.");
     } finally { setBusy(null); }
   };
@@ -213,7 +226,7 @@ export default function QuoteDetail() {
       </ScrollView>
 
       {/* Rendu hors écran 1080×1350 pour l'export */}
-      <View style={styles.offscreen} pointerEvents="none">
+      <View style={styles.offscreen}>
         <ShareQuoteCard ref={shareRef} quote={quote} variant={style} />
       </View>
 
@@ -266,7 +279,7 @@ const styles = StyleSheet.create({
   shareBtnText: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.creme },
   shareBtnGhostText: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.espresso },
   feedback: { fontFamily: fonts.body, fontSize: 13, color: colors.clay, textAlign: 'center', marginTop: spacing.sm },
-  offscreen: { position: 'absolute', top: 0, left: -2000 },
+  offscreen: { position: 'absolute', top: 0, left: -2000, pointerEvents: 'none' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(58,33,25,0.4)', justifyContent: 'flex-end' },
   modal: { backgroundColor: colors.glacier, padding: spacing.xl, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '70%' },
   grabber: { width: 44, height: 4, backgroundColor: colors.borderSoft, borderRadius: 2, alignSelf: 'center', marginBottom: spacing.md },

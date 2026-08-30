@@ -1,0 +1,50 @@
+{
+  "summary": "Phase 2 testing complete. Backend: 18/18 new-feature tests PASSED (/api/search with q/theme/book_id/scope, book.sheet PATCH + init empty, vision page_number). Full regression 21/22 (the sole failure — /api/books/search?q=Coelho — is an external Google Books 429 rate-limit, not a Manent bug). Frontend: search flow OK (home-search → /search, debounced text filter returning results, segments, theme/book chips, book result navigation), StudySheet 100% flow (author→character→summary→theme drives 0%→25%→50%→75%→100% and persists across reload), btn-photo-page present on papier books, all 3 share styles + btn-save-image + btn-share-image present. ONE CRITICAL WEB BUG: btn-save-image / btn-share-image fail on web with feedback 'Impossible de générer l'image. Réessaie.' — root cause: react-native-view-shot@4.0.3 captureRef() calls findNodeHandle() unconditionally which throws on react-native-web ('findNodeHandle is not supported on web').",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/books/search?q=...", "issue": "External Google Books API returns 429 Too Many Requests for tests; response {'results':[]}. Not a Manent defect — but consider caching / graceful fallback so users get results after rate-limit recovery."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "quote/[id].tsx saveToGallery/shareImage", "issue": "On web, captureRef(shareRef, ...) throws 'findNodeHandle is not supported on web. Use the ref property on the component instead.' — the react-native-view-shot 4.0.3 index.js calls findNodeHandle() before delegating to RNViewShot.web.js. Because the exception is caught, users only see 'Impossible de générer l'image. Réessaie.' and no PNG download happens. Reference: /app/frontend/app/quote/[id].tsx:47 and /app/frontend/node_modules/react-native-view-shot/src/index.js:128", "testID": "btn-save-image, btn-share-image, share-feedback", "priority": "CRITICAL"}
+    ],
+    "integration_issues": [
+      {"flow": "Partage image (web)", "issue": "PNG export completely broken on web preview; the entire feature #1 of this iteration does not work on web. Both galerie and partager l'image affected.", "affected_testIDs": ["btn-save-image", "btn-share-image", "share-feedback"]}
+    ],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "quote/[id].tsx offscreen View (line 216)", "issue": "Uses deprecated prop `pointerEvents=\"none\"` on <View>. Runtime warning: 'props.pointerEvents is deprecated. Use style.pointerEvents'. Move to style.pointerEvents. Reference: /app/frontend/app/quote/[id].tsx:216"},
+      {"component": "book/[id].tsx expo-image-picker MediaTypeOptions", "issue": "Uses `ImagePicker.MediaTypeOptions.Images` (deprecated in expo-image-picker; new API is a string array like ['images']). Reference: /app/frontend/app/book/[id].tsx:58,66"}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_new_features.py",
+    "/app/backend/tests/test_manent_api.py",
+    "/app/test_reports/pytest/phase2_new.xml",
+    "/app/test_reports/pytest/phase1_regression.xml"
+  ],
+  "action_items": [
+    "CRITICAL: Fix web image export. react-native-view-shot 4.0.3 breaks on react-native-web. Two options: (a) on Platform.OS==='web', bypass captureRef and call html2canvas directly on the offscreen DOM node — attach a ref callback that stores the raw DOM element (e.g. `<View ref={el => { shareDomRef.current = el; }}>`), then `const canvas = await (await import('html2canvas')).default(shareDomRef.current, { width:1080, height:1350, backgroundColor:null }); const dataUri = canvas.toDataURL('image/png');`. (b) Downgrade / patch react-native-view-shot to a version that supports RN-Web (or use a Web-only alternative such as `dom-to-image-more`). After fix, verify /quote/[id] btn-save-image triggers a PNG download and testID share-feedback shows 'Image téléchargée.'.",
+    "Replace `pointerEvents=\"none\"` prop with `style={{ pointerEvents:'none', ... }}` on the offscreen View at quote/[id].tsx:216.",
+    "Replace deprecated `ImagePicker.MediaTypeOptions.Images` with `mediaTypes: ['images']` in book/[id].tsx photoProgress().",
+    "Cosmetic: Google Books 429 — consider a small in-memory cache or a retry-after backoff for /api/books/search to reduce user-visible empty results during peak. Not blocking."
+  ],
+  "critical_code_review_comments": [
+    "quote/[id].tsx swallows the captureRef error with a plain `catch {}` — this made triage hard. Recommend keeping a `console.warn` inside the catch so future regressions are visible in dev.",
+    "The offscreen ShareQuoteCard container relies on `position:absolute; left:-2000` which works but is placed inside the root View AFTER a ScrollView; html2canvas will still find it when rendered, but any parent transform could break capture. Consider portalling to document.body on web.",
+    "server.py: book creation now correctly initializes `sheet: {}` (verified by test_create_book_initializes_empty_sheet). PATCH sheet fully replaces the previous value (partial replace test confirms). This is coherent with the spec but be aware the client must always send the full sheet object.",
+    "/api/search: theme filter correctly hides books (per spec) and book_id filter also hides books; user-scoping verified with a second account seeing empty results. Regex escaping of the q parameter should be reviewed to avoid ReDoS on adversarial input (not tested, low priority)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_new_features.py (already existed, run only)",
+    "/app/test_reports/iteration_2.json"
+  ],
+  "success_rate": {"backend": "100% new features (18/18); 95.5% overall regression (21/22 — 1 external 429)", "frontend": "~85% (12/13 frontend flow checks OK; web image export broken)"},
+  "seed_data_creation": "Each frontend test registers a fresh user via /api/auth/register with themes set via PATCH /api/users/me, then creates TEST_ prefixed books and quotes. Backend test suite auto-cleans books and quotes. No admin/seed side-effects.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "After main agent fixes web captureRef, re-run: (a) pytest /app/backend/tests -q (should stay 39/40 with only the Google Books 429), and (b) in Playwright: navigate to /quote/{id}, click [data-testid=btn-save-image], expect a page.expect_download() event within 5s AND share-feedback text to be 'Image téléchargée.'. Also re-check /quote/{id} for absence of the pointerEvents deprecation warning after the style fix. Test creds: register fresh with POST /api/auth/register (payload {email,password:'Test1234!',pseudo}); token key in localStorage is 'manent_session_token'. Onboarding is skipped when reading_mode + themes are set via PATCH /api/users/me.",
+  "rca_of_issue": "CRITICAL — web image export failure. Reproduction: 1) open /quote/{id} in web preview; 2) click testID btn-save-image; 3) observe share-feedback shows 'Impossible de générer l'image. Réessaie.' and NO PNG download occurs. Root cause: react-native-view-shot@4.0.3 exports captureRef from src/index.js which unconditionally invokes findNodeHandle(view). react-native-web's findNodeHandle throws 'findNodeHandle is not supported on web. Use the ref property on the component instead.' This exception propagates BEFORE RNViewShot.web.js (which uses html2canvas) is ever reached. The screen's try/catch then displays the generic error string. Confirmed by instrumenting the catch with console.error; captured stack: findNodeHandle at 65279 → captureRef at 181967 → our capture() at quote/[id].tsx:47. Mitigation (recommended): on Platform.OS==='web', skip captureRef entirely — attach a ref callback to the offscreen <View> that stores the underlying DOM element (`viewRef.current._node` or via `(el)=>{ domRef.current = el; }`) and invoke `html2canvas(domRef.current, { width:1080, height:1350 })` directly, then `.toDataURL('image/png')`. This restores the intended data-uri output on web and preserves native behaviour."
+}
