@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, ScrollView, Pressable, ActivityIndicator, KeyboardAvoidingView, Platform, Image, Linking } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
@@ -17,7 +17,18 @@ export default function AddBook() {
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const params = useLocalSearchParams<{ title?: string; author?: string; cover?: string }>();
   const [method, setMethod] = useState<Method>('title');
+  const selectedRef = useRef(false);
+
+  // Préremplissage depuis une suggestion (page thème)
+  useEffect(() => {
+    if (params.title && !selectedRef.current) {
+      selectedRef.current = true;
+      setSelected({ title: params.title, author: params.author || null, cover: params.cover || null });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.title]);
 
   // Recherche par titre en direct
   const [query, setQuery] = useState('');

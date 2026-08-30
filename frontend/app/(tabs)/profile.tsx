@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Modal, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -18,8 +18,10 @@ export default function Profile() {
   const toggle = useToggleScheme();
   const [premium, setPremium] = useState<{ is_premium: boolean; plan?: string | null; captures_used: number; captures_limit: number } | null>(null);
   const [stats, setStats] = useState({ books: 0, quotes: 0, boards: 0 });
-  const [reading, setReading] = useState<{ streak: number; week: { label: string; pages: number; active: boolean }[]; week_pages: number; active_days_month: number } | null>(null);
+  const [reading, setReading] = useState<any>(null);
   const [badges, setBadges] = useState<{ id: string; title: string; desc: string; icon: string; earned: boolean }[]>([]);
+  const [goalModal, setGoalModal] = useState(false);
+  const [goalInput, setGoalInput] = useState('');
 
   useFocusEffect(React.useCallback(() => {
     (async () => {
@@ -79,6 +81,30 @@ export default function Profile() {
         </View>
       )}
 
+      {reading && (
+        <View style={styles.goalCard} testID="goal-card">
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
+            <Text style={styles.readingTitle}>Objectif {reading.year}</Text>
+            <Pressable testID="goal-edit" onPress={() => { setGoalInput(reading.yearly_goal ? String(reading.yearly_goal) : ''); setGoalModal(true); }} hitSlop={8}>
+              <Text style={styles.goalEdit}>{reading.yearly_goal ? 'Modifier' : 'Fixer un objectif'}</Text>
+            </Pressable>
+          </View>
+          {reading.yearly_goal ? (
+            <>
+              <View style={styles.goalBar}>
+                <View style={[styles.goalFill, { width: `${Math.min(100, Math.round((reading.books_year / reading.yearly_goal) * 100))}%` }]} />
+              </View>
+              <Text style={styles.goalText} testID="goal-text">
+                {reading.books_year} / {reading.yearly_goal} livre{reading.yearly_goal > 1 ? 's' : ''} terminé{reading.books_year > 1 ? 's' : ''}
+                {reading.books_year >= reading.yearly_goal ? '  ·  Objectif atteint.' : ''}
+              </Text>
+            </>
+          ) : (
+            <Text style={styles.readingSub}>Combien de livres cette année ? Fixe ton cap, la jauge suivra.</Text>
+          )}
+        </View>
+      )}
+
       {badges.length > 0 && (
         <View style={{ marginTop: spacing.md }} testID="badges-section">
           <Text style={styles.badgesLabel}>Badges · {badges.filter(b => b.earned).length}/{badges.length}</Text>
@@ -122,9 +148,46 @@ export default function Profile() {
             <View style={[styles.knob, scheme === 'dark' && { alignSelf: 'flex-end' }]} />
           </View>
         </Pressable>
-        <Pressable testID="row-settings" style={styles.row}><Feather name="settings" size={18} color={colors.espresso} /><Text style={styles.rowLabel}>Paramètres</Text></Pressable>
+        <Pressable testID="row-settings" onPress={() => router.push('/settings')} style={styles.row}><Feather name="settings" size={18} color={colors.espresso} /><Text style={styles.rowLabel}>Paramètres</Text></Pressable>
         <Pressable testID="row-signout" onPress={signOut} style={styles.row}><Feather name="log-out" size={18} color={colors.espresso} /><Text style={styles.rowLabel}>Se déconnecter</Text></Pressable>
       </View>
+
+      <Modal visible={goalModal} transparent animationType="slide" onRequestClose={() => setGoalModal(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
+          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }}>
+            <View style={styles.modal}>
+            <Text style={styles.modalTitle}>Objectif de l&rsquo;année</Text>
+            <Text style={styles.readingSub}>Un cap réaliste vaut mieux qu&rsquo;un record : combien de livres cette année ?</Text>
+            <TextInput
+              testID="goal-input"
+              value={goalInput} onChangeText={setGoalInput}
+              keyboardType="number-pad"
+              placeholder="12"
+              placeholderTextColor={colors.clay}
+              style={styles.goalInput}
+              autoFocus
+            />
+            <Pressable
+              testID="goal-save"
+              disabled={!goalInput || parseInt(goalInput, 10) < 1}
+              onPress={async () => {
+                const g = parseInt(goalInput, 10);
+                if (!g || g < 1) return;
+                await api('/me/goal', { method: 'PATCH', body: JSON.stringify({ yearly_goal: g }) });
+                setReading((r: any) => ({ ...r, yearly_goal: g }));
+                setGoalModal(false);
+              }}
+              style={[styles.goalSaveBtn, (!goalInput || parseInt(goalInput, 10) < 1) && { opacity: 0.5 }]}
+            >
+              <Text style={styles.goalSaveText}>Enregistrer</Text>
+            </Pressable>
+            <Pressable testID="goal-cancel" onPress={() => setGoalModal(false)} style={{ alignSelf: 'center', padding: spacing.sm }}>
+              <Text style={styles.goalEdit}>Annuler</Text>
+            </Pressable>
+          </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
     </ScrollView>
   );
 }
@@ -156,6 +219,17 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   badgeIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.glacier, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm },
   badgeTitle: { fontFamily: fonts.displayMedium, fontSize: 15, color: colors.espresso, textAlign: 'center' },
   badgeDesc: { fontFamily: fonts.body, fontSize: 10.5, color: colors.clay, textAlign: 'center', marginTop: 2, lineHeight: 14 },
+  goalCard: { marginHorizontal: spacing.xl, marginTop: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },
+  goalEdit: { fontFamily: fonts.body, fontSize: 12, color: colors.clay, textDecorationLine: 'underline' },
+  goalBar: { height: 8, backgroundColor: colors.glacier, borderRadius: 4, overflow: 'hidden', marginTop: spacing.sm },
+  goalFill: { height: 8, backgroundColor: colors.chambray },
+  goalText: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1, textTransform: 'uppercase', marginTop: 6 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(58,33,25,0.4)', justifyContent: 'flex-end' },
+  modal: { backgroundColor: colors.glacier, padding: spacing.xl, paddingBottom: spacing.xxl, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
+  modalTitle: { fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso, marginBottom: spacing.xs },
+  goalInput: { height: 56, borderWidth: 1, borderColor: colors.borderSoft, borderRadius: radius.md, paddingHorizontal: spacing.md, fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso, backgroundColor: colors.creme, marginTop: spacing.md, textAlign: 'center' },
+  goalSaveBtn: { height: 52, borderRadius: radius.md, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center', marginTop: spacing.md },
+  goalSaveText: { fontFamily: fonts.bodyMedium, fontSize: 15, color: colors.creme },
   premium: { margin: spacing.xl, padding: spacing.lg, backgroundColor: colors.bisque, borderRadius: radius.md },
   premiumTitle: { fontFamily: fonts.displayMedium, fontSize: 22, color: colors.espresso },
   premiumText: { fontFamily: fonts.body, fontSize: 13, color: colors.espresso, marginTop: spacing.xs, lineHeight: 20 },

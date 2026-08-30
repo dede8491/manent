@@ -222,6 +222,13 @@ async def get_themes():
     return {"themes": THEMES}
 
 
+@api.get("/themes/mine")
+async def get_my_themes(user=Depends(get_current_user)):
+    mine = await db.quotes.distinct("themes", {"user_id": user["user_id"]})
+    custom = [t for t in mine if t and t not in THEMES]
+    return {"themes": THEMES + sorted(custom)}
+
+
 async def _attach_public_meta(quotes: list):
     for qd in quotes:
         if qd.get("book_id"):
@@ -238,7 +245,29 @@ async def theme_page(theme: str, user=Depends(get_current_user)):
     books = len([b for b in await db.quotes.distinct("book_id", q) if b])
     quotes = await db.quotes.find(q, {"_id": 0}).sort("created_at", -1).limit(80).to_list(80)
     await _attach_public_meta(quotes)
-    return {"theme": theme, "stats": {"quotes": total, "readers": readers, "books": books}, "quotes": quotes}
+    # livres à découvrir pour ce thème (issus des citations publiques)
+    book_ids = [b for b in await db.quotes.distinct("book_id", q) if b]
+    suggestions = []
+    if book_ids:
+        bl = await db.books.find(
+            {"book_id": {"$in": book_ids}},
+            {"_id": 0, "book_id": 1, "title": 1, "author": 1, "cover": 1, "user_id": 1, "type": 1},
+        ).to_list(30)
+        seen = set()
+        for b in bl:
+            k = (b.get("title") or "").strip().lower()
+            if not k or k in seen:
+                continue
+            seen.add(k)
+            suggestions.append({
+                "book_id": b["book_id"],
+                "title": b["title"],
+                "author": b.get("author"),
+                "cover": b.get("cover"),
+                "is_mine": b["user_id"] == user["user_id"],
+            })
+        suggestions = suggestions[:10]
+    return {"theme": theme, "stats": {"quotes": total, "readers": readers, "books": books}, "quotes": quotes, "suggested_books": suggestions}
 
 
 @api.get("/readers/{handle}")
@@ -430,6 +459,34 @@ async def search_books(q: str):
                     })
             except Exception:
                 logger.warning("openlibrary search fallback failed for %s", q)
+        if not results:
+            # Repli 2 : catalogue de la BnF (API publique SRU, riche en éditions françaises)
+            try:
+                r3 = await http.get(
+                    "http://catalogue.bnf.fr/api/SRU",
+                    params={"version": "1.2", "operation": "searchRetrieve",
+                            "query": f'bib.anywhere all "{q}"',
+                            "recordSchema": "dublincore", "maximumRecords": "8"},
+                )
+                if r3.status_code == 200:
+                    records = re.split(r'<srw:record>', r3.text)[1:9]
+                    for rec in records:
+                        tm = re.search(r'<dc:title[^>]*>([^<]+)</dc:title>', rec)
+                        am = re.search(r'<dc:creator[^>]*>([^<]+)</dc:creator>', rec)
+                        dm = re.search(r'<dc:date[^>]*>[^<]*?(\d{4})', rec)
+                        if not tm:
+                            continue
+                        author = re.sub(r'\s*\(\d{4}-.*?\)\s*', '', am.group(1)).strip(' .,;') if am else None
+                        results.append({
+                            "title": tm.group(1).strip(),
+                            "author": author,
+                            "isbn": None,
+                            "pages": None,
+                            "year": dm.group(1) if dm else None,
+                            "cover": None,
+                        })
+            except Exception:
+                logger.warning("bnf search fallback failed for %s", q)
     return {"results": results}
 
 
@@ -461,6 +518,10 @@ async def patch_book(book_id: str, body: BookPatch, user=Depends(get_current_use
         prev = await db.books.find_one({"book_id": book_id, "user_id": user["user_id"]}, {"_id": 0, "progress_page": 1})
         delta = upd["progress_page"] - (prev.get("progress_page") or 0) if prev else 0
         await log_reading_event(user["user_id"], delta)
+    if upd.get("status") == "termine":
+        cur = await db.books.find_one({"book_id": book_id, "user_id": user["user_id"]}, {"_id": 0, "finished_at": 1})
+        if cur is not None and not cur.get("finished_at"):
+            upd["finished_at"] = now_utc()
     if upd:
         await db.books.update_one({"book_id": book_id, "user_id": user["user_id"]}, {"$set": upd})
     return await get_book(book_id, user)
@@ -682,6 +743,19 @@ async def list_quotes(book_id: Optional[str] = None, user=Depends(get_current_us
     return {"quotes": quotes}
 
 
+# IMPORTANT : routes fixes déclarées AVANT /quotes/{quote_id}
+@api.get("/quotes/daily")
+async def daily_quote(user=Depends(get_current_user)):
+    quotes = await db.quotes.find({"user_id": user["user_id"]}, {"_id": 0}).sort("created_at", 1).to_list(500)
+    if not quotes:
+        return {"quote": None}
+    idx = int(now_utc().strftime("%Y%m%d")) % len(quotes)
+    q = quotes[idx]
+    if q.get("book_id"):
+        q["book"] = await db.books.find_one({"book_id": q["book_id"]}, {"_id": 0, "title": 1, "author": 1, "type": 1})
+    return {"quote": q}
+
+
 @api.get("/quotes/{quote_id}")
 async def get_quote(quote_id: str, user=Depends(get_current_user)):
     q = await db.quotes.find_one({"quote_id": quote_id}, {"_id": 0})
@@ -711,6 +785,69 @@ async def delete_quote(quote_id: str, user=Depends(get_current_user)):
     await db.quotes.delete_one({"quote_id": quote_id, "user_id": user["user_id"]})
     await db.board_quotes.delete_many({"quote_id": quote_id})
     return {"ok": True}
+
+
+class SettingsBody(BaseModel):
+    language: Optional[Literal['fr', 'en']] = None
+    default_public: Optional[bool] = None
+
+
+@api.patch("/me/settings")
+async def update_settings(body: SettingsBody, user=Depends(get_current_user)):
+    upd = {k: v for k, v in body.dict().items() if v is not None}
+    if upd:
+        await db.users.update_one({"user_id": user["user_id"]}, {"$set": upd})
+    u = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "language": 1, "default_public": 1})
+    return {"language": (u or {}).get("language", "fr"), "default_public": (u or {}).get("default_public", False)}
+
+
+@api.get("/me/export")
+async def export_my_data(user=Depends(get_current_user)):
+    uid = user["user_id"]
+    u = await db.users.find_one({"user_id": uid}, {"_id": 0, "password_hash": 0})
+    data = {
+        "exported_at": now_utc().isoformat(),
+        "user": u,
+        "books": await db.books.find({"user_id": uid}, {"_id": 0}).to_list(1000),
+        "quotes": await db.quotes.find({"user_id": uid}, {"_id": 0}).to_list(5000),
+        "boards": await db.boards.find({"user_id": uid}, {"_id": 0}).to_list(500),
+        "flashcards": await db.flashcards.find({"user_id": uid}, {"_id": 0}).to_list(2000),
+        "clubs": await db.clubs.find({"members": uid}, {"_id": 0, "challenge.progress": 0}).to_list(100),
+        "reading_events": await db.reading_events.find({"user_id": uid}, {"_id": 0}).to_list(1000),
+    }
+    return data
+
+
+@api.delete("/me")
+async def delete_my_account(user=Depends(get_current_user)):
+    uid = user["user_id"]
+    quote_ids = await db.quotes.distinct("quote_id", {"user_id": uid})
+    if quote_ids:
+        await db.board_quotes.delete_many({"quote_id": {"$in": quote_ids}})
+    await db.quotes.delete_many({"user_id": uid})
+    await db.books.delete_many({"user_id": uid})
+    board_ids = await db.boards.distinct("board_id", {"user_id": uid})
+    if board_ids:
+        await db.board_quotes.delete_many({"board_id": {"$in": board_ids}})
+    await db.boards.delete_many({"user_id": uid})
+    await db.flashcards.delete_many({"user_id": uid})
+    await db.reading_events.delete_many({"user_id": uid})
+    # clubs : quitter proprement (transfert ou suppression si seul membre)
+    clubs = await db.clubs.find({"members": uid}, {"_id": 0}).to_list(200)
+    for c in clubs:
+        members = [m for m in c.get("members", []) if m != uid]
+        if not members:
+            await db.clubs.delete_one({"club_id": c["club_id"]})
+            await db.club_messages.delete_many({"club_id": c["club_id"]})
+        else:
+            upd = {"members": members}
+            if c["owner_id"] == uid:
+                upd["owner_id"] = members[0]
+            await db.clubs.update_one({"club_id": c["club_id"]}, {"$set": upd})
+    await db.club_messages.delete_many({"user_id": uid})
+    await db.sessions.delete_many({"user_id": uid})
+    await db.users.delete_one({"user_id": uid})
+    return {"ok": True, "deleted": True}
 
 
 # ============ Recherche fine ============
@@ -1269,7 +1406,28 @@ async def reading_stats(user=Depends(get_current_user)):
     month_prefix = today.strftime("%Y-%m")
     active_month = len([k for k in by_day if k.startswith(month_prefix)])
     total_pages = sum(e.get("pages", 0) for e in events)
-    return {"streak": streak, "week": week, "week_pages": week_pages, "active_days_month": active_month, "total_pages": total_pages}
+    # objectif annuel
+    u = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "yearly_goal": 1})
+    year_start = datetime(today.year, 1, 1, tzinfo=timezone.utc)
+    books_year = await db.books.count_documents({
+        "user_id": user["user_id"], "status": "termine",
+        "$or": [{"finished_at": {"$gte": year_start}}, {"finished_at": {"$exists": False}}],
+    })
+    return {
+        "streak": streak, "week": week, "week_pages": week_pages,
+        "active_days_month": active_month, "total_pages": total_pages,
+        "year": today.year, "yearly_goal": (u or {}).get("yearly_goal"), "books_year": books_year,
+    }
+
+
+class GoalBody(BaseModel):
+    yearly_goal: int = Field(ge=1, le=1000)
+
+
+@api.patch("/me/goal")
+async def set_goal(body: GoalBody, user=Depends(get_current_user)):
+    await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"yearly_goal": body.yearly_goal}})
+    return {"yearly_goal": body.yearly_goal}
 
 
 # ============ Badges lecteur ============

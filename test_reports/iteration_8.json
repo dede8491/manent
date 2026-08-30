@@ -1,0 +1,43 @@
+{
+  "summary": "Iteration 8 — 4 nouvelles demandes (objectif annuel, citation du matin, suggestions de livres par thème, thème 'Autre…' + écran Paramètres RGPD) : TOUT PASSE. Backend: 11/11 pytest (test_iteration8.py) — PATCH /api/me/goal=12 OK; /api/stats/reading contient year/yearly_goal/books_year; passer un livre en status=termine via PATCH pose finished_at ET books_year s'incrémente (before→after +1 sur un livre TEST_); GET /api/quotes/daily renvoie une vraie citation (l'ordre de route est bien avant /quotes/{id}, PAS de 404) avec book attaché; GET /api/themes/mine renvoie 13+ thèmes (12 base + customs) et une citation avec thème 'mélancolie_<rand>' apparaît immédiatement, GET /api/themes/{custom}/page fonctionne; GET /api/themes/résilience/page renvoie suggested_books non vide avec title/author/is_mine; PATCH /api/me/settings default_public=true persiste, revert OK; GET /api/me/export renvoie toutes les clefs (user sans password_hash, books, quotes, boards, flashcards, clubs, reading_events); DELETE /api/me sur compte JETABLE delete.test@manent.app supprime tout et re-login=401. Frontend (mobile 390×844, compte Léa / test.manent@example.com): (1) Profil → carte 'Objectif 2026' (goal-card) visible avec jauge chambray, goal-edit ouvre modal, saisie 12 + goal-save persiste → '0 / 12 LIVRES TERMINÉ' affiché après recharge. (2) Accueil → carte 'TA CITATION DU MATIN' (daily-quote) visible AU-DESSUS du fil avec 'Il faut cultiver notre jardin. — Voltaire, Candide, p.150'; tap → route /quote/q_4e86b2e8dbf14c15 OK. (3) Chip 'résilience' → page thème résilience → theme-books rangée horizontale avec 2 cartes (L'Alchimiste + Les Étoiles Perdues) CTA 'Ajouter'; tap sur un livre NON possédé → écran /book/add avec confirm-card prérempli L'Alchimiste / Paulo Coelho (params title/author/cover passés dans l'URL). (4) Capture → chip 'Autre…' (cap-theme-other) → champ cap-theme-custom → 'melancolie_ui' + cap-theme-custom-add → chip active immédiatement, enregistrement citation → détail /quote/... OK. (5) Paramètres complet: compte 'Léa · test.manent@example.com', langue FR actif + English 'bientôt' grisé, mode sombre toggle réactif, 'Citations publiques par défaut' toggle (settings-default-public) persisté via PATCH /api/me/settings, 'Télécharger mes données' feedback 'Données téléchargées.', modal RGPD (doc-content) ouvre/ferme, modal conditions idem, flux delete-cancel referme le modal sans casser l'écran (compte principal PRESERVÉ, non premium, CLAIR). Régression rapide: /api/books/search?q=alchimiste renvoie >=1 résultat, fil d'accueil OK. Comptes créés: JETABLE delete.test@manent.app SUPPRIMÉ à la fin du test comme demandé.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "quote/[id].tsx offscreen ShareQuoteCard", "issue": "Carry-over deprecation warning: 'props.pointerEvents is deprecated. Use style.pointerEvents'. Non-bloquant, visible dans les logs console au montage. Reference: /app/frontend/app/quote/[id].tsx"}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration8.py",
+    "/app/test_reports/pytest/iteration8.xml"
+  ],
+  "action_items": [
+    "(carry-over, low) Remplacer `pointerEvents` prop par `style={{ pointerEvents: 'none' }}` dans /app/frontend/app/quote/[id].tsx (offscreen ShareQuoteCard) — avertissement récurrent.",
+    "(cosmétique) Dans la modal 'Modifier l'objectif' (profile.tsx), le bouton goal-save peut sortir du viewport quand le clavier virtuel est ouvert; Playwright a dû scroll-into-view-if-needed. Envisager d'envelopper le contenu de la modal dans un KeyboardAvoidingView + ScrollView, ou de rehausser le bouton avec un marginBottom dynamique. Non bloquant en usage normal utilisateur."
+  ],
+  "critical_code_review_comments": [
+    "server.py:747 — /quotes/daily est bien déclaré AVANT /quotes/{quote_id} ; le choix déterministe utilise int(YYYYMMDD) % len(quotes) et attache book meta si book_id, comportement stable sur 24h.",
+    "server.py:521-524 — PATCH /books/{id} pose finished_at=now_utc() UNIQUEMENT si le book existe ET n'a pas déjà finished_at, ce qui rend l'opération idempotente (bon comportement anti-double-count).",
+    "server.py:1412-1415 — reading_stats books_year utilise $or [{finished_at>=year_start}, {finished_at: {$exists: False}}] : compte tous les livres 'termine' de l'année ET les anciens 'termine' sans finished_at → tolérant pour la migration mais surestime books_year si un utilisateur a marqué des livres 'termine' l'année précédente sans jamais toucher finished_at. Acceptable en l'état, à documenter.",
+    "server.py:225-229 — /themes/mine renvoie THEMES + customs triés ; correctement filtre les thèmes vides/null via `if t and t not in THEMES`.",
+    "server.py:249-269 — /themes/{theme}/page dédupplique les suggestions par title.lower() et limite à 10, is_mine calculé côté serveur : sain et rapide.",
+    "server.py:822-850 — DELETE /me purge quotes+board_quotes+books+boards+flashcards+reading_events+sessions et gère intelligemment les clubs (soit delete si dernier membre, soit transfère l'ownership au premier autre membre restant). Bon comportement multi-tenant.",
+    "server.py:807 — /me/export exclut correctement password_hash via projection {password_hash: 0}. Vérifié en pytest."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration8.py (nouveau)",
+    "/app/test_reports/pytest/iteration8.xml (junit output)",
+    "/app/test_reports/iteration_8.json (ce rapport)"
+  ],
+  "success_rate": {"backend": "100% (11/11 pytest iteration_8 pass)", "frontend": "100% sur toutes les nouvelles demandes (goal, daily quote, theme suggestions, custom theme, settings complet, delete-cancel flow)"},
+  "seed_data_creation": "Compte principal Léa: yearly_goal fixé à 12 via PATCH /api/me/goal (déjà à 12 en début de run, idempotent). 1 quote de test créée via UI puis SUPPRIMÉE (q_08977298558e4abb). default_public bascule ON puis OFF (revert). Compte JETABLE delete.test@manent.app créé + 1 livre + 1 citation puis SUPPRIMÉ via DELETE /api/me. Compte test principal laissé en mode CLAIR, non premium, avec ses 2 livres (Candide + O Alquimista) et ses citations habituelles.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Itération 8 complète et verte de bout en bout. Le compte principal Léa a maintenant: yearly_goal=12, default_public=false, 2 livres, plusieurs citations (dont Voltaire/Candide qui sert de daily-quote), au moins un thème custom historisé côté /themes/mine ('optimism' d'un run précédent). Les endpoints stables ajoutés cette itération: PATCH /api/me/goal, GET /api/quotes/daily, GET /api/themes/mine, GET /api/themes/{theme}/page (avec suggested_books), PATCH /api/me/settings, GET /api/me/export, DELETE /api/me. Le compte JETABLE delete.test@manent.app est supprimé — le recréer via register si besoin de retester DELETE /me.",
+  "rca_of_issue": "N/A — aucun bug bloquant détecté sur l'itération 8."
+}

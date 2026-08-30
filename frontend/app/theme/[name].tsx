@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, useWindowDimensions, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, useWindowDimensions, ActivityIndicator, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -15,7 +15,7 @@ export default function ThemePage() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const { name } = useLocalSearchParams<{ name: string }>();
-  const [data, setData] = useState<{ stats: { quotes: number; readers: number; books: number }; quotes: Quote[] } | null>(null);
+  const [data, setData] = useState<{ stats: { quotes: number; readers: number; books: number }; quotes: Quote[]; suggested_books?: any[] } | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -67,6 +67,35 @@ export default function ThemePage() {
           </View>
         )}
 
+        {data && (data.suggested_books?.length || 0) > 0 && (
+          <View style={{ marginTop: spacing.lg }} testID="theme-books">
+            <Text style={styles.suggestLabel}>Des livres pour ce thème</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm, paddingHorizontal: spacing.xl }}>
+              {data.suggested_books!.map((b: any) => (
+                <Pressable
+                  key={b.book_id}
+                  testID={`theme-book-${b.book_id}`}
+                  onPress={() => b.is_mine
+                    ? router.push({ pathname: '/book/[id]', params: { id: b.book_id } })
+                    : router.push({ pathname: '/book/add', params: { title: b.title, author: b.author || '', cover: b.cover || '' } })}
+                  style={styles.suggestCard}
+                >
+                  {b.cover ? (
+                    <Image source={{ uri: b.cover }} style={styles.suggestCover} resizeMode="cover" />
+                  ) : (
+                    <View style={[styles.suggestCover, { alignItems: 'center', justifyContent: 'center' }]}>
+                      <Text style={styles.suggestInitial}>{(b.title?.[0] || 'M').toUpperCase()}</Text>
+                    </View>
+                  )}
+                  <Text style={styles.suggestTitle} numberOfLines={2}>{b.title}</Text>
+                  {!!b.author && <Text style={styles.suggestAuthor} numberOfLines={1}>{b.author}</Text>}
+                  <Text style={styles.suggestCta}>{b.is_mine ? 'Dans ta bibliothèque' : 'Ajouter'}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
         {data && (
           <View style={{ paddingHorizontal: spacing.xl, marginTop: spacing.lg }}>
             {data.quotes.length === 0 ? (
@@ -106,6 +135,13 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   statCard: { flex: 1, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', paddingVertical: spacing.md },
   statNum: { fontFamily: fonts.displayMedium, fontSize: 28, color: colors.espresso },
   statLbl: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase', marginTop: 2 },
+  suggestLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase', paddingHorizontal: spacing.xl, marginBottom: spacing.sm },
+  suggestCard: { width: 120, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.sm },
+  suggestCover: { width: '100%', height: 120, borderRadius: radius.sm, backgroundColor: colors.bisque, marginBottom: spacing.xs },
+  suggestInitial: { fontFamily: fonts.displayMedium, fontSize: 34, color: colors.espresso },
+  suggestTitle: { fontFamily: fonts.displayMedium, fontSize: 14, color: colors.espresso, lineHeight: 17 },
+  suggestAuthor: { fontFamily: fonts.body, fontSize: 11, color: colors.clay, marginTop: 1 },
+  suggestCta: { fontFamily: fonts.bodyMedium, fontSize: 9.5, color: colors.chambray, letterSpacing: 1, textTransform: 'uppercase', marginTop: spacing.xs },
   emptyTitle: { fontFamily: fonts.displayMedium, fontSize: 22, color: colors.espresso, textAlign: 'center' },
   emptySub: { fontFamily: fonts.body, fontSize: 14, color: colors.clay, textAlign: 'center', marginTop: spacing.sm },
 });

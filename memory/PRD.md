@@ -62,7 +62,16 @@
 - **Badges lecteur**: `GET /api/badges` → 10 badges calculés (citations 1/10/50, streak 3/7/30, livres terminés 1/5, défi de club atteint, fiche d'études 100 %). Profil: rangée horizontale (gagnés en Chambray d'abord, verrouillés grisés), compteur X/10.
 - **Récap hebdo club**: message système « Manent · Récap » (passage de la semaine + top 3 du défi avec pseudos) — posté automatiquement 1×/semaine à l'ouverture des messages (garde atomique `last_recap_week`, semaine ISO) + bouton owner « Envoyer le récap » (`POST /clubs/{id}/recap`). Rendu carte Bisque distincte (`recap-message`).
 - Renommage testID: bouton d'ajout de la Bibliothèque = `btn-library-add` (l'ancien `btn-add-book` dupliquait le CTA de l'écran d'ajout).
-- Reste à faire (mineur, non bloquant): migrer le warning `pointerEvents` (web), quirk Open Library sur certains ISBN d'éditions FR (renvoie parfois une autre œuvre).
+- Reste à faire (mineur, non bloquant): warning `pointerEvents` (émis par une lib, notre code utilise déjà style.pointerEvents), quirk Open Library sur certains ISBN d'éditions FR.
+
+## Ajouts session 2 sexies (juin 2026) — Objectif annuel, Citation du matin, Suggestions thème, Thème « Autre », Paramètres (itération 8: pytest 11/11, e2e ALL GREEN)
+- **Objectif annuel**: `PATCH /api/me/goal`, `/stats/reading` renvoie year/yearly_goal/books_year (`finished_at` posé au passage en `termine`). Profil: carte « Objectif {année} » avec jauge Chambray + modal d'édition (KeyboardAvoidingView).
+- **Citation du matin**: `GET /api/quotes/daily` (déterministe par jour, déclaré AVANT `/quotes/{quote_id}` — piège d'ordre des routes). Carte en haut de l'accueil. NOTE: le vrai widget d'écran d'accueil OS demandé nécessite un build natif + modules natifs (react-native-android-widget / WidgetKit iOS) — non faisable en Expo Go; l'utilisateur a reçu la version in-app, à reproposer en widget natif plus tard.
+- **Suggestions de livres par thème**: `suggested_books` (dédupliqués, is_mine) sur `/themes/{theme}/page`; rangée horizontale sur la page thème; tap non possédé → `/book/add` prérempli via params (title/author/cover → confirm-card).
+- **Thème « Autre »**: chip Autre… dans la capture (saisie libre, minuscules), `GET /api/themes/mine` = 12 thèmes + customs distincts de l'utilisateur (utilisé par capture; search utilise encore /themes statique).
+- **Paramètres** (`/settings`, depuis le profil): compte, langue (fr actif / en « bientôt »), mode sombre, « Citations publiques par défaut » (`PATCH /api/me/settings`, pré-coche le toggle de la capture), export RGPD (`GET /api/me/export`, JSON sans password_hash, download web / partage natif), politique de confidentialité + conditions (modals), **suppression de compte** (`DELETE /api/me` — purge complète, transfert/suppression des clubs, déconnexion).
+- Recherche Google Books toujours en quota 429 côté conteneur; repli Open Library + BnF (SRU dublincore) opérationnels. Babelio: pas d'API publique (scraping refusé, CGU).
+
 
 
 

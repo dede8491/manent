@@ -25,7 +25,9 @@ export default function CaptureModal() {
   const [selectedThemes, setSelectedThemes] = useState<string[]>([]);
   const [books, setBooks] = useState<{ book_id: string; title: string; type: string }[]>([]);
   const [bookId, setBookId] = useState<string | null>(null);
-  const [themes] = useState<string[]>(['résilience','amour','argent','foi','leadership','famille','confiance','deuil','spiritualité','santé','voyage','entrepreneuriat']);
+  const [themes, setThemes] = useState<string[]>(['résilience','amour','argent','foi','leadership','famille','confiance','deuil','spiritualité','santé','voyage','entrepreneuriat']);
+  const [customTheme, setCustomTheme] = useState('');
+  const [showCustom, setShowCustom] = useState(false);
   const [premium, setPremium] = useState<{ is_premium: boolean; captures_used: number; captures_limit: number } | null>(null);
   const [limitReached, setLimitReached] = useState(false);
 
@@ -33,8 +35,22 @@ export default function CaptureModal() {
     (async () => {
       try { const r = await api<{ books: any[] }>('/books'); setBooks(r.books.map(b => ({ book_id: b.book_id, title: b.title, type: b.type }))); } catch {}
       try { setPremium(await api('/premium/status')); } catch {}
+      try { const t = await api<{ themes: string[] }>('/themes/mine'); setThemes(t.themes); } catch {}
+      try {
+        const s = await api<{ default_public: boolean }>('/me/settings', { method: 'PATCH', body: JSON.stringify({}) });
+        if (s.default_public) setIsPublic(true);
+      } catch {}
     })();
   }, []);
+
+  const addCustomTheme = () => {
+    const t = customTheme.trim().toLowerCase();
+    if (!t) return;
+    if (!themes.includes(t)) setThemes(p => [...p, t]);
+    setSelectedThemes(p => (p.includes(t) ? p : [...p, t]));
+    setCustomTheme('');
+    setShowCustom(false);
+  };
 
   const pickImage = async (fromCamera: boolean) => {
     const perm = fromCamera
@@ -165,7 +181,26 @@ export default function CaptureModal() {
               </Pressable>
             );
           })}
+          <Pressable testID="cap-theme-other" onPress={() => setShowCustom(v => !v)} style={[styles.chip, styles.chipDashed]}>
+            <Text style={styles.chipText}>Autre…</Text>
+          </Pressable>
         </View>
+        {showCustom && (
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: spacing.sm }}>
+            <TextInput
+              testID="cap-theme-custom"
+              value={customTheme} onChangeText={setCustomTheme}
+              onSubmitEditing={addCustomTheme}
+              placeholder="Ta thématique (ex. mélancolie)"
+              placeholderTextColor={colors.clay}
+              style={[styles.input, { flex: 1, minHeight: 44 }]}
+              autoFocus
+            />
+            <Pressable testID="cap-theme-custom-add" onPress={addCustomTheme} disabled={!customTheme.trim()} style={[styles.customAddBtn, !customTheme.trim() && { opacity: 0.5 }]}>
+              <Feather name="plus" size={20} color={colors.creme} />
+            </Pressable>
+          </View>
+        )}
 
         <Pressable testID="toggle-public" onPress={() => setIsPublic(v => !v)} style={styles.visRow}>
           <Feather name={isPublic ? 'check-square' : 'square'} size={20} color={colors.chambray} />
@@ -194,6 +229,8 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   label: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase', marginTop: spacing.lg, marginBottom: spacing.xs },
   input: { minHeight: 52, borderWidth: 1, borderColor: colors.borderSoft, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontFamily: fonts.body, fontSize: 15, color: colors.espresso, backgroundColor: colors.creme },
   chip: { height: 36, paddingHorizontal: 14, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center', flexShrink: 0, backgroundColor: colors.creme },
+  chipDashed: { borderStyle: 'dashed', borderColor: colors.chambray, backgroundColor: 'transparent' },
+  customAddBtn: { width: 44, height: 44, borderRadius: radius.md, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },
   chipActive: { backgroundColor: colors.chambray, borderColor: colors.chambray },
   chipText: { fontFamily: fonts.body, fontSize: 13, color: colors.espresso, maxWidth: 160 },
   chipTextActive: { color: colors.creme, fontFamily: fonts.bodyMedium },

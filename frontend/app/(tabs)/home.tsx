@@ -17,6 +17,7 @@ export default function Home() {
   const { width } = useWindowDimensions();
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [themes, setThemes] = useState<string[]>([]);
+  const [daily, setDaily] = useState<Quote | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -24,6 +25,10 @@ export default function Home() {
     try {
       const r = await api<{ quotes: Quote[] }>('/feed');
       setQuotes(r.quotes);
+    } catch {}
+    try {
+      const d = await api<{ quote: Quote | null }>('/quotes/daily');
+      setDaily(d.quote);
     } catch {}
   }, []);
 
@@ -75,6 +80,12 @@ export default function Home() {
         contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + 80 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.chambray} />}
       >
+        {daily && (
+          <View style={{ marginBottom: spacing.lg }} testID="daily-quote">
+            <Text style={styles.dailyLabel}>Ta citation du matin</Text>
+            <QuoteCard quote={daily} onPress={() => router.push({ pathname: '/quote/[id]', params: { id: daily.quote_id } })} />
+          </View>
+        )}
         {loading ? (
           <Text style={styles.empty}>Chargement…</Text>
         ) : shown.length === 0 ? (
@@ -110,6 +121,7 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   searchRow: { paddingHorizontal: spacing.xl },
   search: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 44, paddingHorizontal: spacing.md, backgroundColor: colors.creme, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft },
   searchPlaceholder: { flex: 1, fontFamily: fonts.body, fontSize: 14, color: colors.clay },
+  dailyLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: spacing.sm },
   chipRow: { height: 44 },
   chip: { height: 36, paddingHorizontal: 14, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   chipActive: { backgroundColor: colors.chambray, borderColor: colors.chambray },
