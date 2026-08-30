@@ -3,6 +3,7 @@ import Purchases from 'react-native-purchases';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, loadToken, saveToken, clearToken, setCachedToken } from './api';
 import { rcEnabled } from './revenuecat';
+import { registerForPush } from './push';
 
 type User = {
   user_id: string;
@@ -73,6 +74,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     })();
   }, [user?.user_id, queryClient]);
+
+  // Enregistrement push à chaque connexion / ouverture (les jetons peuvent tourner)
+  useEffect(() => {
+    if (user?.user_id) registerForPush(user.user_id);
+  }, [user?.user_id]);
 
   const signIn = async (email: string, password: string) => {
     const r = await api<{ session_token: string; user: User }>('/auth/login', {

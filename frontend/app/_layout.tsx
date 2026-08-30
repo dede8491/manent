@@ -1,21 +1,41 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
-import { LogBox, View } from 'react-native';
+import { LogBox, View, Platform, Linking, Alert } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFonts } from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
+import * as Notifications from 'expo-notifications';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useIconFonts } from '@/src/hooks/use-icon-fonts';
 import { AuthProvider, useAuth } from '@/src/auth';
 import { ThemeProvider, useColors, useScheme } from '@/src/themeCtx';
-import { I18nProvider } from '@/src/i18n';
+import { I18nProvider, useT } from '@/src/i18n';
 import { initializeRevenueCat, SubscriptionProvider } from '@/src/revenuecat';
 
 LogBox.ignoreAllLogs(true);
 SplashScreen.preventAutoHideAsync();
+
+// Notifications push — comportement au premier plan + canal Android (portée module, avant tout composant)
+if (Platform.OS !== 'web') {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    }),
+  });
+}
+if (Platform.OS === 'android') {
+  Notifications.setNotificationChannelAsync('default', {
+    name: 'Default',
+    importance: Notifications.AndroidImportance.MAX,
+    sound: 'default',
+  });
+}
 
 try {
   initializeRevenueCat();
@@ -30,6 +50,44 @@ function NavGate() {
   const segments = useSegments() as string[];
   const router = useRouter();
   const colors = useColors();
+  const t = useT();
+
+  // Notifications : navigation au tap (app ouverte + démarrage à froid) et relance hebdo si refusées
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    const openFromData = (data: any) => {
+      const url = data?.deeplink || data?.action_url;
+      if (!url) return;
+      if (typeof url === 'string' && url.startsWith('http')) Linking.openURL(url);
+      else router.push(url);
+    };
+    const tapSub = Notifications.addNotificationResponseReceivedListener(response => {
+      openFromData(response.notification.request.content.data || {});
+    });
+    Notifications.getLastNotificationResponseAsync().then(response => {
+      if (response) openFromData(response.notification.request.content.data || {});
+    });
+    (async () => {
+      try {
+        const { status, canAskAgain } = await Notifications.getPermissionsAsync();
+        if (status !== 'denied' || canAskAgain) return;
+        const lastNudge = await AsyncStorage.getItem('pushNudgeAt');
+        const oneWeek = 7 * 24 * 60 * 60 * 1000;
+        if (lastNudge && Date.now() - Number(lastNudge) <= oneWeek) return;
+        Alert.alert(
+          t('Notifications désactivées'),
+          t('Active les notifications dans les réglages pour suivre tes clubs et tes histoires Wattpad.'),
+          [
+            { text: t('Plus tard'), style: 'cancel', onPress: () => AsyncStorage.setItem('pushNudgeAt', String(Date.now())) },
+            { text: t('Ouvrir les réglages'), onPress: () => { AsyncStorage.setItem('pushNudgeAt', String(Date.now())); Linking.openSettings(); } },
+          ],
+        );
+      } catch {}
+    })();
+    return () => {
+      tapSub.remove();
+    };
+  }, [router]);
 
   useEffect(() => {
     if (loading) return;

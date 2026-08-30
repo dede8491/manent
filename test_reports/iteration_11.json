@@ -1,0 +1,46 @@
+{
+  "summary": "Iteration 11 — Backend refactoring (/app/backend/routes/) + push notifications hooks : TOUT PASSE. Backend 15/15 pytest (test_iteration11.py, 3.52s) : (1) Régression recherche depuis routes/book_search.py — GET /api/books/search?q=alchimiste → {results:[...]} non vide ; /books/search/isbn?isbn=9782253006329 → 200 (title='L'Alchimiste', source google/openlibrary) ; /books/search/isbn?isbn=9782290398487 → 200 avec source='bnf' (fallback confirmé). (2) Ordre des routes préservé — book_search_router inclus AVANT api router : GET /api/books/does_not_exist_xyz (auth) → 404 (pas d'interception par /books/search) ; /books/search reste unauth. (3) POST /api/register-push avec {user_id,platform,device_token} → 500 'EMERGENT_PUSH_KEY missing or invalid' (comportement ATTENDU — httpx.INFO logs confirment le 401 en amont sur integrations.emergentagent.com) ; body incomplet → 422. (4) Hooks push clubs non-bloquants avec un compte auth fresh : POST /clubs (200), POST /clubs/{id}/messages (200), POST /clubs/{id}/reco (200), PATCH /clubs/{id} avec challenge {title:'Défi 50 pages', goal_pages:50} (200), PATCH avec weekly_passage.text (200) — toutes les opérations réussissent malgré la clé placeholder (send_push return early car others=[] pour un club à 1 seul membre → le try/except ne se déclenche même pas ; logique validée par le try/except autour de send_push dans server.py:1006/1050/1177/1006). (5) Régression rapide auth (register 200 + login 200), GET /api/books (200 {books:[]}), POST /api/quotes (200), GET /api/premium/status (200 avec is_premium/captures_used/captures_limit). Frontend e2e mobile 390×844 (Léa test.manent@example.com) : login OK → home → /community → onglet Clubs → 'Club Candide' (1 club existant seed) → ouverture → discussion : saisie 'TEST_it11 msg 1788130058' dans [data-testid=club-msg-input] + tap [data-testid=club-msg-send] → message affiché en fin de fil (bulle bleue 'is_me:true') — aucun crash, aucune erreur console. Guards expo-notifications OK : seul warning benign '[expo-notifications] Listening to push token changes is not yet fully supported on web' × 2 (attendu, non bloquant, Platform.OS==='web' guards en place dans _layout.tsx lignes 23 et 57).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration11.py",
+    "/app/test_reports/pytest/iteration11.xml"
+  ],
+  "action_items": [
+    "(info, non-bloquant) La clé EMERGENT_PUSH_KEY reste 'placeholder' en dev — remplacée au déploiement. Comportement attendu et validé : 401 Unauthorized côté relais, re-mappé en 500 propre par /api/register-push et try/except non-bloquant pour les hooks club.",
+    "(nice-to-have) Les hooks send_push dans server.py filtrent déjà les autres membres avant l'appel ; on pourrait ajouter un log INFO 'push skipped: no recipients' pour clarifier les runs à un seul membre. Cosmétique."
+  ],
+  "critical_code_review_comments": [
+    "server.py:29-30 — Import propre des routers depuis routes/book_search.py et routes/push.py + réexport de send_push. Les deux routers ont prefix='/api' et sont inclus AVANT app.include_router(api) (server.py:1579-1581) — ordre correct pour que /books/search ait priorité sur /books/{book_id} déclaré dans api. Confirmé end-to-end (test_get_book_by_id_still_reachable renvoie 404 sur un ID bidon).",
+    "routes/book_search.py:24-105 — search_isbn a 3 fallbacks (Google → OpenLibrary → BnF SRU) avec validation EAN13 (checksum) en amont et parsing regex XML-safe des tags Dublin Core. Réponse toujours enrichie du champ 'source'. Timeout httpx 15s.",
+    "routes/book_search.py:205-228 — search_books interroge les 3 sources en parallèle via asyncio.gather (timeout 12s), tri des résultats par priorité FR (Google FR → BnF → OL FR → reliquat), dedup via _norm_key(title|last_author_word), cap 10 résultats. Bonne perf.",
+    "routes/push.py:13-17 — httpx.AsyncClient créé au niveau module avec X-Push-Key en header et timeout 10s ; réutilisé sur toutes les requêtes (pas de leak, pas de reconnexion à chaque call).",
+    "routes/push.py:28-36 — POST /api/register-push remappe proprement 401→500 (auth foireuse) et 5xx→502 (provider). Excellent pattern.",
+    "routes/push.py:39-55 — send_push découpe par batches de 100 destinataires (respect API SuprSend), supporte $idempotency_key (déduplication côté provider). Docstring explicite : 'Ne jamais bloquer l'opération principale (appeler dans try/except)'.",
+    "server.py:1003-1018, 1048-1056, 1076-1083 (push club update), 1175-1183 — TOUS les appels send_push sont enveloppés dans try/except avec logger.warning 'push xxx failed (non-blocking)'. Garantit que l'opération métier (message/reco/challenge/passage) réussit même si le relais push tombe. Excellent découplage.",
+    "server.py:1527-1570 — _watch_wattpad tâche de fond démarrée via asyncio.get_event_loop().create_task au startup ; send_push envoyé pour chaque nouveau chapitre détecté. Note : bien qu'on n'ait pas déclenché le watcher pendant les tests, la structure est saine (try/except autour, boucle avec sleep). Non testé end-to-end car nécessite un compte Wattpad configuré et un nouveau chapitre effectif.",
+    "_layout.tsx:22-38 — Platform.OS !== 'web' guard correct autour de Notifications.setNotificationHandler ; Platform.OS === 'android' pour le channel — pas d'exécution sur web. _layout.tsx:57 : if (Platform.OS === 'web') return; sur le hook des listeners. Warning expo-notifications sur push-token en web est benign et attendu."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration11.py (nouveau, 15 tests)",
+    "/app/test_reports/pytest/iteration11.xml (junit output)",
+    "/app/test_reports/iteration_11.json (ce rapport)"
+  ],
+  "success_rate": {
+    "backend": "100% (15/15 pytest iteration_11 pass en 3.52s)",
+    "frontend": "100% (login + navigation home→community→club→message envoyé + affiché, aucune erreur console, guards expo-notifications OK)"
+  },
+  "seed_data_creation": "Tests pytest ont créé quelques comptes 'test_<uuid>@example.com' (fixture session auth) et 'TEST_it11_reg_<uuid>@manent.app' (test_auth_flow), plus 1 club 'TEST_it11_club_<xxxx>' avec 1 message + 1 reco + challenge + weekly_passage. Compte principal Léa (test.manent@example.com) laissé PREMIUM comme demandé ; un nouveau message 'TEST_it11 msg 1788130058' ajouté dans son 'Club Candide' via UI.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Refactoring backend it.11 stable : routes/book_search.py et routes/push.py inclus AVANT app.include_router(api) (server.py:1579-1581) — ordre critique pour ne pas casser /books/search vs /books/{book_id}. EMERGENT_PUSH_KEY=placeholder → /register-push renvoie 500 propre et les hooks club (send_push wrappé try/except) restent non-bloquants ; en prod la clé est injectée au déploiement. Watcher Wattpad (_watch_wattpad) démarré au startup mais NON testé end-to-end (nécessite un chapitre effectif publié). Frontend : guards Platform.OS==='web' en place dans app/_layout.tsx (lignes 23,32,57) — warning benign expo-notifications push-token attendu sur web. testIDs club discussion : club-msg-input, club-msg-send (utilisés pour la smoke UI). Aucun bug ; refactoring propre.",
+  "rca_of_issue": "N/A — aucun bug détecté."
+}
