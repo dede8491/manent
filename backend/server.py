@@ -273,6 +273,7 @@ class BookCreate(BaseModel):
     wattpad_url: Optional[str] = None
     cover: Optional[str] = None
     pages: Optional[int] = None
+    year: Optional[str] = None
     chapters: Optional[int] = None
     status: Literal['a_lire', 'en_cours', 'termine'] = 'a_lire'
     mode: Literal['perso', 'etudes'] = 'perso'
@@ -328,21 +329,51 @@ async def list_books(status: Optional[str] = None, user=Depends(get_current_user
 
 @api.get("/books/search/isbn")
 async def search_isbn(isbn: str):
+    isbn = re.sub(r'[^0-9Xx]', '', isbn)
     async with httpx.AsyncClient(timeout=15) as http:
         r = await http.get(f"https://www.googleapis.com/books/v1/volumes?q=isbn:{isbn}")
-    data = r.json() if r.status_code == 200 else {}
-    items = data.get("items") or []
-    if not items:
-        raise HTTPException(status_code=404, detail="isbn_not_found")
-    v = items[0].get("volumeInfo", {})
-    return {
-        "title": v.get("title"),
-        "author": ", ".join(v.get("authors", []) or []),
-        "isbn": isbn,
-        "pages": v.get("pageCount"),
-        "cover": (v.get("imageLinks") or {}).get("thumbnail", "").replace("http://", "https://"),
-        "description": v.get("description"),
-    }
+        data = r.json() if r.status_code == 200 else {}
+        items = data.get("items") or []
+        if items:
+            v = items[0].get("volumeInfo", {})
+            return {
+                "title": v.get("title"),
+                "author": ", ".join(v.get("authors", []) or []),
+                "isbn": isbn,
+                "pages": v.get("pageCount"),
+                "year": (v.get("publishedDate") or "")[:4] or None,
+                "cover": (v.get("imageLinks") or {}).get("thumbnail", "").replace("http://", "https://"),
+                "description": v.get("description"),
+                "source": "google",
+            }
+        # Repli : Open Library
+        try:
+            r2 = await http.get(f"https://openlibrary.org/isbn/{isbn}.json", follow_redirects=True)
+            if r2.status_code == 200:
+                d = r2.json()
+                author = None
+                a = d.get("authors") or []
+                if a and a[0].get("key"):
+                    try:
+                        ra = await http.get(f"https://openlibrary.org{a[0]['key']}.json")
+                        if ra.status_code == 200:
+                            author = ra.json().get("name")
+                    except Exception:
+                        pass
+                m = re.search(r'(\d{4})', d.get("publish_date") or "")
+                return {
+                    "title": d.get("title"),
+                    "author": author,
+                    "isbn": isbn,
+                    "pages": d.get("number_of_pages"),
+                    "year": m.group(1) if m else None,
+                    "cover": f"https://covers.openlibrary.org/b/isbn/{isbn}-M.jpg",
+                    "description": None,
+                    "source": "openlibrary",
+                }
+        except Exception:
+            logger.warning("openlibrary fallback failed for %s", isbn)
+    raise HTTPException(status_code=404, detail="isbn_not_found")
 
 
 @api.get("/books/search")
@@ -350,7 +381,7 @@ async def search_books(q: str):
     async with httpx.AsyncClient(timeout=15) as http:
         r = await http.get(
             "https://www.googleapis.com/books/v1/volumes",
-            params={"q": q, "maxResults": 12},
+            params={"q": q, "maxResults": 8, "langRestrict": "fr"},
         )
     data = r.json() if r.status_code == 200 else {}
     items = data.get("items") or []
@@ -362,6 +393,7 @@ async def search_books(q: str):
             "author": ", ".join(v.get("authors", []) or []),
             "isbn": next((i.get("identifier") for i in (v.get("industryIdentifiers") or []) if i.get("type") in ("ISBN_13", "ISBN_10")), None),
             "pages": v.get("pageCount"),
+            "year": (v.get("publishedDate") or "")[:4] or None,
             "cover": (v.get("imageLinks") or {}).get("thumbnail", "").replace("http://", "https://"),
         })
     return {"results": results}
@@ -376,9 +408,25 @@ async def get_book(book_id: str, user=Depends(get_current_user)):
     return b
 
 
+def today_key():
+    return now_utc().strftime("%Y-%m-%d")
+
+
+async def log_reading_event(user_id: str, pages: int = 0):
+    await db.reading_events.update_one(
+        {"user_id": user_id, "day": today_key()},
+        {"$inc": {"pages": max(0, pages), "actions": 1}},
+        upsert=True,
+    )
+
+
 @api.patch("/books/{book_id}")
 async def patch_book(book_id: str, body: BookPatch, user=Depends(get_current_user)):
     upd = {k: v for k, v in body.dict().items() if v is not None}
+    if "progress_page" in upd:
+        prev = await db.books.find_one({"book_id": book_id, "user_id": user["user_id"]}, {"_id": 0, "progress_page": 1})
+        delta = upd["progress_page"] - (prev.get("progress_page") or 0) if prev else 0
+        await log_reading_event(user["user_id"], delta)
     if upd:
         await db.books.update_one({"book_id": book_id, "user_id": user["user_id"]}, {"$set": upd})
     return await get_book(book_id, user)
@@ -573,6 +621,7 @@ async def create_quote(body: QuoteCreate, user=Depends(get_current_user)):
         "created_at": now_utc(),
     }
     await db.quotes.insert_one(doc.copy())
+    await log_reading_event(user["user_id"], 0)
     # auto-progress
     if body.book_id and body.page:
         book = await db.books.find_one({"book_id": body.book_id, "user_id": user["user_id"]}, {"_id": 0})
@@ -779,6 +828,7 @@ class ClubPatch(BaseModel):
     description: Optional[str] = None
     book: Optional[dict] = None  # {book_id?, title, author?}
     weekly_passage: Optional[dict] = None  # {text, page?, book_title?}
+    challenge: Optional[dict] = None  # {title, goal_pages}
 
 
 class ClubJoin(BaseModel):
@@ -787,6 +837,10 @@ class ClubJoin(BaseModel):
 
 class ClubMessageBody(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
+
+
+class ChallengeProgress(BaseModel):
+    pages: int = Field(ge=0, le=100000)
 
 
 def _club_code():
@@ -856,6 +910,26 @@ async def get_club(club_id: str, user=Depends(get_current_user)):
     club["members"] = users
     club["members_count"] = len(member_ids)
     club["is_owner"] = club["owner_id"] == user["user_id"]
+    # classement du défi
+    ch = club.get("challenge")
+    if ch:
+        umap = {u["user_id"]: u for u in users}
+        progress = ch.get("progress", {})
+        board = []
+        for uid in member_ids:
+            uinfo = umap.get(uid, {})
+            pages = int(progress.get(uid, 0))
+            board.append({
+                "pseudo": uinfo.get("pseudo", "Lecteur"),
+                "handle": uinfo.get("handle", ""),
+                "pages": pages,
+                "pct": min(100, round(pages / ch["goal_pages"] * 100)) if ch.get("goal_pages") else 0,
+                "is_me": uid == user["user_id"],
+            })
+        board.sort(key=lambda x: -x["pages"])
+        ch["leaderboard"] = board
+        ch["my_pages"] = int(progress.get(user["user_id"], 0))
+        ch.pop("progress", None)
     return club
 
 
@@ -867,8 +941,32 @@ async def patch_club(club_id: str, body: ClubPatch, user=Depends(get_current_use
     upd = {k: v for k, v in body.dict().items() if v is not None}
     if "weekly_passage" in upd:
         upd["weekly_passage"] = {**upd["weekly_passage"], "set_at": now_utc().isoformat(), "set_by": user["pseudo"]}
+    if "challenge" in upd:
+        ch = upd["challenge"]
+        if not ch.get("title") or not ch.get("goal_pages"):
+            raise HTTPException(status_code=400, detail="challenge_invalid")
+        prev = club.get("challenge") or {}
+        upd["challenge"] = {
+            "title": str(ch["title"]).strip(),
+            "goal_pages": int(ch["goal_pages"]),
+            "created_at": now_utc().isoformat(),
+            "progress": prev.get("progress", {}),
+        }
     if upd:
         await db.clubs.update_one({"club_id": club_id}, {"$set": upd})
+    return await get_club(club_id, user)
+
+
+@api.post("/clubs/{club_id}/challenge/progress")
+async def challenge_progress(club_id: str, body: ChallengeProgress, user=Depends(get_current_user)):
+    club = await _club_or_404(club_id, user["user_id"])
+    if not club.get("challenge"):
+        raise HTTPException(status_code=400, detail="no_challenge")
+    await db.clubs.update_one(
+        {"club_id": club_id},
+        {"$set": {f"challenge.progress.{user['user_id']}": body.pages}},
+    )
+    await log_reading_event(user["user_id"], 0)
     return await get_club(club_id, user)
 
 
@@ -1038,6 +1136,34 @@ async def review_flashcard(card_id: str, body: FlashReview, user=Depends(get_cur
 async def delete_flashcard(card_id: str, user=Depends(get_current_user)):
     await db.flashcards.delete_one({"card_id": card_id, "user_id": user["user_id"]})
     return {"ok": True}
+
+
+# ============ Statistiques de lecture ============
+@api.get("/stats/reading")
+async def reading_stats(user=Depends(get_current_user)):
+    events = await db.reading_events.find({"user_id": user["user_id"]}, {"_id": 0}).sort("day", -1).to_list(90)
+    by_day = {e["day"]: e for e in events}
+    today = now_utc().date()
+    # série de jours consécutifs (tolérance : la série tient si l'activité date d'hier)
+    streak = 0
+    d = today
+    if today.strftime("%Y-%m-%d") not in by_day:
+        d = today - timedelta(days=1)
+    while d.strftime("%Y-%m-%d") in by_day:
+        streak += 1
+        d -= timedelta(days=1)
+    # 7 derniers jours
+    week = []
+    for i in range(6, -1, -1):
+        day = today - timedelta(days=i)
+        k = day.strftime("%Y-%m-%d")
+        e = by_day.get(k)
+        week.append({"day": k, "label": ["lun", "mar", "mer", "jeu", "ven", "sam", "dim"][day.weekday()], "pages": (e or {}).get("pages", 0), "active": bool(e)})
+    week_pages = sum(w["pages"] for w in week)
+    month_prefix = today.strftime("%Y-%m")
+    active_month = len([k for k in by_day if k.startswith(month_prefix)])
+    total_pages = sum(e.get("pages", 0) for e in events)
+    return {"streak": streak, "week": week, "week_pages": week_pages, "active_days_month": active_month, "total_pages": total_pages}
 
 
 # ============ Home feed (public quotes) ============

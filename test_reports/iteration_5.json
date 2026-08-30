@@ -1,0 +1,54 @@
+{
+  "summary": "Iteration 5 backend + frontend testing. Backend 15/15 PASS (test_iteration5.py) covering books search + ISBN (Google + Open Library fallback + 404), POST /api/books year field, clubs challenge PATCH/POST progress with 400/403 rules and leaderboard, stats/reading shape + effects (quote creation marks today active, PATCH progress_page increments week_pages). Frontend: (A) tab-capture BUG FIX verified — tapping the central camera button opens /capture on both first tap and after close→reopen. (D+E) profile shows reading-stats card (streak, 7 bars) AND real stats numbers (1 livre, 1 citation, 0 tableaux, 3 themes) — not zeros anymore, iter-4 regression is fixed. Dark mode toggle works: profile bg goes rgb(210,226,236) → rgb(45,25,19) (espresso), toggle-back restores light bg. Club challenge card renders on Club Candide with Objectif Candide 150p, updating challenge-my-pages to 90 immediately reflects on the leaderboard (90 p.). CRITICAL BUG DETECTED: navigating to /library throws Uncaught ReferenceError 'styles is not defined at BookCard' (screen text visibly shows the RN red-screen error overlay). This is a code-scope bug in /app/frontend/app/(tabs)/library.tsx — the BookCard sub-component (declared OUTSIDE Library) references `styles.card`, `styles.cover`, etc. but `styles` is only created via `useStyles(makeStyles)` inside the Library component. Any book render crashes. This is NOT dark-mode specific — it will crash in LIGHT mode too as soon as there is ≥1 book to render. Since user has 1 Candide book, /library is broken today. Backend /api/books/search returns 0 results for 'alchimiste' from this container's IP because Google Books rate-limits (429) — endpoint code is correct; frontend correctly shows the title-empty message + manual-book fallback. ISBN fallback via Open Library works (verified: 9782070368228 → source=openlibrary).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/books/search?q=...", "issue": "From this container the Google Books API returns HTTP 429 (rate limit) → endpoint returns empty {results:[]}. Endpoint code is correct. No fallback to Open Library on the free-text search (only ISBN has fallback). Consider adding an Open Library search fallback for resilience in production too."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "(tabs)/library.tsx — BookCard", "issue": "Uncaught ReferenceError: 'styles is not defined at BookCard'. BookCard is declared at module scope (line 33) but references styles.card/cover/coverInitial/badge/statusMeta/title/author/progressBar/progressFill/progressText/footer which are only created via useStyles(makeStyles) INSIDE the Library() component (line 68). Any book in the list crashes rendering. Applies in BOTH light and dark modes — the tester noticed it during dark-mode nav but it is not dark-specific. Fix: either move BookCard inside Library() so it closes over `styles`, or call `const styles = useStyles(makeStyles)` at the top of BookCard, or pass styles as prop. Reference: /app/frontend/app/(tabs)/library.tsx:33-64", "testID": "screen-library", "priority": "CRITICAL"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "profile.tsx (dark)", "issues": ["Dark mode background (espresso #2D1913) and creme text render well; reading-stats card readable; premium card still uses bisque which stays warm on dark, good contrast."]},
+      {"screen": "club/[id].tsx", "issues": ["Défi de lecture section renders with progress bar, my_pages update reflected instantly. Owner sees an inline edit pencil (no separate club-set-challenge button once challenge exists — matches spec)."]}
+    ],
+    "react_native_issues": [
+      {"component": "quote/[id].tsx offscreen ShareQuoteCard View", "issue": "Carry-over warning: props.pointerEvents deprecated. Not addressed in iterations 2/3/4. Reference: /app/frontend/app/quote/[id].tsx"},
+      {"component": "package.json expo-av", "issue": "Deprecated 'expo-av' still declared. Migrate to expo-audio + expo-video per Expo SDK 52+. Carry-over from iter 4. Reference: /app/frontend/package.json"}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration5.py",
+    "/app/test_reports/pytest/iteration5.xml"
+  ],
+  "action_items": [
+    "CRITICAL: Fix (tabs)/library.tsx BookCard scope error. Simplest fix — move BookCard inside Library() component so it closes over the `styles` returned by useStyles(makeStyles), OR add `const styles = useStyles(makeStyles);` inside BookCard itself. Currently /library shows a red-screen 'styles is not defined' error whenever there is ≥1 book to render.",
+    "Consider adding an Open Library free-text search fallback in /api/books/search so results are not empty when Google Books rate-limits.",
+    "(carry-over) Replace deprecated pointerEvents prop with style.pointerEvents in /app/frontend/app/quote/[id].tsx offscreen ShareQuoteCard.",
+    "(carry-over) Replace expo-av in package.json with expo-audio + expo-video."
+  ],
+  "critical_code_review_comments": [
+    "server.py::search_isbn correctly falls back to Open Library when Google Books returns no items, and enriches with author lookup from /authors/{key}.json. Returns 404 with detail 'isbn_not_found' when both sources fail — verified end-to-end.",
+    "server.py::patch_club challenge branch validates title + goal_pages (400 challenge_invalid), preserves prior progress via prev.get('progress',{}), stamps created_at, and is properly owner-gated (403 non-owner). Solid.",
+    "server.py::challenge_progress correctly rejects with 400 'no_challenge' when club has no challenge, 403 via _club_or_404 when the caller is not a member. Progress stored under challenge.progress.<uid> using dotted $set — leaderboard rebuilt on GET.",
+    "server.py::log_reading_event is upsert with $inc pages/actions on today's day-key. Called from POST /quotes, PATCH /books progress_page (delta only), and POST /clubs/{id}/challenge/progress (0-page action to mark 'active'). Clean.",
+    "server.py::reading_stats correctly builds a 7-item week array (oldest→today), computes streak with 1-day tolerance (streak still counts if today has no activity but yesterday does), and active_days_month. Sound implementation.",
+    "(tabs)/library.tsx — BookCard uses `styles.*` but `styles` is scoped inside Library(). This is a scope bug that predates dark mode; the makeStyles refactor probably removed the module-level `const styles = StyleSheet.create({...})` that used to exist. Any book rendered crashes with ReferenceError.",
+    "(tabs)/_layout.tsx — CaptureTabButton correctly routes to /capture; tab-capture button hitSlop and translateY -12 look good. Bug-fix verified on both first tap and reopen.",
+    "themeCtx.tsx — clean provider using AsyncStorage; darkColors palette swaps espresso/creme cleanly. useStyles(factory) memoizes on colors — good."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration5.py (created — 15 tests, all pass)",
+    "/app/test_reports/pytest/iteration5.xml (generated)",
+    "/app/test_reports/iteration_5.json (this file)"
+  ],
+  "success_rate": {"backend": "100% (15/15 iteration 5 tests)", "frontend": "83% — Test A (tab-capture bug fix), D (reading-stats card + real stats numbers), E (dark toggle + persistence + toggle-back), F (club challenge leaderboard update) all PASS. Test B (add-book search 'alchimiste') FALLS BACK to title-empty because Google Books rate-limits the container (not a frontend bug). Test dark-mode navigation exposed a CRITICAL library.tsx BookCard scope bug — /library is broken."},
+  "seed_data_creation": "Reused test.manent@example.com (Léa) as requested. During test-run I updated challenge-my-pages via UI from the previous 42 → 90 for Léa on Club Candide (cl_e0b27822964b4fb3). Backend test fixtures create/destroy their own TEST_ClubIt5 / TEST_YearBook / TEST_StatsBook / TEST_ProgBook artefacts. Left the primary test account in LIGHT mode (toggled back from dark at end of run) and NON-premium.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 5 backend fully passing (15/15). ONE CRITICAL frontend bug remains: /app/frontend/app/(tabs)/library.tsx BookCard references `styles.*` from outside the Library() component where the useStyles(makeStyles) hook is called — Uncaught ReferenceError at BookCard render. Applies to both light and dark modes as soon as there is ≥1 book. To reproduce: login as Léa (test.manent@example.com/Test1234!), tap 'Bibliothèque' tab. Fix suggestion in action_items. All other iteration-5 flows (tab-capture, dark toggle+persistence, club challenge leaderboard, reading stats, ISBN Open Library fallback) verified working. After the library.tsx fix is applied, re-run: pytest /app/backend/tests/test_iteration5.py -v (should stay 15/15) and re-navigate /library in both modes. Note: /api/books/search returns empty from this container due to Google Books 429; production likely fine.",
+  "rca_of_issue": "RCA — /library crash: /app/frontend/app/(tabs)/library.tsx declares `function BookCard(...)` at module scope (line 33), but the `styles` object is created via `const styles = useStyles(makeStyles)` INSIDE the Library() function component (line 68). BookCard has no `styles` in its closure/lexical scope, so `styles.card` on line 40 throws ReferenceError. The `makeStyles(colors) => StyleSheet.create({...})` factory pattern was likely introduced during the light→dark refactor, replacing an old module-level `const styles = StyleSheet.create({...})` — during that refactor BookCard was not updated. Reproduction: open /library after logging in with any account that owns ≥1 book (e.g., Léa/Candide). Mitigation options: (1) Move `function BookCard(...)` INSIDE `export default function Library()` so it closes over the local `styles` (simplest, no prop-drilling). (2) At the top of BookCard, add `const styles = useStyles(makeStyles);`. (3) Pass `styles` as a prop from Library. Recommend option (1) — minimal diff, keeps the styles memoization at one call site."
+}

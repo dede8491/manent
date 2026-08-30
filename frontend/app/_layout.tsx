@@ -9,7 +9,7 @@ import { StatusBar } from 'expo-status-bar';
 
 import { useIconFonts } from '@/src/hooks/use-icon-fonts';
 import { AuthProvider, useAuth } from '@/src/auth';
-import { colors } from '@/src/theme';
+import { ThemeProvider, useColors, useScheme } from '@/src/themeCtx';
 
 LogBox.ignoreAllLogs(true);
 SplashScreen.preventAutoHideAsync();
@@ -18,6 +18,7 @@ function NavGate() {
   const { user, loading } = useAuth();
   const segments = useSegments() as string[];
   const router = useRouter();
+  const colors = useColors();
 
   useEffect(() => {
     if (loading) return;
@@ -39,6 +40,21 @@ function NavGate() {
   return <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.glacier } }} />;
 }
 
+function ThemedApp() {
+  const colors = useColors();
+  const scheme = useScheme();
+  return (
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.glacier }}>
+      <SafeAreaProvider>
+        <AuthProvider>
+          <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+          <NavGate />
+        </AuthProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
+  );
+}
+
 export default function RootLayout() {
   const [iconsLoaded, iconsError] = useIconFonts();
   const [fontsLoaded, fontsError] = useFonts({
@@ -57,13 +73,8 @@ export default function RootLayout() {
   if (!ready) return null;
 
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.glacier }}>
-      <SafeAreaProvider>
-        <AuthProvider>
-          <StatusBar style="dark" />
-          <NavGate />
-        </AuthProvider>
-      </SafeAreaProvider>
-    </GestureHandlerRootView>
+    <ThemeProvider>
+      <ThemedApp />
+    </ThemeProvider>
   );
 }

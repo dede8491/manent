@@ -3,13 +3,16 @@ import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-nati
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { colors, fonts, radius, spacing } from '@/src/theme';
+import { fonts, radius, spacing } from '@/src/theme';
+import { useColors, useStyles } from '@/src/themeCtx';
 import { api } from '@/src/api';
 import { PrimaryButton } from '@/src/components/Button';
 
 type Card = { card_id: string; question: string; answer: string; due: string };
 
 export default function FlashcardsReview() {
+  const colors = useColors();
+  const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { bookId } = useLocalSearchParams<{ bookId: string }>();
@@ -103,7 +106,7 @@ export default function FlashcardsReview() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, backgroundColor: colors.glacier },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 2, textTransform: 'uppercase' },

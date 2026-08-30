@@ -2,11 +2,14 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, fonts, spacing } from '@/src/theme';
+import { fonts, spacing } from '@/src/theme';
+import { useColors, useStyles } from '@/src/themeCtx';
 import { PrimaryButton, GhostButton } from '@/src/components/Button';
 import { Wordmark, Monogram } from '@/src/components/Wordmark';
 
 export default function Welcome() {
+  const colors = useColors();
+  const styles = useStyles(makeStyles);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   return (
@@ -29,7 +32,7 @@ export default function Welcome() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   c: { flex: 1, backgroundColor: colors.glacier, paddingHorizontal: spacing.xl },
   top: { alignItems: 'center', gap: spacing.sm },
   middle: { flex: 1, justifyContent: 'center', alignItems: 'center' },

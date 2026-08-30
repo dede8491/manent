@@ -3,11 +3,14 @@ import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Modal, Keyboa
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { colors, fonts, radius, spacing } from '@/src/theme';
+import { fonts, radius, spacing } from '@/src/theme';
+import { useColors, useStyles } from '@/src/themeCtx';
 import { api } from '@/src/api';
 import { PrimaryButton, GhostButton } from '@/src/components/Button';
 
 export default function ClubDetail() {
+  const colors = useColors();
+  const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -20,6 +23,10 @@ export default function ClubDetail() {
   const [passageModal, setPassageModal] = useState(false);
   const [passageText, setPassageText] = useState('');
   const [passagePage, setPassagePage] = useState('');
+  const [challengeModal, setChallengeModal] = useState(false);
+  const [chTitle, setChTitle] = useState('');
+  const [chGoal, setChGoal] = useState('');
+  const [myPages, setMyPages] = useState('');
   const scrollRef = useRef<ScrollView>(null);
 
   const load = useCallback(async () => {
@@ -78,6 +85,24 @@ export default function ClubDetail() {
   const leave = async () => {
     await api(`/clubs/${id}/leave`, { method: 'POST' });
     router.back();
+  };
+
+  const saveChallenge = async () => {
+    if (!chTitle.trim() || !chGoal) return;
+    const c = await api<any>(`/clubs/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ challenge: { title: chTitle.trim(), goal_pages: parseInt(chGoal, 10) } }),
+    });
+    setClub(c);
+    setChallengeModal(false); setChTitle(''); setChGoal('');
+  };
+
+  const saveMyProgress = async () => {
+    const pages = parseInt(myPages, 10);
+    if (isNaN(pages) || pages < 0) return;
+    const c = await api<any>(`/clubs/${id}/challenge/progress`, { method: 'POST', body: JSON.stringify({ pages }) });
+    setClub(c);
+    setMyPages('');
   };
 
   if (!club) {
@@ -156,6 +181,55 @@ export default function ClubDetail() {
           <Text style={styles.emptyText}>Aucun passage proposé cette semaine.</Text>
         )}
 
+        <Text style={styles.sectionLabel}>Défi de lecture</Text>
+        {club.challenge ? (
+          <View style={styles.challengeCard} testID="club-challenge">
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.challengeTitle}>{club.challenge.title}</Text>
+                <Text style={styles.challengeGoal}>Objectif : {club.challenge.goal_pages} pages</Text>
+              </View>
+              {club.is_owner && (
+                <Pressable testID="club-edit-challenge" onPress={() => { setChTitle(club.challenge.title); setChGoal(String(club.challenge.goal_pages)); setChallengeModal(true); }} hitSlop={8}>
+                  <Feather name="edit-2" size={15} color={colors.clay} />
+                </Pressable>
+              )}
+            </View>
+            <View style={{ marginTop: spacing.md, gap: spacing.sm }}>
+              {club.challenge.leaderboard?.map((m: any, i: number) => (
+                <View key={m.handle + i} style={styles.rankRow}>
+                  <Text style={styles.rankNum}>{i + 1}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.rankName, m.is_me && { fontFamily: fonts.bodyMedium }]}>{m.pseudo}{m.is_me ? ' (toi)' : ''}</Text>
+                    <View style={styles.rankBar}><View style={[styles.rankFill, { width: `${m.pct}%` }]} /></View>
+                  </View>
+                  <Text style={styles.rankPages}>{m.pages} p.</Text>
+                </View>
+              ))}
+            </View>
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: spacing.md }}>
+              <TextInput
+                testID="challenge-my-pages"
+                value={myPages} onChangeText={setMyPages}
+                keyboardType="number-pad"
+                placeholder={`Ta page actuelle (${club.challenge.my_pages || 0})`}
+                placeholderTextColor={colors.clay}
+                style={styles.progressInput}
+              />
+              <Pressable testID="challenge-save-progress" onPress={saveMyProgress} disabled={!myPages} style={[styles.progressBtn, !myPages && { opacity: 0.5 }]}>
+                <Feather name="check" size={18} color={colors.creme} />
+              </Pressable>
+            </View>
+          </View>
+        ) : club.is_owner ? (
+          <Pressable testID="club-set-challenge" onPress={() => setChallengeModal(true)} style={styles.dashedBtn}>
+            <Feather name="flag" size={18} color={colors.chambray} />
+            <Text style={styles.dashedBtnText}>Lancer un défi de lecture</Text>
+          </Pressable>
+        ) : (
+          <Text style={styles.emptyText}>Aucun défi en cours.</Text>
+        )}
+
         <Text style={styles.sectionLabel}>Discussion</Text>
         {messages.length === 0 ? (
           <Text style={styles.emptyText}>Lance la conversation — premier mot sur la lecture ?</Text>
@@ -212,6 +286,20 @@ export default function ClubDetail() {
         </View>
       </Modal>
 
+      <Modal visible={challengeModal} transparent animationType="slide" onRequestClose={() => setChallengeModal(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
+          <View style={[styles.modal, { paddingBottom: insets.bottom + spacing.lg }]}>
+            <View style={styles.grabber} />
+            <Text style={styles.modalTitle}>Défi de lecture</Text>
+            <TextInput testID="challenge-title" value={chTitle} onChangeText={setChTitle} placeholder="Nom du défi (ex: Finir Candide en mai)" placeholderTextColor={colors.clay} style={styles.modalInput} />
+            <TextInput testID="challenge-goal" value={chGoal} onChangeText={setChGoal} keyboardType="number-pad" placeholder="Objectif en pages (ex: 150)" placeholderTextColor={colors.clay} style={styles.modalInput} />
+            <View style={{ height: spacing.md }} />
+            <PrimaryButton testID="challenge-save" title="Lancer le défi" onPress={saveChallenge} disabled={!chTitle.trim() || !chGoal} />
+            <GhostButton title="Annuler" onPress={() => setChallengeModal(false)} />
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
       <Modal visible={passageModal} transparent animationType="slide" onRequestClose={() => setPassageModal(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
           <View style={[styles.modal, { paddingBottom: insets.bottom + spacing.lg }]}>
@@ -229,7 +317,7 @@ export default function ClubDetail() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSoft, backgroundColor: colors.glacier },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontFamily: fonts.displayMedium, fontSize: 19, color: colors.espresso, flex: 1, textAlign: 'center', marginHorizontal: spacing.sm },
@@ -252,6 +340,17 @@ const styles = StyleSheet.create({
   passageText: { fontFamily: fonts.display, fontSize: 19, color: colors.espresso, lineHeight: 27 },
   passageMeta: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.clay, letterSpacing: 1.5, marginTop: spacing.md },
   passageEdit: { position: 'absolute', top: spacing.md, right: spacing.md },
+  challengeCard: { backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },
+  challengeTitle: { fontFamily: fonts.displayMedium, fontSize: 19, color: colors.espresso },
+  challengeGoal: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase', marginTop: 2 },
+  rankRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  rankNum: { fontFamily: fonts.displayMedium, fontSize: 18, color: colors.clay, width: 20, textAlign: 'center' },
+  rankName: { fontFamily: fonts.body, fontSize: 13, color: colors.espresso },
+  rankBar: { height: 4, backgroundColor: colors.glacier, borderRadius: 2, overflow: 'hidden', marginTop: 3 },
+  rankFill: { height: 4, backgroundColor: colors.chambray },
+  rankPages: { fontFamily: fonts.bodyMedium, fontSize: 12, color: colors.espresso, width: 44, textAlign: 'right' },
+  progressInput: { flex: 1, height: 44, borderWidth: 1, borderColor: colors.borderSoft, borderRadius: radius.md, paddingHorizontal: spacing.md, fontFamily: fonts.body, fontSize: 14, color: colors.espresso, backgroundColor: colors.glacier },
+  progressBtn: { width: 44, height: 44, borderRadius: radius.md, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },
   msg: { alignSelf: 'flex-start', maxWidth: '82%', backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },
   msgMine: { alignSelf: 'flex-end', backgroundColor: colors.bisque, borderColor: colors.bisque },
   msgAuthor: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.chambray, marginBottom: 2 },

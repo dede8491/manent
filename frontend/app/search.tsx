@@ -3,13 +3,16 @@ import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, ActivityIndic
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { colors, fonts, radius, spacing } from '@/src/theme';
+import { fonts, radius, spacing } from '@/src/theme';
+import { useColors, useStyles } from '@/src/themeCtx';
 import { QuoteCard, Quote } from '@/src/components/QuoteCard';
 import { api } from '@/src/api';
 
 type Scope = 'all' | 'quotes' | 'books';
 
 export default function SearchScreen() {
+  const colors = useColors();
+  const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [q, setQ] = useState('');
@@ -161,7 +164,7 @@ export default function SearchScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   header: { paddingBottom: spacing.sm, backgroundColor: colors.glacier, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSoft },
   searchRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, gap: 4 },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },

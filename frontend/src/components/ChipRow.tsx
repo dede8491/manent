@@ -1,10 +1,12 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
-import { colors, fonts, radius, spacing } from '@/src/theme';
+import { fonts, radius, spacing } from '@/src/theme';
+import { useColors, useStyles } from '@/src/themeCtx';
 
 export function ChipRow<T extends string>({ items, selected, onSelect, testID }: {
   items: readonly T[]; selected: T | null; onSelect: (v: T) => void; testID?: string;
 }) {
+  const styles = useStyles(makeStyles);
   return (
     <View style={styles.wrap} testID={testID}>
       <ScrollView
@@ -30,7 +32,7 @@ export function ChipRow<T extends string>({ items, selected, onSelect, testID }:
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   wrap: { height: 56, justifyContent: 'center' },
   chip: {
     height: 36,

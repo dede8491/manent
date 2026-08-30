@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { colors, fonts, radius, spacing } from '@/src/theme';
+import { fonts, radius, spacing } from '@/src/theme';
+import { useColors, useStyles } from '@/src/themeCtx';
 
 export type Sheet = {
   author_bio?: string;
@@ -11,6 +12,8 @@ export type Sheet = {
 };
 
 export function StudySheet({ sheet, onSave }: { sheet?: Sheet | null; onSave: (s: Sheet) => void }) {
+  const colors = useColors();
+  const styles = useStyles(makeStyles);
   const [authorBio, setAuthorBio] = useState(sheet?.author_bio || '');
   const [summary, setSummary] = useState(sheet?.summary || '');
   const [characters, setCharacters] = useState<{ name: string; description: string }[]>(sheet?.characters || []);
@@ -125,7 +128,7 @@ export function StudySheet({ sheet, onSave }: { sheet?: Sheet | null; onSave: (s
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   card: { backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.lg },
   headRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
   headTitle: { fontFamily: fonts.displayMedium, fontSize: 22, color: colors.espresso },

@@ -1,0 +1,37 @@
+{
+  "summary": "Iteration 6 — targeted RETEST of the CRITICAL library.tsx BookCard scope bug reported in iteration 5. Fix applied by main agent: added `const styles = useStyles(makeStyles);` at the top of BookCard (line 34 of /app/frontend/app/(tabs)/library.tsx). Retest performed with Léa (test.manent@example.com/Test1234!) on the public preview URL. RESULT: ALL 4 retest cases PASS. (1) Light-mode /library renders with 1 book card visible for Candide by Voltaire, badge ÉTUDES, status EN COURS, progress 150/150 p. · 100%, 1 CITATION — no red-screen, no ReferenceError. (2) Dark toggle via profile→row-darkmode flips background rgb(210,226,236)→rgb(45,25,19); returning to /library in dark shows the same book card rendered correctly against the dark background; tapping the card opens /book/bk_9104fefe83cf4e40 (Candide) with fiche scolaire, personnages, résumé all visible — no crash. (3) Toggling back via row-darkmode restores light bg rgb(210,226,236) on profile — persistence intact. (4) Sanity 30s: /home renders (screen-home present), tab-capture button routes to /capture as expected. No new console errors observed on library screen (only the carry-over pointerEvents deprecation warning from quote/[id].tsx offscreen ShareQuoteCard, non-blocking). Account left in LIGHT mode, non-premium as requested. No backend testing performed (per request).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "quote/[id].tsx offscreen ShareQuoteCard", "issue": "Carry-over deprecation warning: props.pointerEvents is deprecated, use style.pointerEvents. Non-blocking, visible in console on multiple screens. Reference: /app/frontend/app/quote/[id].tsx"},
+      {"component": "package.json expo-av", "issue": "Carry-over: deprecated 'expo-av' package still declared. Migrate to expo-audio + expo-video for Expo SDK 52+. Reference: /app/frontend/package.json"}
+    ]
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_5.json (original bug report)",
+    "/app/test_reports/iteration_6.json (this retest)"
+  ],
+  "action_items": [
+    "(carry-over, low priority) Replace deprecated `pointerEvents` prop with style.pointerEvents in /app/frontend/app/quote/[id].tsx offscreen ShareQuoteCard.",
+    "(carry-over, low priority) Replace expo-av dependency with expo-audio + expo-video in /app/frontend/package.json."
+  ],
+  "critical_code_review_comments": [
+    "(tabs)/library.tsx — BookCard now calls `const styles = useStyles(makeStyles);` at its top (line 34). This resolves the ReferenceError by giving BookCard its own memoized styles closure. The double useStyles call (one in BookCard, one in Library) is fine because useStyles(factory) memoizes on colors — no perf concern for a single-book list.",
+    "Alternative would have been to move BookCard inside Library() to avoid duplicating the hook call, but the applied fix is minimal-diff, safe, and correct."
+  ],
+  "updated_files": [
+    "/app/test_reports/iteration_6.json (this file)"
+  ],
+  "success_rate": {"backend": "N/A (not requested)", "frontend": "100% — all 4 retest cases PASS: light-library render, dark-toggle + dark-library render + book fiche open in dark, toggle-back to light, tab-capture→/capture sanity."},
+  "seed_data_creation": "None. Reused existing Léa account and existing Candide book (bk_9104fefe83cf4e40). Left account in LIGHT mode and non-premium at end of run.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 5 CRITICAL library.tsx BookCard scope bug is FIXED and verified in iteration 6. /library now renders correctly in both light and dark modes; book detail opens from the card. Remaining carry-over items are non-blocking deprecation warnings (pointerEvents prop on quote/[id].tsx ShareQuoteCard, and expo-av package). No further testing required for this feature. If a new iteration starts, backend iteration-5 tests at /app/backend/tests/test_iteration5.py should still be 15/15.",
+  "rca_of_issue": "RCA confirmed & fix verified — Root cause was BookCard being declared at module scope while `styles` was created via useStyles(makeStyles) INSIDE Library(), so BookCard had no `styles` in its closure. Main agent applied option (2) from iteration-5 recommendations: added `const styles = useStyles(makeStyles);` at the top of BookCard. Reproduction attempted post-fix (login as Léa → tap Bibliothèque tab, both light and dark modes) — no ReferenceError observed, book cards render cleanly, book detail navigation works. Fix validated end-to-end."
+}

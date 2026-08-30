@@ -3,18 +3,20 @@ import { Tabs, useRouter } from 'expo-router';
 import { View, Pressable, StyleSheet, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors } from '@/src/theme';
+import { useColors, useStyles } from '@/src/themeCtx';
 
 function CaptureTabButton() {
   const router = useRouter();
+  const styles = useStyles(makeStyles);
   return (
     <Pressable
       testID="tab-capture"
       onPress={() => router.push('/capture')}
+      hitSlop={{ top: 20, bottom: 8, left: 12, right: 12 }}
       style={styles.captureBtn}
     >
       <View style={styles.captureInner}>
-        <Feather name="camera" size={22} color={colors.creme} />
+        <Feather name="camera" size={22} color="#F5EDE4" />
       </View>
     </Pressable>
   );
@@ -22,6 +24,7 @@ function CaptureTabButton() {
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
+  const colors = useColors();
   const tabBarHeight = 60;
   return (
     <Tabs
@@ -43,7 +46,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="home" options={{ tabBarIcon: ({ color, focused }) => (
         <Feather name={focused ? 'grid' : 'grid'} size={22} color={color} />) }} />
       <Tabs.Screen name="library" options={{ tabBarIcon: ({ color }) => <Feather name="book" size={22} color={color} /> }} />
-      <Tabs.Screen name="capture" options={{
+      <Tabs.Screen name="capture-tab" options={{
         tabBarButton: () => <CaptureTabButton />,
       }} />
       <Tabs.Screen name="community" options={{ tabBarIcon: ({ color }) => <Feather name="bookmark" size={22} color={color} /> }} />
@@ -52,17 +55,18 @@ export default function TabsLayout() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   captureBtn: {
-    top: -18,
+    flex: 1,
+    minWidth: 64,
     justifyContent: 'center',
     alignItems: 'center',
-    width: 60,
   },
   captureInner: {
-    width: 56, height: 56, borderRadius: 28,
+    width: 54, height: 54, borderRadius: 27,
     backgroundColor: colors.chambray,
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 3, borderColor: colors.creme,
+    transform: [{ translateY: -12 }],
   },
 });

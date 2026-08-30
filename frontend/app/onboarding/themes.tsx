@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, fonts, radius, spacing } from '@/src/theme';
+import { fonts, radius, spacing } from '@/src/theme';
+import { useColors, useStyles } from '@/src/themeCtx';
 import { PrimaryButton } from '@/src/components/Button';
 import { api } from '@/src/api';
 import { useAuth } from '@/src/auth';
@@ -14,6 +15,8 @@ const MODES = [
 ] as const;
 
 export default function Themes() {
+  const colors = useColors();
+  const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { updateUser } = useAuth();
@@ -86,7 +89,7 @@ export default function Themes() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   c: { flex: 1, backgroundColor: colors.glacier },
   step: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase' },
   title: { fontFamily: fonts.displayMedium, fontSize: 30, color: colors.espresso, marginTop: spacing.sm },

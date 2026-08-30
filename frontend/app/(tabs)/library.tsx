@@ -3,7 +3,8 @@ import { View, Text, StyleSheet, FlatList, Pressable, ScrollView } from 'react-n
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { colors, fonts, radius, spacing } from '@/src/theme';
+import { fonts, radius, spacing } from '@/src/theme';
+import { useColors, useStyles } from '@/src/themeCtx';
 import { api } from '@/src/api';
 
 type Book = {
@@ -30,6 +31,7 @@ const FILTERS = [
 ];
 
 function BookCard({ b, onPress }: { b: Book; onPress: () => void }) {
+  const styles = useStyles(makeStyles);
   const isWattpad = b.type === 'wattpad';
   const isEtude = b.type === 'etude';
   const total = isWattpad ? b.chapters : b.pages;
@@ -63,6 +65,8 @@ function BookCard({ b, onPress }: { b: Book; onPress: () => void }) {
 }
 
 export default function Library() {
+  const colors = useColors();
+  const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [filter, setFilter] = useState<string | null>(null);
@@ -116,7 +120,7 @@ export default function Library() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   header: { paddingBottom: spacing.sm, backgroundColor: colors.glacier, gap: spacing.md },
   headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl },
   h1: { fontFamily: fonts.displayMedium, fontSize: 30, color: colors.espresso },

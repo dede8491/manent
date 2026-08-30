@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
-import { Feather } from '@expo/vector-icons';
-import { colors, fonts, radius, spacing } from '@/src/theme';
+import { fonts, radius, spacing } from '@/src/theme';
+import { useColors, useStyles } from '@/src/themeCtx';
 
 export type Quote = {
   quote_id: string;
@@ -15,6 +15,7 @@ export type Quote = {
 };
 
 export function QuoteCard({ quote, onPress, compact, onPressAuthor }: { quote: Quote; onPress?: () => void; compact?: boolean; onPressAuthor?: () => void }) {
+  const styles = useStyles(makeStyles);
   const isWattpad = quote.book?.type === 'wattpad';
   const label = isWattpad ? 'CHAP.' : 'PAGE';
   const num = isWattpad ? quote.chapter : quote.page;
@@ -48,7 +49,7 @@ export function QuoteCard({ quote, onPress, compact, onPressAuthor }: { quote: Q
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   card: {
     backgroundColor: colors.bisque,
     borderRadius: radius.md,

@@ -3,7 +3,8 @@ import { View, Text, StyleSheet, FlatList, Pressable, TextInput, Modal, Keyboard
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { colors, fonts, radius, spacing } from '@/src/theme';
+import { fonts, radius, spacing } from '@/src/theme';
+import { useColors, useStyles } from '@/src/themeCtx';
 import { api } from '@/src/api';
 import { PrimaryButton, GhostButton } from '@/src/components/Button';
 
@@ -17,6 +18,8 @@ type Board = {
 };
 
 export default function Community() {
+  const colors = useColors();
+  const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const [tab, setTab] = useState<'boards' | 'clubs'>('boards');
@@ -223,7 +226,7 @@ export default function Community() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   header: { paddingHorizontal: spacing.xl, paddingBottom: spacing.md, backgroundColor: colors.glacier },
   h1: { fontFamily: fonts.displayMedium, fontSize: 30, color: colors.espresso },
   sub: { fontFamily: fonts.body, fontSize: 14, color: colors.clay, marginTop: 4 },

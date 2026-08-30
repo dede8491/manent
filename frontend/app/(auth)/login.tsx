@@ -3,11 +3,14 @@ import { View, Text, StyleSheet, TextInput, KeyboardAvoidingView, Platform, Scro
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { colors, fonts, radius, spacing } from '@/src/theme';
+import { fonts, radius, spacing } from '@/src/theme';
+import { useColors, useStyles } from '@/src/themeCtx';
 import { PrimaryButton, GhostButton } from '@/src/components/Button';
 import { useAuth } from '@/src/auth';
 
 export default function Login() {
+  const colors = useColors();
+  const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { signIn } = useAuth();
@@ -46,7 +49,7 @@ export default function Login() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   c: { paddingHorizontal: spacing.xl },
   back: { width: 40, height: 40, marginLeft: -8, alignItems: 'flex-start', justifyContent: 'center', marginBottom: spacing.md },
   title: { fontFamily: fonts.displayMedium, fontSize: 30, color: colors.espresso },
