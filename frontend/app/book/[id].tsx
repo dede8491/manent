@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Platform, Alert, Linking, Modal } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
@@ -14,12 +14,13 @@ import { toBase64 } from '@/src/image';
 import { buildSheetHtml } from '@/src/sheetPdf';
 import { api, getCachedToken } from '@/src/api';
 import { BookCover } from '@/src/components/BookCover';
-import { useT } from '@/src/i18n';
+import { useT, useI18n } from '@/src/i18n';
 import { InfoTooltip } from '@/src/components/InfoTooltip';
 import ManentLoader from '@/src/components/ManentLoader';
 
 export default function BookDetail() {
   const t = useT();
+  const { lang } = useI18n();
   const colors = useColors();
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
@@ -42,6 +43,11 @@ export default function BookDetail() {
   const [pageModal, setPageModal] = useState<null | 'progress' | 'total' | 'start'>(null);
   const [pageInput, setPageInput] = useState('');
   const [finishedBanner, setFinishedBanner] = useState(false);
+  const [summary, setSummary] = useState<string | null>(null);
+  const [sumExpanded, setSumExpanded] = useState(false);
+  const [sumModal, setSumModal] = useState(false);
+  const [sumInput, setSumInput] = useState('');
+  const [sumSaving, setSumSaving] = useState(false);
 
   const openDelete = async () => {
     setConfirmDelete(true);
@@ -150,6 +156,29 @@ export default function BookDetail() {
       }
     })();
   }, [id]));
+
+  // Résumé du livre (résumé manuel prioritaire, sinon Google Books → Open Library, en français)
+  useEffect(() => {
+    if (!book?.title || book.summary || book.type === 'wattpad') return;
+    let alive = true;
+    (async () => {
+      try {
+        const r = await api<{ summary: string | null }>(`/books-summary?title=${encodeURIComponent(book.title)}&author=${encodeURIComponent(book.author || '')}&lang=${lang}`);
+        if (alive && r.summary) setSummary(r.summary);
+      } catch {}
+    })();
+    return () => { alive = false; };
+  }, [book?.title, book?.summary, lang]);
+
+  const saveSummary = async () => {
+    if (sumSaving) return;
+    setSumSaving(true);
+    try {
+      const b = await api<any>(`/books/${id}`, { method: 'PATCH', body: JSON.stringify({ summary: sumInput.trim() }) });
+      setBook(b);
+      setSumModal(false);
+    } finally { setSumSaving(false); }
+  };
 
   const saveField = async (patch: any) => { await api(`/books/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }); };
   const addLesson = async () => {
@@ -328,6 +357,28 @@ export default function BookDetail() {
           </View>
         )}
 
+        {(book.summary || summary) ? (
+          <View style={styles.summaryBox} testID="book-summary">
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={styles.summaryLabel}>{t('Résumé')}</Text>
+              <Pressable testID="book-summary-edit" onPress={() => { setSumInput(book.summary || summary || ''); setSumModal(true); }} hitSlop={10}>
+                <Feather name="edit-2" size={13} color={colors.clay} />
+              </Pressable>
+            </View>
+            <Text style={styles.summaryText} numberOfLines={sumExpanded ? undefined : 4}>{book.summary || summary}</Text>
+            {(book.summary || summary || '').length > 180 && (
+              <Pressable testID="book-summary-toggle" onPress={() => setSumExpanded(!sumExpanded)} hitSlop={8}>
+                <Text style={styles.summaryMore}>{sumExpanded ? t('Réduire') : t('Lire la suite')}</Text>
+              </Pressable>
+            )}
+          </View>
+        ) : (
+          <Pressable testID="book-summary-add" onPress={() => { setSumInput(''); setSumModal(true); }} style={styles.addSummaryBtn}>
+            <Feather name="edit-2" size={13} color={colors.chambray} />
+            <Text style={styles.addSummaryText}>{t('Ajouter un résumé')}</Text>
+          </Pressable>
+        )}
+
         {!isWattpad && (
           <View style={{ marginTop: spacing.md }}>
             {detectedPage === null ? (
@@ -497,11 +548,40 @@ export default function BookDetail() {
           </View>
         </View>
       </Modal>
+
+      <Modal visible={sumModal} transparent animationType="slide" onRequestClose={() => setSumModal(false)}>
+        <View style={[styles.modalOverlay, { justifyContent: 'flex-end' }]}>
+          <View style={[styles.modalBox, { borderRadius: 0, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: insets.bottom + spacing.lg }]}>
+            <Text style={styles.modalTitle}>{t('Résumé du livre')}</Text>
+            <TextInput
+              testID="summary-modal-input"
+              value={sumInput} onChangeText={setSumInput}
+              multiline autoFocus
+              placeholder={t('La quatrième de couverture, ou tes propres mots…')}
+              placeholderTextColor={colors.clay}
+              style={styles.summaryInput}
+            />
+            <Pressable testID="summary-modal-save" onPress={saveSummary} disabled={sumSaving} style={[styles.detectConfirm, sumSaving && { opacity: 0.6 }]}>
+              <Text style={styles.photoBtnText}>{t('Enregistrer')}</Text>
+            </Pressable>
+            <Pressable testID="summary-modal-cancel" onPress={() => setSumModal(false)} style={[styles.cancelBtn, { marginTop: spacing.sm }]}>
+              <Text style={styles.cancelBtnText}>{t('Annuler')}</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
+  summaryBox: { marginTop: spacing.lg, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },
+  summaryLabel: { fontFamily: fonts.bodyMedium, fontSize: 10.5, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 },
+  summaryText: { fontFamily: fonts.body, fontSize: 13.5, color: colors.espresso, lineHeight: 20 },
+  summaryMore: { fontFamily: fonts.bodyMedium, fontSize: 12.5, color: colors.chambray, marginTop: 8 },
+  addSummaryBtn: { marginTop: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 44, borderRadius: radius.md, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.chambray, backgroundColor: colors.creme },
+  addSummaryText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.chambray },
+  summaryInput: { minHeight: 140, maxHeight: 260, borderWidth: 1, borderColor: colors.borderSoft, borderRadius: radius.md, padding: spacing.md, fontFamily: fonts.body, fontSize: 14, lineHeight: 20, color: colors.espresso, backgroundColor: colors.glacier, marginTop: spacing.md, textAlignVertical: 'top' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(58,33,25,0.55)', justifyContent: 'center', padding: spacing.xl },
   modalBox: { backgroundColor: colors.creme, borderRadius: 20, padding: spacing.xl },
   modalTitle: { fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso },

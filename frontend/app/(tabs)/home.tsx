@@ -13,6 +13,7 @@ import { Wordmark } from '@/src/components/Wordmark';
 import { BookCardFeed, AwardCard, CollectionCard, ResumeCard } from '@/src/components/FeedCards';
 import ManentLoader from '@/src/components/ManentLoader';
 import { InfoTooltip } from '@/src/components/InfoTooltip';
+import { WelcomeTour } from '@/src/components/WelcomeTour';
 import { useT } from '@/src/i18n';
 
 const BIRTH_PROMPT_KEY = 'manent_birth_prompted';
@@ -263,6 +264,8 @@ export default function Home() {
           </View>
         </View>
       </Modal>
+
+      {!birthModal && <WelcomeTour />}
     </View>
   );
 }

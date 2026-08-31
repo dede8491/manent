@@ -8,7 +8,7 @@ import { useColors, useStyles } from '@/src/themeCtx';
 import { QuoteCard, Quote } from '@/src/components/QuoteCard';
 import { api } from '@/src/api';
 import { BookCover } from '@/src/components/BookCover';
-import { useT } from '@/src/i18n';
+import { useT, useI18n } from '@/src/i18n';
 import ManentLoader from '@/src/components/ManentLoader';
 
 type Discover = {
@@ -22,6 +22,7 @@ type Discover = {
 
 export default function DiscoverBook() {
   const t = useT();
+  const { lang } = useI18n();
   const colors = useColors();
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
@@ -29,6 +30,7 @@ export default function DiscoverBook() {
   const { isbn } = useLocalSearchParams<{ isbn: string }>();
   const [data, setData] = useState<Discover | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [summary, setSummary] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -39,6 +41,18 @@ export default function DiscoverBook() {
       }
     })();
   }, [isbn]);
+
+  useEffect(() => {
+    if (!data?.book?.title) return;
+    let alive = true;
+    (async () => {
+      try {
+        const r = await api<{ summary: string | null }>(`/books-summary?title=${encodeURIComponent(data.book.title)}&author=${encodeURIComponent(data.book.author || '')}&lang=${lang}`);
+        if (alive && r.summary) setSummary(r.summary);
+      } catch {}
+    })();
+    return () => { alive = false; };
+  }, [data?.book?.title]);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.glacier }} testID="screen-discover">
@@ -108,6 +122,13 @@ export default function DiscoverBook() {
             </View>
           )}
 
+          {summary ? (
+            <View style={styles.summaryBox} testID="discover-summary">
+              <Text style={styles.sectionLabel}>{t('Résumé')}</Text>
+              <Text style={styles.summaryText}>{summary}</Text>
+            </View>
+          ) : null}
+
           <Text style={styles.sectionLabel}>{t('Ce que les lecteurs en retiennent')}</Text>
           {data.quotes.length === 0 ? (
             <Text style={styles.emptySub}>{t('Aucune citation publique pour ce livre — sois la première à en partager une.')}</Text>
@@ -125,6 +146,8 @@ export default function DiscoverBook() {
 }
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
+  summaryBox: { backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },
+  summaryText: { fontFamily: fonts.body, fontSize: 13.5, color: colors.espresso, lineHeight: 20 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, backgroundColor: colors.glacier },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 2, textTransform: 'uppercase' },

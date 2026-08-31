@@ -479,6 +479,7 @@ class BookPatch(BaseModel):
     status: Optional[Literal['a_lire', 'en_cours', 'termine']] = None
     rating: Optional[int] = None
     recap: Optional[str] = None
+    summary: Optional[str] = None
     lessons: Optional[List[str]] = None
     progress_page: Optional[int] = None
     progress_chapter: Optional[int] = None
@@ -612,6 +613,22 @@ async def list_books(status: Optional[str] = None, user=Depends(get_current_user
     # attach quote counts
     for b in books:
         b["quotes_count"] = await db.quotes.count_documents({"book_id": b["book_id"]})
+    # Couvertures manquantes : récupération en arrière-plan (max 5 par appel, réessai après 7 jours)
+    tried = 0
+    for b in books:
+        if tried >= 5:
+            break
+        if b.get("cover"):
+            continue
+        last = b.get("cover_checked_at")
+        if isinstance(last, datetime):
+            if last.tzinfo is None:
+                last = last.replace(tzinfo=timezone.utc)
+            if (now_utc() - last).days < 7:
+                continue
+        await db.books.update_one({"book_id": b["book_id"]}, {"$set": {"cover_checked_at": now_utc()}})
+        asyncio.create_task(_backfill_cover(b["book_id"], b.get("title"), b.get("author"), b.get("isbn")))
+        tried += 1
     return {"books": books}
 
 
@@ -1965,30 +1982,92 @@ async def discover_isbn(isbn: str, user=Depends(get_current_user)):
     return {"book": meta, "readers": readers, "avg_rating": avg_rating, "ratings_count": len(ratings), "quotes": quotes, "in_library": in_library}
 
 
-# ---- Synopsis (4e de couverture) d'un livre, avec cache ----
+# ---- Synopsis (4e de couverture) d'un livre, avec cache par langue ----
+_FR_STOPWORDS = ["le", "la", "les", "des", "une", "est", "dans", "pour", "qui", "avec", "son", "ses", "sur"]
+
+
+def _looks_french(text: str) -> bool:
+    t = f" {re.sub(r'[^a-zàâçéèêëîïôûùüÿ]+', ' ', text.lower())} "
+    return sum(t.count(f" {w} ") for w in _FR_STOPWORDS) >= 3
+
+
+async def _translate_summary_fr(text: str) -> Optional[str]:
+    """Traduit un résumé en français via l'IA (source anglaise → français élégant)."""
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"trad_{abs(hash(text)) % 10**8}",
+            system_message=(
+                "Tu traduis en français des résumés de livres (quatrièmes de couverture). "
+                "Réponds uniquement avec la traduction française, fidèle et élégante, sans commentaire ni guillemets."
+            ),
+        ).with_model("anthropic", "claude-sonnet-4-6")
+        r = await chat.send_message(UserMessage(text=text[:1200]))
+        out = (r or "").strip()
+        return out[:900] if out else None
+    except Exception as e:
+        logger.warning("summary translation failed: %s", e)
+        return None
+
+
+async def _ai_book_summary(title: str, author: str, lang: str) -> Optional[str]:
+    """L'IA rédige la 4e de couverture uniquement si elle connaît le livre avec certitude."""
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        langue = "français" if lang == "fr" else "anglais"
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"summ_{abs(hash(title + author)) % 10**8}",
+            system_message=(
+                f"Tu rédiges des quatrièmes de couverture en {langue}, fidèles et élégantes (4 à 6 phrases, sans spoiler majeur). "
+                "Si tu ne connais pas ce livre avec certitude, réponds uniquement INCONNU. "
+                "N'invente jamais l'intrigue d'un livre que tu ne connais pas."
+            ),
+        ).with_model("anthropic", "claude-sonnet-4-6")
+        r = await chat.send_message(UserMessage(text=f"Livre : {title}" + (f" — {author}" if author else "")))
+        out = (r or "").strip()
+        if not out or out.upper().startswith("INCONNU"):
+            return None
+        return out[:900]
+    except Exception as e:
+        logger.warning("ai summary failed: %s", e)
+        return None
+
+
 @api.get("/books-summary")
-async def book_summary(title: str, author: str = "", user=Depends(get_current_user)):
-    key = re.sub(r"\W+", "", f"{title}{author}".lower())[:80]
+async def book_summary(title: str, author: str = "", lang: str = "fr", user=Depends(get_current_user)):
+    lang = "en" if lang == "en" else "fr"
+    key = f"{lang}|" + re.sub(r"\W+", "", f"{title}{author}".lower())[:80]
     cached = await db.book_summaries.find_one({"key": key}, {"_id": 0})
     if cached:
         return {"summary": cached.get("summary")}
     summary = None
     try:
         async with httpx.AsyncClient(timeout=10) as http:
-            r = await http.get("https://www.googleapis.com/books/v1/volumes",
-                               params={"q": f"intitle:{title} inauthor:{author}".strip(), "maxResults": 3, "langRestrict": "fr"})
-            if r.status_code == 200:
-                for it in (r.json().get("items") or []):
-                    d = (it.get("volumeInfo") or {}).get("description")
-                    if d:
-                        summary = d[:900]
-                        break
+            # 1) Google Books : d'abord dans la langue demandée, puis sans restriction
+            for params in (
+                {"q": f"intitle:{title} inauthor:{author}".strip(), "maxResults": 5, "langRestrict": lang},
+                {"q": f"intitle:{title} inauthor:{author}".strip(), "maxResults": 5},
+            ):
+                r = await http.get("https://www.googleapis.com/books/v1/volumes", params=params)
+                if r.status_code == 200:
+                    for it in (r.json().get("items") or []):
+                        d = (it.get("volumeInfo") or {}).get("description")
+                        if d:
+                            summary = d[:900]
+                            break
+                if summary:
+                    break
+            # 2) Open Library : on parcourt plusieurs œuvres (souvent en anglais — traduit ensuite)
             if not summary:
                 r2 = await http.get("https://openlibrary.org/search.json",
-                                    params={"title": title, "author": author, "limit": 1, "fields": "key"})
-                if r2.status_code == 200 and (r2.json().get("docs") or []):
-                    wk = r2.json()["docs"][0].get("key")
-                    if wk:
+                                    params={"title": title, "author": author, "limit": 5, "fields": "key"})
+                if r2.status_code == 200:
+                    for doc in (r2.json().get("docs") or [])[:5]:
+                        wk = doc.get("key")
+                        if not wk:
+                            continue
                         r3 = await http.get(f"https://openlibrary.org{wk}.json")
                         if r3.status_code == 200:
                             d = r3.json().get("description")
@@ -1996,8 +2075,17 @@ async def book_summary(title: str, author: str = "", user=Depends(get_current_us
                                 d = d.get("value")
                             if d:
                                 summary = str(d)[:900]
+                                break
     except Exception as e:
         logger.warning("book summary failed: %s", e)
+    # 3) Dernier recours automatique : l'IA rédige la 4e de couverture si elle connaît le livre
+    if not summary:
+        summary = await _ai_book_summary(title, author, lang)
+    # Langue française exigée : traduction si la source est dans une autre langue
+    if summary and lang == "fr" and not _looks_french(summary):
+        fr = await _translate_summary_fr(summary)
+        if fr:
+            summary = fr
     if summary:
         await db.book_summaries.update_one({"key": key}, {"$set": {"summary": summary, "at": now_utc()}}, upsert=True)
     return {"summary": summary}

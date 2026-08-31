@@ -8,10 +8,11 @@ import { useColors, useStyles } from '@/src/themeCtx';
 import { api } from '@/src/api';
 import { BookCover } from '@/src/components/BookCover';
 import { PrimaryButton } from '@/src/components/Button';
-import { useT } from '@/src/i18n';
+import { useT, useI18n } from '@/src/i18n';
 
 export default function DiscoverBook() {
   const t = useT();
+  const { lang } = useI18n();
   const colors = useColors();
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
@@ -26,7 +27,7 @@ export default function DiscoverBook() {
     if (summary || !title) return;
     (async () => {
       try {
-        const r = await api<{ summary: string | null }>(`/books-summary?title=${encodeURIComponent(title)}&author=${encodeURIComponent(author || '')}`);
+        const r = await api<{ summary: string | null }>(`/books-summary?title=${encodeURIComponent(title)}&author=${encodeURIComponent(author || '')}&lang=${lang}`);
         if (r.summary) setDesc(r.summary);
       } catch {}
     })();

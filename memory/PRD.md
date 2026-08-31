@@ -271,3 +271,11 @@
 - Placements : Accueil (à côté du wordmark), Bibliothèque (à côté du titre), Communauté (texte dynamique Tableaux/Club), Profil (haut droite), Capture (header), Mes citations (header), Fiche livre (header, avant la corbeille).
 - Traductions EN ajoutées dans translations.ts (+ « Compris » → « Got it »).
 - Vérifié par screenshots sur les 5 écrans principaux + capture. Compte de test test_tooltip@manent.app créé puis supprimé de la base (base toujours propre : admin + demo uniquement).
+
+## Itération 32 — Tour de bienvenue + Résumés français partout + couvertures auto (juin 2026)
+- **Tour de bienvenue** : `src/components/WelcomeTour.tsx` — 6 étapes plein écran (Bienvenue, Accueil, Bibliothèque, Capture, Communauté, Profil), dots de progression, Passer/Suivant/C'est parti, flèche retour. Affiché une seule fois (AsyncStorage `manent_tour_done`), monté dans home.tsx (`{!birthModal && <WelcomeTour />}`).
+- **Résumés en FRANÇAIS sur tous les livres** : `/books-summary` réécrit — param `lang` (cache par langue, clé `fr|…`), sources : Google Books (langRestrict) → Google sans restriction → Open Library (5 œuvres) → repli IA `_ai_book_summary` (Claude rédige la 4e de couverture, répond INCONNU s'il ne connaît pas → null). Si la source n'est pas française (`_looks_french` : stopwords) → traduction Claude `_translate_summary_fr`. Ancien cache anglais purgé.
+- **Résumé manuel** : champ `summary` ajouté à BookPatch ; book/[id].tsx affiche `book.summary || summary` avec crayon d'édition (testID book-summary-edit) + bouton pointillé « Ajouter un résumé » si aucun ; modale summary-modal-input/save.
+- **Couvertures auto sur tous les livres** : GET /books lance `_backfill_cover` en tâche de fond pour les livres sans couverture (max 5/appel, réessai 7 j via `cover_checked_at`). Upload manuel déjà existant sur la fiche. Vérifié : L'Alchimiste a reçu sa couverture automatiquement.
+- Résumé aussi sur discover/[isbn] (section Résumé) — discover/book l'avait déjà ; les deux passent `lang`.
+- Comptes de test créés puis supprimés — base propre (admin + démo uniquement).
