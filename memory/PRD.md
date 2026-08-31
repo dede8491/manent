@@ -219,3 +219,15 @@
 - Section 5 : système de cartes variées (citation courte/longue, livre, primé, tableau, collection, lecteur, sponsorisé).
 - Section 4 : Accueil vivant Pinterest (sections Reprendre ta lecture / Pour toi / Livres primés via featured_collections / Plus lus / Collections thématiques / Nouveautés / Tableaux populaires / Lecteurs à suivre / sponsorisé, fiche de découverte livre, scroll infini). ATTENTION : Google Books souvent en quota 429 — prévoir cache serveur + replis Open Library.
 - Section 6 : capture → création de livre à la volée ; récap/note cachés si « À lire » ; dates relatives françaises ; vérif mode sombre nouveaux écrans ; 3 niveaux de visibilité (privé/abonnés/public) demandés mais seuls privé/public+masqué implémentés à ce jour.
+
+## Itération 25 — Accueil vivant + système de cartes + couvertures librairie (juin 2026)
+### Backend
+- GET /api/home/discover : {resume (livre en cours), awarded (db.featured_books, 14 lauréats seedés — Goncourt/Renaudot/Femina/Nobel/Booker/Afrique noire, couvertures 13/14), popular (agrégation db.books par titre, nb lecteurs), new_books (Google Books newest FR, cache 12 h db.meta new_books_cache, vide si quota 429 → section masquée), collections (top 5 thèmes publics + 3 couvertures), boards publics populaires}.
+- _find_cover enrichi : OpenLibrary ISBN → Google Books → OpenLibrary titre → **leslibraires.fr scraping (itemprop="image")** en dernier repli (demande utilisatrice « covers des liens affiliés »).
+- Seed featured : flag meta featured_seeded_v1 (supprimer le flag + featured_books pour re-seeder).
+### Frontend
+- src/components/FeedCards.tsx : BookCardFeed (couverture 2:3 + pastille +), AwardCard (ruban Chambray « Goncourt 2024 »), CollectionCard (3 couvertures en éventail), ResumeCard (progression + « Photographier ma page »).
+- home.tsx : ResumeCard en tête → citation du matin → masonry « Pour toi » → sections horizontales Livres primés / Les plus lus cette semaine / Collections thématiques / Nouveautés.
+- app/discover/book.tsx : fiche de découverte (couverture, prix, titre/auteur/année/résumé, choix statut À lire/En cours/Déjà lu, « Ajouter à ma bibliothèque » → POST /books → fiche livre).
+### Non fait (sections 4-6 restantes)
+- Épingles sponsorisées (pas d'annonceur), tableaux populaires/lecteurs sur l'accueil (données vides), scroll infini, mémorisation cartes vues, liens d'achat affiliés sur la fiche découverte, section 6 (dates relatives, capture création livre à la volée, niveau « abonnés », audit mode sombre nouveaux écrans).

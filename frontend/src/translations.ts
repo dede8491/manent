@@ -594,4 +594,14 @@ export const EN: Record<string, string> = {
   'Capturer un passage': 'Capture a passage',
   '{n} citations supprimées': '{n} quotes deleted',
   'Citation supprimée': 'Quote deleted',
+
+  // ---- Accueil vivant
+  'Reprendre ta lecture': 'Resume your reading',
+  'Photographier ma page': 'Photograph my page',
+  'Livres primés': 'Award-winning books',
+  'Les plus lus cette semaine': 'Most read this week',
+  'Collections thématiques': 'Thematic collections',
+  'Découverte': 'Discovery',
+  'Déjà lu': 'Already read',
+  'Ajouter à ma bibliothèque': 'Add to my library',
 };

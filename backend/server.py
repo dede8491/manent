@@ -479,6 +479,18 @@ async def _find_cover(title: Optional[str], author: Optional[str], isbn: Optiona
                             return f"https://covers.openlibrary.org/b/id/{d['cover_i']}-L.jpg"
         except Exception:
             pass
+        # Dernier repli : couverture de la librairie partenaire (leslibraires.fr)
+        try:
+            q = isbn or f"{title or ''} {author or ''}".strip()
+            if q:
+                r = await http.get("https://www.leslibraires.fr/recherche/", params={"q": q},
+                                   headers={"User-Agent": "Mozilla/5.0"}, follow_redirects=True)
+                if r.status_code == 200:
+                    m = re.search(r'itemprop="image"\s+src="(//[^"]+)"', r.text)
+                    if m:
+                        return "https:" + m.group(1)
+        except Exception:
+            pass
     return None
 
 
@@ -1852,6 +1864,123 @@ async def discover_isbn(isbn: str, user=Depends(get_current_user)):
     return {"book": meta, "readers": readers, "avg_rating": avg_rating, "ratings_count": len(ratings), "quotes": quotes, "in_library": in_library}
 
 
+# ============ Accueil vivant : découverte ============
+AWARDED_SEED = [
+    {"title": "Houris", "author": "Kamel Daoud", "prize": "Goncourt", "year": "2024"},
+    {"title": "Veiller sur elle", "author": "Jean-Baptiste Andrea", "prize": "Goncourt", "year": "2023"},
+    {"title": "Vivre vite", "author": "Brigitte Giraud", "prize": "Goncourt", "year": "2022"},
+    {"title": "La plus secrète mémoire des hommes", "author": "Mohamed Mbougar Sarr", "prize": "Goncourt", "year": "2021"},
+    {"title": "Les Impatientes", "author": "Djaïli Amadou Amal", "prize": "Goncourt des lycéens", "year": "2020"},
+    {"title": "Les Insolents", "author": "Ann Scott", "prize": "Renaudot", "year": "2023"},
+    {"title": "Performance", "author": "Simon Liberati", "prize": "Renaudot", "year": "2022"},
+    {"title": "Triste tigre", "author": "Neige Sinno", "prize": "Femina", "year": "2023"},
+    {"title": "Un chien à ma table", "author": "Claudie Hunzinger", "prize": "Femina", "year": "2022"},
+    {"title": "Les Années", "author": "Annie Ernaux", "prize": "Nobel de littérature", "year": "2022"},
+    {"title": "Paradis", "author": "Abdulrazak Gurnah", "prize": "Nobel de littérature", "year": "2021"},
+    {"title": "Le Pays du passé", "author": "Georgi Gospodinov", "prize": "Booker International", "year": "2023"},
+    {"title": "Une si longue lettre", "author": "Mariama Bâ", "prize": "Grand prix littéraire d'Afrique noire", "year": "1980"},
+    {"title": "Les Soleils des indépendances", "author": "Ahmadou Kourouma", "prize": "Grand prix littéraire d'Afrique noire", "year": "1968"},
+]
+
+
+async def _seed_featured():
+    """Alimente featured_collections (lauréats) avec couvertures, une seule fois."""
+    if await db.meta.find_one({"key": "featured_seeded_v1"}):
+        return
+    for it in AWARDED_SEED:
+        cover = await _find_cover(it["title"], it["author"], None)
+        await db.featured_books.update_one(
+            {"title": it["title"], "author": it["author"]},
+            {"$set": {**it, "cover": cover}},
+            upsert=True,
+        )
+    await db.meta.insert_one({"key": "featured_seeded_v1", "at": now_utc()})
+    logger.info("featured collections seeded")
+
+
+async def _cached_new_books() -> list:
+    """Nouveautés FR Google Books, cache 12 h (repli silencieux si quota)."""
+    cache = await db.meta.find_one({"key": "new_books_cache"}, {"_id": 0})
+    if cache and (now_utc() - cache["at"].replace(tzinfo=timezone.utc)).total_seconds() < 12 * 3600:
+        return cache.get("items") or []
+    items = []
+    try:
+        async with httpx.AsyncClient(timeout=10) as http:
+            r = await http.get("https://www.googleapis.com/books/v1/volumes", params={
+                "q": "subject:fiction", "orderBy": "newest", "langRestrict": "fr", "maxResults": 12,
+            })
+            if r.status_code == 200:
+                for it in (r.json().get("items") or []):
+                    v = it.get("volumeInfo", {})
+                    th = (v.get("imageLinks") or {}).get("thumbnail")
+                    if not v.get("title") or not th:
+                        continue
+                    items.append({
+                        "title": v["title"],
+                        "author": ", ".join(v.get("authors") or []),
+                        "cover": th.replace("http://", "https://") + "&zoom=1",
+                        "year": (v.get("publishedDate") or "")[:4] or None,
+                        "summary": (v.get("description") or "")[:400],
+                    })
+    except Exception:
+        pass
+    if items:
+        await db.meta.update_one({"key": "new_books_cache"}, {"$set": {"at": now_utc(), "items": items}}, upsert=True)
+        return items
+    return (cache or {}).get("items") or []
+
+
+@api.get("/home/discover")
+async def home_discover(user=Depends(get_current_user)):
+    uid = user["user_id"]
+    # Reprendre ta lecture
+    resume = await db.books.find_one(
+        {"user_id": uid, "status": "en_cours"}, {"_id": 0},
+        sort=[("created_at", -1)],
+    )
+    # Livres primés
+    awarded = await db.featured_books.find({"cover": {"$ne": None}}, {"_id": 0}).to_list(20)
+    # Les plus lus (agrégés sur toutes les bibliothèques + citations)
+    pipeline = [
+        {"$group": {"_id": {"$toLower": "$title"}, "title": {"$first": "$title"}, "author": {"$first": "$author"},
+                    "cover": {"$max": "$cover"}, "readers": {"$addToSet": "$user_id"}}},
+        {"$project": {"_id": 0, "title": 1, "author": 1, "cover": 1, "readers_count": {"$size": "$readers"}}},
+        {"$match": {"cover": {"$ne": None}}},
+        {"$sort": {"readers_count": -1}},
+        {"$limit": 8},
+    ]
+    popular = await db.books.aggregate(pipeline).to_list(8)
+    # Collections thématiques : thèmes les plus épinglés + couvertures associées
+    collections = []
+    theme_counts = await db.quotes.aggregate([
+        {"$match": {"is_public": True, "is_hidden": {"$ne": True}}},
+        {"$unwind": "$themes"},
+        {"$group": {"_id": "$themes", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}}, {"$limit": 5},
+    ]).to_list(5)
+    for tc in theme_counts:
+        book_ids = [b for b in await db.quotes.distinct("book_id", {"themes": tc["_id"], "is_public": True}) if b]
+        covers = []
+        if book_ids:
+            bl = await db.books.find({"book_id": {"$in": book_ids}, "cover": {"$ne": None}},
+                                     {"_id": 0, "cover": 1}).to_list(3)
+            covers = [b["cover"] for b in bl]
+        collections.append({"theme": tc["_id"], "quotes": tc["count"], "covers": covers})
+    # Tableaux publics populaires
+    boards = await db.boards.find({"visibility": "public"}, {"_id": 0, "board_id": 1, "name": 1, "user_id": 1}).to_list(50)
+    for b in boards:
+        b["pins"] = await db.board_quotes.count_documents({"board_id": b["board_id"]})
+    boards = sorted(boards, key=lambda x: -x["pins"])[:5]
+    return {
+        "resume": resume,
+        "awarded": awarded,
+        "popular": popular,
+        "new_books": await _cached_new_books(),
+        "collections": collections,
+        "boards": boards,
+    }
+
+
 # ============ Home feed (public quotes) ============
 @api.get("/feed")
 async def feed(theme: Optional[str] = None, user=Depends(get_current_user)):
@@ -2036,6 +2165,7 @@ async def on_startup():
     await db.follows.create_index("followed_id")
     asyncio.get_event_loop().create_task(_watch_wattpad())
     asyncio.get_event_loop().create_task(_migrate_covers())
+    asyncio.get_event_loop().create_task(_seed_featured())
     logger.info("Manent backend ready")
 
 

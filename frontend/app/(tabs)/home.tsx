@@ -10,6 +10,7 @@ import { QuoteCard, Quote } from '@/src/components/QuoteCard';
 import { api } from '@/src/api';
 import { useAuth } from '@/src/auth';
 import { Wordmark } from '@/src/components/Wordmark';
+import { BookCardFeed, AwardCard, CollectionCard, ResumeCard } from '@/src/components/FeedCards';
 import { useT } from '@/src/i18n';
 
 const BIRTH_PROMPT_KEY = 'manent_birth_prompted';
@@ -27,6 +28,7 @@ export default function Home() {
   const [daily, setDaily] = useState<Quote | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [discover, setDiscover] = useState<any>(null);
   const [birthModal, setBirthModal] = useState(false);
   const [birth, setBirth] = useState('');
   const [birthSaving, setBirthSaving] = useState(false);
@@ -82,6 +84,9 @@ export default function Home() {
       const d = await api<{ quote: Quote | null }>('/quotes/daily');
       setDaily(d.quote);
     } catch {}
+    try {
+      setDiscover(await api<any>('/home/discover'));
+    } catch {}
   }, []);
 
   useEffect(() => {
@@ -135,6 +140,17 @@ export default function Home() {
         contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + 80 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.chambray} />}
       >
+        {discover?.resume && (
+          <View style={{ marginBottom: spacing.lg }}>
+            <ResumeCard
+              testID="resume-card"
+              book={discover.resume}
+              t={t}
+              onPress={() => router.push({ pathname: '/book/[id]', params: { id: discover.resume.book_id } })}
+              onPhoto={() => router.push({ pathname: '/book/[id]', params: { id: discover.resume.book_id } })}
+            />
+          </View>
+        )}
         {daily && (
           <View style={{ marginBottom: spacing.lg }} testID="daily-quote">
             <Text style={styles.dailyLabel}>{t('Ta citation du matin')}</Text>
@@ -165,6 +181,55 @@ export default function Home() {
                 ))}
               </View>
             ))}
+          </View>
+        )}
+
+        {discover?.awarded?.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>{t('Livres primés')}</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.md }}>
+              {discover.awarded.map((b: any, i: number) => (
+                <AwardCard key={i} testID={`award-${i}`} {...b}
+                  onPress={() => router.push({ pathname: '/discover/book', params: { title: b.title, author: b.author || '', cover: b.cover || '', year: b.year || '', prize: `${b.prize} ${b.year}` } })} />
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {discover?.popular?.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>{t('Les plus lus cette semaine')}</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.md }}>
+              {discover.popular.map((b: any, i: number) => (
+                <BookCardFeed key={i} testID={`popular-${i}`} {...b}
+                  onPress={() => router.push({ pathname: '/discover/book', params: { title: b.title, author: b.author || '', cover: b.cover || '' } })} />
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {discover?.collections?.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>{t('Collections thématiques')}</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.md }}>
+              {discover.collections.map((c: any) => (
+                <CollectionCard key={c.theme} testID={`collection-${c.theme}`} theme={c.theme} covers={c.covers}
+                  label={t(c.quotes > 1 ? '{n} citations' : '{n} citation', { n: c.quotes })}
+                  onPress={() => router.push({ pathname: '/theme/[name]', params: { name: c.theme } })} />
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {discover?.new_books?.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>{t('Nouveautés')}</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.md }}>
+              {discover.new_books.map((b: any, i: number) => (
+                <BookCardFeed key={i} testID={`new-${i}`} {...b}
+                  onPress={() => router.push({ pathname: '/discover/book', params: { title: b.title, author: b.author || '', cover: b.cover || '', year: b.year || '', summary: b.summary || '' } })} />
+              ))}
+            </ScrollView>
           </View>
         )}
       </ScrollView>
@@ -212,6 +277,8 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   emptySub: { fontFamily: fonts.body, fontSize: 14, color: colors.clay, textAlign: 'center', marginTop: spacing.sm },
   followTag: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 },
   followTagText: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.chambray, letterSpacing: 1, textTransform: 'uppercase' },
+  section: { marginTop: spacing.xl },
+  sectionTitle: { fontFamily: fonts.displayMedium, fontSize: 21, color: colors.espresso, marginBottom: spacing.md },
   birthOverlay: { flex: 1, backgroundColor: 'rgba(58,33,25,0.4)', justifyContent: 'center', padding: spacing.xl },
   birthModal: { backgroundColor: colors.glacier, borderRadius: 20, padding: spacing.xl },
   birthTitle: { fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso },
