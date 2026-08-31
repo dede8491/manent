@@ -156,3 +156,6 @@
 - app.json : ios.bundleIdentifier et android.package changés de com.emergent.lecturecapture.xjqcj0 → **com.manent.app** (avant toute config Firebase/publication).
 - RevenueCat resynchronisé via /setup idempotent avec les nouveaux identifiants (mêmes clés SDK, mêmes produits) — les achats in-app resteront valides dans les builds.
 - Firebase : l'app Android à créer dans la console doit maintenant utiliser le package **com.manent.app** pour générer google-services.json.
+
+## Itération 18 — google-services.json reçu et câblé (juin 2026)
+- Fichier Firebase (projet manent-ce772, package com.manent.app) enregistré dans /app/frontend/google-services.json et câblé via expo.android.googleServicesFile. Les notifications push Android seront actives dans le prochain build natif (EMERGENT_PUSH_KEY injecté au déploiement).
