@@ -85,7 +85,7 @@ async def search_isbn(isbn: str):
                 fm = re.search(r'<dc:format[^>]*>[^<]*?\((\d+)\s*p', rec)
                 if tm:
                     title = tm.group(1).split(" / ")[0].strip()
-                    title = re.sub(r'\s*:\s*roman\s*$', '', title, flags=re.I)
+                    title = _clean_bnf_title(title)
                     author = None
                     if am:
                         author = re.sub(r'\s*\(\d{4}-[^)]*\)\s*', ' ', am.group(1))
@@ -103,6 +103,13 @@ async def search_isbn(isbn: str):
         except Exception:
             logger.warning("bnf isbn fallback failed for %s", isbn)
     raise HTTPException(status_code=404, detail="isbn_not_found")
+
+
+def _clean_bnf_title(title: str) -> str:
+    """Retire le bruit éditorial des titres BnF : mentions d'édition, « : roman », nom d'auteur résiduel."""
+    title = re.sub(r'\s*\(\[?[ÉEé]d\..*$', '', title)   # "(Éd. collector) ..." / "([Éd. en gros caractères]) ..."
+    title = re.sub(r'\s*:\s*roman\b.*$', '', title, flags=re.I)
+    return title.strip(' :;,')
 
 
 def _norm_key(title: Optional[str], author: Optional[str]) -> str:
@@ -181,8 +188,7 @@ async def _search_bnf(http: httpx.AsyncClient, q: str) -> list:
                 if not tm:
                     continue
                 title = tm.group(1).split(" / ")[0].strip()
-                title = re.sub(r'\s*\(\[.*$', '', title).strip()
-                title = re.sub(r'\s*:\s*roman\s*$', '', title, flags=re.I)
+                title = _clean_bnf_title(title)
                 author = None
                 if am:
                     author = re.sub(r'\s*\(\d{4}-[^)]*\)\s*', ' ', am.group(1))

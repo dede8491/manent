@@ -32,7 +32,7 @@ export default function AddBook() {
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const params = useLocalSearchParams<{ title?: string; author?: string; cover?: string }>();
+  const params = useLocalSearchParams<{ title?: string; author?: string; cover?: string; q?: string }>();
   const [method, setMethod] = useState<Method>('title');
   const selectedRef = useRef(false);
 
@@ -42,8 +42,12 @@ export default function AddBook() {
       selectedRef.current = true;
       setSelected({ title: params.title, author: params.author || null, cover: params.cover || null });
     }
+    if (params.q && !selectedRef.current) {
+      selectedRef.current = true;
+      setQuery(String(params.q));
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.title]);
+  }, [params.title, params.q]);
 
   // Recherche par titre en direct
   const [query, setQuery] = useState('');

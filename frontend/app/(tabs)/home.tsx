@@ -97,20 +97,21 @@ export default function Home() {
           </View>
         ) : (
           <View style={{ flexDirection: 'row', gap: spacing.md }}>
-            <View style={{ width: colWidth, gap: spacing.md }}>
-              {col1.map(x => (
-                <View key={x.quote_id}>
-                  <QuoteCard quote={x} compact onPress={() => router.push({ pathname: '/quote/[id]', params: { id: x.quote_id } })} onPressAuthor={x.author?.handle ? () => router.push({ pathname: '/reader/[handle]', params: { handle: x.author!.handle! } }) : undefined} />
-                </View>
-              ))}
-            </View>
-            <View style={{ width: colWidth, gap: spacing.md }}>
-              {col2.map(x => (
-                <View key={x.quote_id}>
-                  <QuoteCard quote={x} compact onPress={() => router.push({ pathname: '/quote/[id]', params: { id: x.quote_id } })} onPressAuthor={x.author?.handle ? () => router.push({ pathname: '/reader/[handle]', params: { handle: x.author!.handle! } }) : undefined} />
-                </View>
-              ))}
-            </View>
+            {[col1, col2].map((col, ci) => (
+              <View key={ci} style={{ width: colWidth, gap: spacing.md }}>
+                {col.map(x => (
+                  <View key={x.quote_id}>
+                    {(x as any).is_followed_author ? (
+                      <View style={styles.followTag}>
+                        <Feather name="user-check" size={10} color={colors.chambray} />
+                        <Text style={styles.followTagText}>{t('Suivi')}</Text>
+                      </View>
+                    ) : null}
+                    <QuoteCard quote={x} compact onPress={() => router.push({ pathname: '/quote/[id]', params: { id: x.quote_id } })} onPressAuthor={x.author?.handle ? () => router.push({ pathname: '/reader/[handle]', params: { handle: x.author!.handle! } }) : undefined} />
+                  </View>
+                ))}
+              </View>
+            ))}
           </View>
         )}
       </ScrollView>
@@ -132,4 +133,6 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   empty: { fontFamily: fonts.body, color: colors.clay, textAlign: 'center', paddingTop: spacing.xxxl },
   emptyTitle: { fontFamily: fonts.displayMedium, fontSize: 22, color: colors.espresso, textAlign: 'center' },
   emptySub: { fontFamily: fonts.body, fontSize: 14, color: colors.clay, textAlign: 'center', marginTop: spacing.sm },
+  followTag: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 },
+  followTagText: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.chambray, letterSpacing: 1, textTransform: 'uppercase' },
 });

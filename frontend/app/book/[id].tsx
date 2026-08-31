@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Platform, Alert, Linking, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Platform, Alert, Linking, ActivityIndicator, Modal } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -33,6 +33,20 @@ export default function BookDetail() {
   const [exportingPdf, setExportingPdf] = useState(false);
   const [fc, setFc] = useState<{ total: number; due: number } | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const deleteBook = async () => {
+    if (deleting) return;
+    setDeleting(true);
+    try {
+      await api(`/books/${id}`, { method: 'DELETE' });
+      setConfirmDelete(false);
+      router.replace('/(tabs)/library');
+    } catch {
+      setDeleting(false);
+    }
+  };
 
   useFocusEffect(useCallback(() => {
     (async () => {
@@ -157,7 +171,9 @@ export default function BookDetail() {
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
         <Pressable onPress={() => router.back()} testID="book-back" style={styles.iconBtn}><Feather name="chevron-left" size={22} color={colors.espresso} /></Pressable>
         <Text style={styles.headerTitle} numberOfLines={1}>{book.title}</Text>
-        <View style={{ width: 40 }} />
+        <Pressable onPress={() => setConfirmDelete(true)} testID="book-delete" style={styles.iconBtn}>
+          <Feather name="trash-2" size={19} color={colors.clay} />
+        </Pressable>
       </View>
       <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + spacing.xxl }}>
         <View style={styles.top}>
@@ -302,11 +318,34 @@ export default function BookDetail() {
           <QuoteCard key={q.quote_id} quote={q} onPress={() => router.push({ pathname: '/quote/[id]', params: { id: q.quote_id } })} />
         ))}
       </ScrollView>
+
+      <Modal visible={confirmDelete} transparent animationType="fade" onRequestClose={() => setConfirmDelete(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>{t('Supprimer ce livre ?')}</Text>
+            <Text style={styles.modalText}>{t('« {title} » et sa progression quitteront ta bibliothèque. Tes citations, elles, restent précieusement gardées.', { title: book.title })}</Text>
+            <Pressable testID="book-delete-confirm" onPress={deleteBook} disabled={deleting} style={styles.deleteBtn}>
+              {deleting ? <ActivityIndicator color={colors.creme} size="small" /> : <Text style={styles.deleteBtnText}>{t('Supprimer définitivement')}</Text>}
+            </Pressable>
+            <Pressable testID="book-delete-cancel" onPress={() => setConfirmDelete(false)} style={styles.cancelBtn}>
+              <Text style={styles.cancelBtnText}>{t('Garder ce livre')}</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(58,33,25,0.55)', justifyContent: 'center', padding: spacing.xl },
+  modalBox: { backgroundColor: colors.creme, borderRadius: 20, padding: spacing.xl },
+  modalTitle: { fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso },
+  modalText: { fontFamily: fonts.body, fontSize: 14, color: colors.clay, marginTop: spacing.sm, lineHeight: 20 },
+  deleteBtn: { marginTop: spacing.lg, height: 48, borderRadius: radius.md, backgroundColor: '#B3552F', alignItems: 'center', justifyContent: 'center' },
+  deleteBtnText: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.creme },
+  cancelBtn: { marginTop: spacing.sm, height: 44, alignItems: 'center', justifyContent: 'center' },
+  cancelBtnText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.espresso },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSoft, backgroundColor: colors.glacier },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontFamily: fonts.displayMedium, fontSize: 18, color: colors.espresso, flex: 1, textAlign: 'center', marginHorizontal: spacing.md },

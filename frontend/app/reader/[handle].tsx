@@ -12,7 +12,8 @@ import { useT } from '@/src/i18n';
 type Profile = {
   user: { pseudo: string; handle: string; picture?: string };
   is_me: boolean;
-  stats: { public_quotes: number; books: number; boards: number };
+  is_following: boolean;
+  stats: { public_quotes: number; books: number; boards: number; followers: number };
   quotes: Quote[];
 };
 
@@ -27,6 +28,18 @@ export default function ReaderProfile() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [feedback, setFeedback] = useState('');
+  const [followBusy, setFollowBusy] = useState(false);
+
+  const toggleFollow = async () => {
+    if (!profile || followBusy) return;
+    setFollowBusy(true);
+    try {
+      const r = await api<{ following: boolean; followers: number }>(`/readers/${encodeURIComponent(handle)}/follow`, { method: 'POST' });
+      setProfile({ ...profile, is_following: r.following, stats: { ...profile.stats, followers: r.followers } });
+    } catch {} finally {
+      setFollowBusy(false);
+    }
+  };
 
   useEffect(() => {
     (async () => {
@@ -95,15 +108,31 @@ export default function ReaderProfile() {
             </View>
             <Text style={styles.pseudo} testID="reader-pseudo">{profile.user.pseudo}</Text>
             <Text style={styles.handle}>@{profile.user.handle}</Text>
-            <Pressable testID="btn-share-profile" onPress={shareProfile} style={styles.shareBtn}>
-              <Feather name="share" size={14} color={colors.creme} />
-              <Text style={styles.shareBtnText}>{t('Partager le profil')}</Text>
-            </Pressable>
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: spacing.md }}>
+              {!profile.is_me && (
+                <Pressable
+                  testID="btn-follow"
+                  onPress={toggleFollow}
+                  disabled={followBusy}
+                  style={[styles.shareBtn, { marginTop: 0 }, profile.is_following && styles.followingBtn]}
+                >
+                  <Feather name={profile.is_following ? 'check' : 'user-plus'} size={14} color={profile.is_following ? colors.espresso : colors.creme} />
+                  <Text style={[styles.shareBtnText, profile.is_following && { color: colors.espresso }]}>
+                    {profile.is_following ? t('Suivi') : t('Suivre')}
+                  </Text>
+                </Pressable>
+              )}
+              <Pressable testID="btn-share-profile" onPress={shareProfile} style={[styles.shareBtn, { marginTop: 0 }, !profile.is_me && styles.followingBtn]}>
+                <Feather name="share" size={14} color={!profile.is_me ? colors.espresso : colors.creme} />
+                <Text style={[styles.shareBtnText, !profile.is_me && { color: colors.espresso }]}>{t('Partager le profil')}</Text>
+              </Pressable>
+            </View>
             {feedback ? <Text style={styles.feedback} testID="reader-feedback">{feedback}</Text> : null}
           </View>
 
           <View style={styles.statsRow}>
             {[
+              { n: profile.stats.followers, l: t(profile.stats.followers > 1 ? 'abonnés' : 'abonné') },
               { n: profile.stats.public_quotes, l: t(profile.stats.public_quotes > 1 ? 'citations' : 'citation') },
               { n: profile.stats.books, l: t(profile.stats.books > 1 ? 'livres' : 'livre') },
               { n: profile.stats.boards, l: t(profile.stats.boards > 1 ? 'tableaux' : 'tableau') },
@@ -147,6 +176,7 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   handle: { fontFamily: fonts.body, fontSize: 14, color: colors.clay, marginTop: 2 },
   shareBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 40, paddingHorizontal: spacing.lg, borderRadius: radius.pill, backgroundColor: colors.chambray, marginTop: spacing.md },
   shareBtnText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.creme },
+  followingBtn: { backgroundColor: colors.creme, borderWidth: 1, borderColor: colors.borderSoft },
   feedback: { fontFamily: fonts.body, fontSize: 12, color: colors.clay, marginTop: spacing.sm },
   statsRow: { flexDirection: 'row', gap: 8, paddingHorizontal: spacing.xl },
   statCard: { flex: 1, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', paddingVertical: spacing.md },

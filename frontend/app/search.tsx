@@ -129,12 +129,32 @@ export default function SearchScreen() {
               <ActivityIndicator color={colors.chambray} />
             </View>
           ) : total === 0 ? (
-            <View style={{ paddingVertical: spacing.xxxl, alignItems: 'center' }}>
+            <View style={{ paddingVertical: spacing.xxl, alignItems: 'center' }}>
               <Text style={styles.emptyTitle}>{t('Rien pour l’instant.')}</Text>
-              <Text style={styles.emptySub}>{t('Essaie un autre mot, ou retire un filtre.')}</Text>
+              <Text style={styles.emptySub}>{t('Cette recherche fouille ta bibliothèque et tes citations.')}</Text>
+              {q.trim().length >= 2 && (
+                <Pressable
+                  testID="search-catalog-cta"
+                  onPress={() => router.push({ pathname: '/book/add', params: { q: q.trim() } })}
+                  style={styles.catalogBtn}
+                >
+                  <Feather name="globe" size={15} color={colors.creme} />
+                  <Text style={styles.catalogBtnText}>{t('Chercher « {q} » dans le catalogue en ligne', { q: q.trim() })}</Text>
+                </Pressable>
+              )}
             </View>
           ) : (
             <>
+              {q.trim().length >= 2 && showBooks && (
+                <Pressable
+                  testID="search-catalog-link"
+                  onPress={() => router.push({ pathname: '/book/add', params: { q: q.trim() } })}
+                  style={styles.catalogLinkRow}
+                >
+                  <Feather name="globe" size={14} color={colors.chambray} />
+                  <Text style={styles.catalogLink}>{t('Chercher dans le catalogue en ligne')}</Text>
+                </Pressable>
+              )}
               {showBooks && results.books.length > 0 && (
                 <>
                   <Text style={styles.sectionLabel}>{t('Livres ({n})', { n: results.books.length })}</Text>
@@ -191,4 +211,8 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   bookAuthor: { fontFamily: fonts.body, fontSize: 13, color: colors.clay, marginTop: 2 },
   emptyTitle: { fontFamily: fonts.displayMedium, fontSize: 22, color: colors.espresso, textAlign: 'center' },
   emptySub: { fontFamily: fonts.body, fontSize: 14, color: colors.clay, textAlign: 'center', marginTop: spacing.sm },
+  catalogBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: spacing.lg, minHeight: 44, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.pill, backgroundColor: colors.chambray },
+  catalogBtnText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.creme, flexShrink: 1 },
+  catalogLinkRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: spacing.sm, marginBottom: spacing.xs },
+  catalogLink: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.chambray, textDecorationLine: 'underline' },
 });

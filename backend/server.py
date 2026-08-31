@@ -273,6 +273,33 @@ async def theme_page(theme: str, user=Depends(get_current_user)):
     return {"theme": theme, "stats": {"quotes": total, "readers": readers, "books": books}, "quotes": quotes, "suggested_books": suggestions}
 
 
+@api.post("/readers/{handle}/follow")
+async def toggle_follow(handle: str, user=Depends(get_current_user)):
+    target = await db.users.find_one({"handle": handle}, {"_id": 0, "user_id": 1, "pseudo": 1})
+    if not target:
+        raise HTTPException(status_code=404, detail="not_found")
+    if target["user_id"] == user["user_id"]:
+        raise HTTPException(status_code=400, detail="self_follow")
+    key = {"follower_id": user["user_id"], "followed_id": target["user_id"]}
+    existing = await db.follows.find_one(key)
+    if existing:
+        await db.follows.delete_one(key)
+        following = False
+    else:
+        await db.follows.insert_one({**key, "created_at": now_utc()})
+        following = True
+        try:
+            await send_push([target["user_id"]], {
+                "title": "Manent",
+                "message": f"{user['pseudo']} suit maintenant tes lectures",
+                "action_url": f"/reader/{user['handle']}",
+            })
+        except Exception as e:
+            logger.warning("push follow failed (non-blocking): %s", e)
+    followers = await db.follows.count_documents({"followed_id": target["user_id"]})
+    return {"following": following, "followers": followers}
+
+
 @api.get("/readers/{handle}")
 async def public_profile(handle: str, user=Depends(get_current_user)):
     u = await db.users.find_one(
@@ -288,10 +315,13 @@ async def public_profile(handle: str, user=Depends(get_current_user)):
     quotes = await db.quotes.find(q, {"_id": 0}).sort("created_at", -1).limit(100).to_list(100)
     await _attach_public_meta(quotes)
     uid = u.pop("user_id")
+    followers = await db.follows.count_documents({"followed_id": uid})
+    is_following = bool(await db.follows.find_one({"follower_id": user["user_id"], "followed_id": uid}))
     return {
         "user": u,
         "is_me": uid == user["user_id"],
-        "stats": {"public_quotes": total, "books": books, "boards": boards},
+        "is_following": is_following,
+        "stats": {"public_quotes": total, "books": books, "boards": boards, "followers": followers},
         "quotes": quotes,
     }
 
@@ -586,6 +616,18 @@ async def create_quote(body: QuoteCreate, user=Depends(get_current_user)):
     }
     await db.quotes.insert_one(doc.copy())
     await log_reading_event(user["user_id"], 0)
+    # Notifier les abonnés quand une citation devient publique
+    if body.is_public:
+        try:
+            followers = [f["follower_id"] for f in await db.follows.find(
+                {"followed_id": user["user_id"]}, {"_id": 0, "follower_id": 1}).to_list(500)]
+            await send_push(followers, {
+                "title": user["pseudo"],
+                "message": f"« {body.text.strip()[:110]} »",
+                "action_url": f"/quote/{quote_id}",
+            }, idempotency_key=f"quote-{quote_id}")
+        except Exception as e:
+            logger.warning("push new quote failed (non-blocking): %s", e)
     # auto-progress
     if body.book_id and body.page:
         book = await db.books.find_one({"book_id": body.book_id, "user_id": user["user_id"]}, {"_id": 0})
@@ -1400,8 +1442,15 @@ async def feed(theme: Optional[str] = None, user=Depends(get_current_user)):
     q: dict = {"is_public": True}
     if theme:
         q["themes"] = theme
-    cur = db.quotes.find(q, {"_id": 0}).sort("created_at", -1).limit(80)
-    quotes = await cur.to_list(80)
+    followed = [f["followed_id"] for f in await db.follows.find(
+        {"follower_id": user["user_id"]}, {"_id": 0, "followed_id": 1}).to_list(500)]
+    quotes = await db.quotes.find(q, {"_id": 0}).sort("created_at", -1).limit(80).to_list(80)
+    # Les citations des lecteurs suivis remontent en tête (récentes d'abord dans chaque groupe)
+    if followed:
+        fset = set(followed)
+        for qd in quotes:
+            qd["is_followed_author"] = qd["user_id"] in fset
+        quotes.sort(key=lambda x: (not x.get("is_followed_author"),))
     for qd in quotes:
         if qd.get("book_id"):
             qd["book"] = await db.books.find_one({"book_id": qd["book_id"]}, {"_id": 0, "title": 1, "author": 1, "type": 1})
@@ -1567,6 +1616,8 @@ async def on_startup():
     await db.quotes.create_index("user_id")
     await db.quotes.create_index("is_public")
     await db.boards.create_index("members")
+    await db.follows.create_index([("follower_id", 1), ("followed_id", 1)], unique=True)
+    await db.follows.create_index("followed_id")
     asyncio.get_event_loop().create_task(_watch_wattpad())
     logger.info("Manent backend ready")
 

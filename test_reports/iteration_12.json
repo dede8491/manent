@@ -1,0 +1,44 @@
+{
+  "summary": "Iteration 12 — SUIVI DES LECTEURS (Reader Follow system) : TOUT PASSE. Backend 7/7 pytest (test_iteration12.py, 2.15s, -n 0 imposé car les 2 tests de séquence Follow→Profile/Feed nécessitent l'état partagé entre classes sur le même worker) : (1) POST /api/readers/{handle}/follow toggle → 1er appel {following:true, followers>=1}, 2e appel {following:false}, re-follow OK. (2) POST /api/readers/{my_handle}/follow → 400 self_follow (verbatim detail). (3) POST /api/readers/does_not_exist_xxx/follow → 404. (4) GET /api/readers/{handle} contient is_following (bool) et stats.followers (int>=1) ; is_me=true sur son propre handle. (5) GET /api/feed → la citation de l'auteur suivi porte is_followed_author:true ET apparaît en tête ; vérification de non-régression du tri stable (aucun quote non-suivi n'apparaît avant un suivi). (6) POST /api/quotes avec is_public:true par un lecteur suivi → 200 malgré l'échec attendu du relais push placeholder (non-bloquant confirmé). Frontend e2e mobile 390×844 (nouveau compte fraîchement créé via /onboarding → étape thèmes → /home) : navigation directe /reader/lea → pseudo 'Léa' affiché, bouton [data-testid=btn-follow] visible avec libellé 'Suivre' → tap → devient 'Suivi' (icône check remplace user-plus) → retour /home → les 4 citations de Léa portent le tag 'SUIVI' en tête du fil (screenshot confirmé, colonnes masonry left+right) → retour /reader/lea → le bouton persiste 'Suivi' → 2e tap → redevient 'Suivre'. Test 'own profile' : /reader/{my_handle} → aucun bouton btn-follow (count=0), is_me guard OK. i18n EN : /settings → tap [data-testid=lang-en] → PATCH /api/me/settings {language:'en'} → /reader/lea affiche 'Follow' → tap → 'Following' → /home affiche le tag 'FOLLOWING' (et plus 'SUIVI'). Aucune erreur console pendant les 3 flows (seuls les 2 warnings benign attendus expo-notifications push token sur web). Push placeholder key : 401 upstream sur send_push aux abonnés ne bloque pas la création de la citation publique (try/except server.py:620-630).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration12.py",
+    "/app/test_reports/pytest/iteration12.xml"
+  ],
+  "action_items": [
+    "(info, non-bloquant) Le QuoteCard passe onPressAuthor au Pressable Manent · @handle (QuoteCard.tsx:44) mais ce Pressable interne n'a pas de testID dédié — non bloquant (la nav /reader/{handle} fonctionne via card.onPressAuthor déjà branché dans home.tsx:110). Cosmétique : envisager testID={`quote-card-${quote_id}-author`} pour un test plus déterministe du tap-auteur.",
+    "(info) pytest sur test_iteration12 doit être lancé en série (-n 0) car TestFollow, TestPublicProfile et TestFeedFollowed partagent l'état 'follower is following author'. Alternative : refactor en un seul test long ou passer les fixtures à scope='session' avec une file lock cross-worker. Actuel : simple et fonctionne."
+  ],
+  "critical_code_review_comments": [
+    "server.py:276-300 toggle_follow — logique claire (find target → 404, self-check → 400, upsert-like via find+insert/delete + push abonné on new follow, wrappé try/except non-bloquant). Bonne clé composite {follower_id, followed_id}. Suggestion (non-bloquant) : créer un index unique sur (follower_id, followed_id) au startup pour garantir l'idempotence et accélérer les lookups à mesure que la table grandit.",
+    "server.py:303-326 public_profile — attache correctement is_following (bool, cast via bool(await find_one)) et stats.followers (int via count_documents), le tout dérivé de la même collection follows. is_me correctement calculé avant pop de user_id. Cohérent.",
+    "server.py:1440-1459 feed — récupère la liste des followed_id du user, marque is_followed_author sur chaque quote, puis sort key=(not is_followed_author,) → tri stable qui préserve l'ordre chronologique dans chaque groupe (Python list.sort est stable). Excellent choix : concis et correct.",
+    "server.py:619-630 create_quote push hook — non-bloquant confirmé end-to-end (retourne 200 malgré 401 upstream). idempotency_key=`quote-{quote_id}` évite les doubles-notifs si retry. Truncation à 110 chars du body message → cohérent avec les autres hooks push.",
+    "reader/[handle].tsx:33-42 toggleFollow — état followBusy prevents double-tap, mise à jour optimiste locale de is_following + stats.followers depuis la réponse serveur (pas de race condition). Try/finally propre.",
+    "home.tsx:104-108 followTag — Feather user-check + Text 'Suivi' avec couleur chambray, letter-spacing 1 : lisible et bien contrasté. Le tag est rendu au-dessus de la carte, pas dans la carte — hierarchy visuelle claire.",
+    "translations.ts:195-196 — 'Suivre'→'Follow' et 'Suivi'→'Following' présents. Le t('Suivi') est utilisé aussi bien pour le bouton (button state) que le tag du feed → le libellé anglais 'FOLLOWING' vient du textTransform:'uppercase' du style followTagText (home.tsx:137), pas de la trad → cohérent."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration12.py (nouveau, 7 tests)",
+    "/app/test_reports/pytest/iteration12.xml (junit)",
+    "/app/test_reports/iteration_12.json (ce rapport)"
+  ],
+  "success_rate": {
+    "backend": "100% (7/7 pytest iteration_12 pass en 2.15s, -n 0)",
+    "frontend": "100% (register+onboarding → follow lea → tag SUIVI en tête → unfollow OK ; own-profile no btn ; i18n EN Follow/Following/FOLLOWING OK)"
+  },
+  "seed_data_creation": "Tests pytest ont créé 2 comptes 'TEST_it12_follower_*' et 'TEST_it12_author_*' + 1 book 'TEST_it12 Book' + 2 citations publiques (dont 1 pour tester la non-blocking creation). Frontend a créé 2 comptes 'TEST_it12_ui_*' et 'TEST_it12_i18n_*' via l'onboarding — les deux ont suivi puis (pour le 1er) dé-suivi Léa. Aucune donnée de production/seed altérée.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Follow system stable it.12 : collection MongoDB 'follows' avec clé {follower_id, followed_id}. Index unique recommandé mais NON créé (non-bloquant, la logique find-before-insert suffit à l'échelle actuelle). Feed sort=stable, is_followed_author calculé serveur — les listes vides côté followed produisent un tri identique au non-suivi (skip du bloc if followed). Push placeholder OK : send_push try/except systématique sur toutes les mutations (server.py:292-298 follow, 619-630 quote). Frontend testIDs importants : btn-follow (reader/[handle].tsx:114), followTag rendu via style (pas de testID dédié — cherche via document.body.innerText 'SUIVI'/'FOLLOWING'). Le tap sur l'auteur (QuoteCard Manent · @handle Pressable) n'a pas de testID — pour tester ce chemin, mieux vaut naviguer directement à /reader/{handle}. Pytest xdist : lancer test_iteration12.py avec -n 0 pour partager l'état entre classes ; sans ça, TestFollow (gw0) et TestPublicProfile (gw1) sont sur des workers différents avec fixtures module distinctes.",
+  "rca_of_issue": "N/A — aucun bug détecté."
+}

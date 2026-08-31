@@ -118,3 +118,17 @@
 - **Frontend** : expo-notifications + expo-device installés, plugin expo-notifications + permission POST_NOTIFICATIONS dans app.json. app/_layout.tsx : setNotificationHandler + canal Android 'default' à portée module (guards web), tap handlers (warm + cold start, navigation via action_url), relance hebdo si permission refusée (AsyncStorage pushNudgeAt + Linking.openSettings, textes i18n). src/push.ts : registerForPush (permission d'abord, getDevicePushTokenAsync, POST /api/register-push), appelé dans src/auth.tsx à chaque connexion/ouverture. No-op sur web/Expo Go.
 - **En attente utilisateur** : google-services.json Firebase (package com.emergent.lecturecapture.xjqcj0) à placer dans frontend/ + câbler expo.android.googleServicesFile. Test réel uniquement après Publish + builds natifs.
 - Testé : 15/15 backend (test_iteration11.py), smoke frontend OK.
+
+## Itération 12 — Suivi des lecteurs (juin 2026)
+- Collection `follows` {follower_id, followed_id, created_at} + index unique (follower,followed) + index followed_id.
+- POST /api/readers/{handle}/follow (toggle, 400 self_follow, 404 inconnu, push "X suit maintenant tes lectures" au suivi — non-bloquant).
+- GET /api/readers/{handle} → is_following + stats.followers. GET /api/feed → is_followed_author:true + tri stable citations suivies en tête. POST /api/quotes is_public → push aux abonnés (« texte », action_url /quote/{id}).
+- Frontend : bouton Suivre/Suivi (btn-follow) sur /reader/[handle] (masqué si is_me), compteur abonnés dans les stats, tag « SUIVI » chambray sur les cartes du fil (home.tsx), i18n Follow/Following/followers.
+- Testé : 7/7 backend (test_iteration12.py) + e2e frontend FR/EN. Toujours en attente : google-services.json Firebase (non fourni — l'image jointe était une capture GitHub).
+
+## Itération 13 — Suppression de livre + pont recherche locale→catalogue (juin 2026)
+- **Diagnostic « je ne trouve pas de livres »** : la recherche de l'accueil (/search) ne fouille QUE la bibliothèque/citations de l'utilisateur. Ajout d'un pont : état vide → CTA « Chercher « {q} » dans le catalogue en ligne » (testID search-catalog-cta) + lien discret au-dessus des résultats livres (search-catalog-link) → navigue vers /book/add?q={q} (add.tsx accepte le param q et préremplit la recherche internet).
+- **Babelio** : impossible (aucune API publique, le site bloque les IP serveurs — timeout). Base = Google Books + Open Library + BnF.
+- **Nettoyage BnF** : helper _clean_bnf_title (retire « (Éd. collector) », « ([Éd. en gros caractères]) », « : roman … »), appliqué titre + ISBN → meilleure déduplication.
+- **Suppression de livre** : icône corbeille (book-delete) dans l'en-tête de la fiche livre → modal de confirmation custom (compatible web, Alert.alert ne marche pas sur web) → DELETE /api/books/{id} → retour bibliothèque. Les citations sont conservées. i18n FR/EN.
+- Testé e2e : recherche « jacaranda » vide → CTA → ajout depuis le catalogue → suppression → disparu de la bibliothèque.
