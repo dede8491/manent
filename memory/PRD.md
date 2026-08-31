@@ -195,3 +195,27 @@
 - birthdate à l'inscription (JJ/MM/AAAA obligatoire côté frontend, ISO en base) + modal une-fois pour comptes existants (home.tsx, clé AsyncStorage manent_birth_prompted, PATCH /me/settings).
 - Citations : is_sensitive (case « Contenu sensible 18+ » dans capture si publique) + filet IA Claude (asyncio.create_task, _ai_sensitivity_check) à la création/publication.
 - Filtrage : sans birthdate ou <18 ans → citations sensibles exclues du feed, pages thèmes, profils publics, et get_quote → 404.
+
+## Itération 24 — Cohérence statut/progression + couvertures + « Mes citations » (juin 2026)
+### Étape 1 — Statut ↔ progression (source de vérité unique, backend patch_book/create_book)
+- Ajout « Terminé » → 100 % direct (progress=pages/chapters, finished_at, read_count=1) sans passer par En cours.
+- Terminé → progression auto 100 %, finished_at, read_count+1, bannière « Bravo ! Note ta lecture… » (frontend finished-banner).
+- Terminé → En cours = relecture : is_rereading=true, progression 0, historique conservé (badge RELECTURE / LU {n} FOIS).
+- À lire → progression 0. En cours depuis À lire → modal « Page où tu en es ». Clamp : progression ≤ total.
+- Total inconnu → « Édition non référencée » + bouton « Nombre de pages ? » (BookPatch accepte pages/chapters/cover).
+- Sélecteur de statut (chips) dans book/[id].tsx (testID book-status-*), étoiles masquées si « À lire », bouton « Modifier » progression, modal page (page-modal-*).
+### Suppression en cascade
+- DELETE /books/{id} : citations + épingles (board_quotes) + référence lecture commune des cercles (clubs.book unset).
+- GET /books/{id}/impact {quotes,pins,clubs} → confirmation listant ce qui sera perdu.
+### Étape 2 — Couvertures
+- _find_cover (OpenLibrary ISBN → Google Books (+&zoom=1, https) → OpenLibrary titre+auteur en repli quota 429).
+- Backfill auto à la création (asyncio task) + migration ponctuelle au démarrage (db.meta covers_migrated_v1, 12 couvertures récupérées).
+- Changement manuel de couverture depuis la fiche livre (badge caméra → galerie → /api/upload → PATCH cover).
+### Étape 3 — Écran « Mes citations »
+- src/components/QuotesManager.tsx : recherche plein texte, bascule liste/grille, bannière compteurs (X publiques · Y privées · Z masquées), filtres visibilité/livre/thème, menu ⋯ (Modifier, Rendre publique/privée, Masquer/Afficher, Supprimer), sélection multiple (appui long) avec barre d'actions bulk, suppression avec annulation 5 s (undo bar).
+- Accès : segment « Livres / Citations » dans Bibliothèque (lib-seg-*) + ligne « Mes citations » dans Profil (row-quotes) + route /quotes.
+- Backend : is_hidden (QuotePatch), POST /api/quotes/bulk {ids, action delete|hide|show|public|private} ; citations masquées exclues du feed, pages thèmes, profils publics, get_quote non-propriétaire → 404. Testé par curl.
+### Restant du prompt « Révision de cohérence » (sections 4, 5, 6 — NON FAIT)
+- Section 5 : système de cartes variées (citation courte/longue, livre, primé, tableau, collection, lecteur, sponsorisé).
+- Section 4 : Accueil vivant Pinterest (sections Reprendre ta lecture / Pour toi / Livres primés via featured_collections / Plus lus / Collections thématiques / Nouveautés / Tableaux populaires / Lecteurs à suivre / sponsorisé, fiche de découverte livre, scroll infini). ATTENTION : Google Books souvent en quota 429 — prévoir cache serveur + replis Open Library.
+- Section 6 : capture → création de livre à la volée ; récap/note cachés si « À lire » ; dates relatives françaises ; vérif mode sombre nouveaux écrans ; 3 niveaux de visibilité (privé/abonnés/public) demandés mais seuls privé/public+masqué implémentés à ce jour.

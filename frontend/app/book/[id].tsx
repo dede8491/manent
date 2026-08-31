@@ -12,7 +12,7 @@ import { QuoteCard, Quote } from '@/src/components/QuoteCard';
 import { StudySheet } from '@/src/components/StudySheet';
 import { toBase64 } from '@/src/image';
 import { buildSheetHtml } from '@/src/sheetPdf';
-import { api } from '@/src/api';
+import { api, getCachedToken } from '@/src/api';
 import { BookCover } from '@/src/components/BookCover';
 import { useT } from '@/src/i18n';
 
@@ -36,6 +36,91 @@ export default function BookDetail() {
   const [generating, setGenerating] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [impact, setImpact] = useState<{ quotes: number; pins: number; clubs: number } | null>(null);
+  const [pageModal, setPageModal] = useState<null | 'progress' | 'total' | 'start'>(null);
+  const [pageInput, setPageInput] = useState('');
+  const [finishedBanner, setFinishedBanner] = useState(false);
+
+  const openDelete = async () => {
+    setConfirmDelete(true);
+    try { setImpact(await api(`/books/${id}/impact`)); } catch { setImpact(null); }
+  };
+
+  // Changement de statut cohérent (source de vérité unique)
+  const changeStatus = async (next: 'a_lire' | 'en_cours' | 'termine') => {
+    if (!book || next === book.status) return;
+    if (next === 'termine') {
+      const b = await api<any>(`/books/${id}`, { method: 'PATCH', body: JSON.stringify({ status: 'termine' }) });
+      setBook(b);
+      setFinishedBanner(true);
+      return;
+    }
+    if (next === 'en_cours' && book.status === 'termine') {
+      const doIt = async () => {
+        const b = await api<any>(`/books/${id}`, { method: 'PATCH', body: JSON.stringify({ status: 'en_cours' }) });
+        setBook(b);
+      };
+      if (Platform.OS === 'web') { doIt(); return; }
+      Alert.alert(t('Relecture ?'), t('Ta progression repart de zéro, ton historique de lecture est conservé.'), [
+        { text: t('Annuler'), style: 'cancel' },
+        { text: t('Relire'), onPress: doIt },
+      ]);
+      return;
+    }
+    if (next === 'en_cours') {
+      // À lire → En cours : demander la page (ou chapitre) courante
+      setPageInput('');
+      setPageModal('start');
+      return;
+    }
+    const b = await api<any>(`/books/${id}`, { method: 'PATCH', body: JSON.stringify({ status: 'a_lire' }) });
+    setBook(b);
+  };
+
+  const savePageModal = async () => {
+    const n = Math.max(0, parseInt(pageInput, 10) || 0);
+    const isWp = book.type === 'wattpad';
+    const progKey = isWp ? 'progress_chapter' : 'progress_page';
+    let patch: any = {};
+    if (pageModal === 'total') patch = isWp ? { chapters: n } : { pages: n };
+    else if (pageModal === 'start') patch = { status: 'en_cours', [progKey]: n };
+    else {
+      patch = { [progKey]: n };
+      const totalN = isWp ? book.chapters : book.pages;
+      if (totalN && n >= totalN) patch.status = 'termine';
+      else if (book.status === 'a_lire') patch.status = 'en_cours';
+    }
+    const b = await api<any>(`/books/${id}`, { method: 'PATCH', body: JSON.stringify(patch) });
+    setBook(b);
+    if (patch.status === 'termine') setFinishedBanner(true);
+    setPageModal(null);
+  };
+
+  // Changer la couverture manuellement (galerie) — utile pour les éditions non référencées
+  const changeCover = async () => {
+    try {
+      const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [2, 3], quality: 0.8 });
+      if (res.canceled || !res.assets?.[0]) return;
+      const asset = res.assets[0];
+      const form = new FormData();
+      if (Platform.OS === 'web') {
+        const blob = await (await fetch(asset.uri)).blob();
+        form.append('file', new File([blob], 'cover.jpg', { type: blob.type || 'image/jpeg' }));
+      } else {
+        form.append('file', { uri: asset.uri, name: 'cover.jpg', type: 'image/jpeg' } as any);
+      }
+      const r = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_URL}/api/upload`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${getCachedToken()}` },
+        body: form,
+      });
+      const j = await r.json();
+      if (j.url) {
+        const b = await api<any>(`/books/${id}`, { method: 'PATCH', body: JSON.stringify({ cover: j.url }) });
+        setBook(b);
+      }
+    } catch {}
+  };
 
   const deleteBook = async () => {
     if (deleting) return;
@@ -172,33 +257,69 @@ export default function BookDetail() {
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
         <Pressable onPress={() => router.back()} testID="book-back" style={styles.iconBtn}><Feather name="chevron-left" size={22} color={colors.espresso} /></Pressable>
         <Text style={styles.headerTitle} numberOfLines={1}>{book.title}</Text>
-        <Pressable onPress={() => setConfirmDelete(true)} testID="book-delete" style={styles.iconBtn}>
+        <Pressable onPress={openDelete} testID="book-delete" style={styles.iconBtn}>
           <Feather name="trash-2" size={19} color={colors.clay} />
         </Pressable>
       </View>
       <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + spacing.xxl }}>
         <View style={styles.top}>
-          <BookCover uri={book.cover} title={book.title} width={64} height={88} radius={8} initialSize={28} />
+          <Pressable testID="book-cover-edit" onPress={changeCover}>
+            <BookCover uri={book.cover} title={book.title} width={64} height={88} radius={8} initialSize={28} />
+            <View style={styles.coverEditBadge}><Feather name="camera" size={10} color={colors.creme} /></View>
+          </Pressable>
           <View style={{ flex: 1, gap: 4 }}>
             {isWattpad ? <Text style={styles.badge}>{t('HISTOIRE WATTPAD')}</Text> : isEtude ? <Text style={styles.badge}>{t('ÉTUDES')}</Text> : null}
             <Text style={styles.title}>{book.title}</Text>
             {book.author ? <Text style={styles.author}>{book.author}</Text> : null}
-            <View style={{ flexDirection: 'row', gap: 4, marginTop: 4 }}>
-              {[1,2,3,4,5].map(i => (
-                <Pressable key={i} testID={`star-${i}`} onPress={async () => { setRating(i); await saveField({ rating: i }); }}>
-                  <Feather name="star" size={18} color={colors.chambray} style={{ opacity: i <= rating ? 1 : 0.3 }} />
-                </Pressable>
-              ))}
-            </View>
+            {book.is_rereading ? <Text style={styles.rereadBadge}>{t('RELECTURE')}</Text> : (book.read_count || 0) > 1 ? <Text style={styles.rereadBadge}>{t('LU {n} FOIS', { n: book.read_count })}</Text> : null}
+            {book.status !== 'a_lire' && (
+              <View style={{ flexDirection: 'row', gap: 4, marginTop: 4 }}>
+                {[1,2,3,4,5].map(i => (
+                  <Pressable key={i} testID={`star-${i}`} onPress={async () => { setRating(i); await saveField({ rating: i }); }}>
+                    <Feather name="star" size={18} color={colors.chambray} style={{ opacity: i <= rating ? 1 : 0.3 }} />
+                  </Pressable>
+                ))}
+              </View>
+            )}
           </View>
         </View>
+
+        <View style={styles.statusRow}>
+          {([['a_lire', 'À lire'], ['en_cours', 'En cours'], ['termine', 'Terminé']] as const).map(([sid, lbl]) => (
+            <Pressable key={sid} testID={`book-status-${sid}`} onPress={() => changeStatus(sid)} style={[styles.statusChip, book.status === sid && styles.statusChipActive]}>
+              <Text style={[styles.statusChipText, book.status === sid && styles.statusChipTextActive]}>{t(lbl)}</Text>
+            </Pressable>
+          ))}
+        </View>
+
+        {finishedBanner && (
+          <View style={styles.finishedBox} testID="finished-banner">
+            <Feather name="award" size={16} color={colors.chambray} />
+            <Text style={styles.finishedText}>{t('Bravo ! Note ta lecture avec les étoiles ci-dessus, et garde-en une trace dans ta fiche.')}</Text>
+            <Pressable onPress={() => setFinishedBanner(false)} hitSlop={8}><Feather name="x" size={14} color={colors.clay} /></Pressable>
+          </View>
+        )}
 
         {total ? (
           <View style={{ marginTop: spacing.lg }}>
             <View style={styles.progressBar}><View style={[styles.progressFill, { width: `${pct}%` }]} /></View>
-            <Text style={styles.progressText}>{prog || 0} / {total} {isWattpad ? 'chap.' : 'p.'} · {pct}%</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={styles.progressText}>{prog || 0} / {total} {isWattpad ? 'chap.' : 'p.'} · {pct}%</Text>
+              {book.status === 'en_cours' && (
+                <Pressable testID="btn-edit-progress" onPress={() => { setPageInput(String(prog || 0)); setPageModal('progress'); }} hitSlop={8}>
+                  <Text style={styles.editProgress}>{t('Modifier')}</Text>
+                </Pressable>
+              )}
+            </View>
           </View>
-        ) : null}
+        ) : (
+          <View style={{ marginTop: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Text style={styles.progressText}>{(prog || 0) > 0 ? `${isWattpad ? t('Chapitre') : t('Page')} ${prog}` : t('Édition non référencée')}</Text>
+            <Pressable testID="btn-set-total" onPress={() => { setPageInput(''); setPageModal('total'); }} hitSlop={8}>
+              <Text style={styles.editProgress}>{isWattpad ? t('Nombre de chapitres ?') : t('Nombre de pages ?')}</Text>
+            </Pressable>
+          </View>
+        )}
 
         {!isWattpad && (
           <View style={{ marginTop: spacing.md }}>
@@ -333,12 +454,38 @@ export default function BookDetail() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
             <Text style={styles.modalTitle}>{t('Supprimer ce livre ?')}</Text>
-            <Text style={styles.modalText}>{t('« {title} » et sa progression quitteront ta bibliothèque. Tes citations, elles, restent précieusement gardées.', { title: book.title })}</Text>
+            <Text style={styles.modalText}>
+              {t('« {title} » quittera ta bibliothèque, définitivement.', { title: book.title })}
+              {impact ? `\n\n${t('Seront aussi supprimées :')}\n· ${t(impact.quotes > 1 ? '{n} citations' : '{n} citation', { n: impact.quotes })}${impact.pins > 0 ? `\n· ${t(impact.pins > 1 ? '{n} épingles retirées de tes tableaux' : '{n} épingle retirée de tes tableaux', { n: impact.pins })}` : ''}${impact.clubs > 0 ? `\n· ${t('la lecture commune de {n} cercle(s)', { n: impact.clubs })}` : ''}` : ''}
+            </Text>
             <Pressable testID="book-delete-confirm" onPress={deleteBook} disabled={deleting} style={styles.deleteBtn}>
               {deleting ? <ActivityIndicator color={colors.creme} size="small" /> : <Text style={styles.deleteBtnText}>{t('Supprimer définitivement')}</Text>}
             </Pressable>
             <Pressable testID="book-delete-cancel" onPress={() => setConfirmDelete(false)} style={styles.cancelBtn}>
               <Text style={styles.cancelBtnText}>{t('Garder ce livre')}</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={pageModal !== null} transparent animationType="slide" onRequestClose={() => setPageModal(null)}>
+        <View style={[styles.modalOverlay, { justifyContent: 'flex-end' }]}>
+          <View style={[styles.modalBox, { borderRadius: 0, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: insets.bottom + spacing.lg }]}>
+            <Text style={styles.modalTitle}>
+              {pageModal === 'total' ? (isWattpad ? t('Nombre total de chapitres') : t('Nombre total de pages')) : (isWattpad ? t('Chapitre où tu en es') : t('Page où tu en es'))}
+            </Text>
+            <TextInput
+              testID="page-modal-input"
+              value={pageInput} onChangeText={setPageInput}
+              keyboardType="number-pad" maxLength={5} autoFocus
+              placeholder="0" placeholderTextColor={colors.clay}
+              style={styles.pageInput}
+            />
+            <Pressable testID="page-modal-save" onPress={savePageModal} style={styles.detectConfirm}>
+              <Text style={styles.photoBtnText}>{t('Enregistrer')}</Text>
+            </Pressable>
+            <Pressable testID="page-modal-cancel" onPress={() => setPageModal(null)} style={[styles.cancelBtn, { marginTop: spacing.sm }]}>
+              <Text style={styles.cancelBtnText}>{t('Annuler')}</Text>
             </Pressable>
           </View>
         </View>
@@ -371,6 +518,17 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   progressBar: { height: 4, backgroundColor: colors.borderSoft, borderRadius: 2, overflow: 'hidden' },
   progressFill: { height: 4, backgroundColor: colors.chambray },
   progressText: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.clay, letterSpacing: 1, marginTop: 4, textTransform: 'uppercase' },
+  editProgress: { fontFamily: fonts.body, fontSize: 12, color: colors.chambray, textDecorationLine: 'underline', marginTop: 4 },
+  coverEditBadge: { position: 'absolute', bottom: -4, right: -4, width: 20, height: 20, borderRadius: 10, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.glacier },
+  rereadBadge: { fontFamily: fonts.bodyMedium, fontSize: 9, color: colors.chambray, letterSpacing: 1.5, marginTop: 2 },
+  statusRow: { flexDirection: 'row', gap: 8, marginTop: spacing.md },
+  statusChip: { flex: 1, height: 36, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.creme },
+  statusChipActive: { backgroundColor: colors.chambray, borderColor: colors.chambray },
+  statusChipText: { fontFamily: fonts.body, fontSize: 13, color: colors.espresso },
+  statusChipTextActive: { color: colors.creme, fontFamily: fonts.bodyMedium },
+  finishedBox: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.bisque, borderRadius: radius.md, padding: spacing.md, marginTop: spacing.md },
+  finishedText: { flex: 1, fontFamily: fonts.body, fontSize: 12.5, color: colors.espresso, lineHeight: 18 },
+  pageInput: { height: 56, borderWidth: 1, borderColor: colors.borderSoft, borderRadius: radius.md, fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso, backgroundColor: colors.creme, marginVertical: spacing.md, textAlign: 'center' },
   photoBtn: { height: 48, borderRadius: radius.md, backgroundColor: colors.chambray, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   photoBtnText: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.creme },
   detectBox: { padding: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft },

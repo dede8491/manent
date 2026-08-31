@@ -38,7 +38,7 @@ async def search_isbn(isbn: str):
                 "isbn": isbn,
                 "pages": v.get("pageCount"),
                 "year": (v.get("publishedDate") or "")[:4] or None,
-                "cover": (v.get("imageLinks") or {}).get("thumbnail", "").replace("http://", "https://"),
+                "cover": ((v.get("imageLinks") or {}).get("thumbnail", "").replace("http://", "https://") + "&zoom=1") if (v.get("imageLinks") or {}).get("thumbnail") else None,
                 "description": v.get("description"),
                 "source": "google",
             }
@@ -134,7 +134,7 @@ async def _search_google(http: httpx.AsyncClient, q: str) -> list:
                 "isbn": next((i.get("identifier") for i in (v.get("industryIdentifiers") or []) if i.get("type") in ("ISBN_13", "ISBN_10")), None),
                 "pages": v.get("pageCount"),
                 "year": (v.get("publishedDate") or "")[:4] or None,
-                "cover": (v.get("imageLinks") or {}).get("thumbnail", "").replace("http://", "https://") or None,
+                "cover": ((v.get("imageLinks") or {}).get("thumbnail", "").replace("http://", "https://") + "&zoom=1") if (v.get("imageLinks") or {}).get("thumbnail") else None,
                 "_fr": (v.get("language") == "fr"),
             })
     except Exception:

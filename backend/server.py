@@ -280,7 +280,7 @@ async def _attach_public_meta(quotes: list):
 
 @api.get("/themes/{theme}/page")
 async def theme_page(theme: str, user=Depends(get_current_user)):
-    q = {"is_public": True, "themes": theme, **sensitive_filter(user)}
+    q = {"is_public": True, "themes": theme, "is_hidden": {"$ne": True}, **sensitive_filter(user)}
     total = await db.quotes.count_documents(q)
     readers = len(await db.quotes.distinct("user_id", q))
     books = len([b for b in await db.quotes.distinct("book_id", q) if b])
@@ -379,7 +379,7 @@ async def public_profile(handle: str, user=Depends(get_current_user)):
     if not profile_public and u["user_id"] != user["user_id"]:
         return {"user": {"pseudo": u["pseudo"], "handle": u["handle"], "picture": u.get("picture")},
                 "is_me": False, "private": True}
-    q = {"user_id": u["user_id"], "is_public": True, **sensitive_filter(user)}
+    q = {"user_id": u["user_id"], "is_public": True, "is_hidden": {"$ne": True}, **sensitive_filter(user)}
     total = await db.quotes.count_documents(q)
     books = len([b for b in await db.quotes.distinct("book_id", q) if b])
     boards = await db.boards.count_documents({"user_id": u["user_id"], "visibility": "public"})
@@ -432,6 +432,9 @@ class BookCreate(BaseModel):
 class BookPatch(BaseModel):
     title: Optional[str] = None
     author: Optional[str] = None
+    cover: Optional[str] = None
+    pages: Optional[int] = None
+    chapters: Optional[int] = None
     status: Optional[Literal['a_lire', 'en_cours', 'termine']] = None
     rating: Optional[int] = None
     recap: Optional[str] = None
@@ -441,6 +444,78 @@ class BookPatch(BaseModel):
     exam_date: Optional[str] = None
     level: Optional[str] = None
     sheet: Optional[dict] = None  # fiche d'études: author_bio, characters, summary, themes
+
+
+# ---- Couvertures : récupération automatique + migration ----
+async def _find_cover(title: Optional[str], author: Optional[str], isbn: Optional[str]) -> Optional[str]:
+    async with httpx.AsyncClient(timeout=10) as http:
+        if isbn:
+            url = f"https://covers.openlibrary.org/b/isbn/{isbn}-L.jpg?default=false"
+            try:
+                r = await http.head(url, follow_redirects=True)
+                if r.status_code == 200:
+                    return url
+            except Exception:
+                pass
+        try:
+            q = f"isbn:{isbn}" if isbn else f"{title or ''} {author or ''}".strip()
+            if q:
+                r = await http.get("https://www.googleapis.com/books/v1/volumes", params={"q": q, "maxResults": 3})
+                if r.status_code == 200:
+                    for it in (r.json().get("items") or []):
+                        th = (it.get("volumeInfo", {}).get("imageLinks") or {}).get("thumbnail")
+                        if th:
+                            return th.replace("http://", "https://") + "&zoom=1"
+        except Exception:
+            pass
+        # Repli : recherche Open Library par titre + auteur (utile quand Google est en quota)
+        try:
+            if title:
+                r = await http.get("https://openlibrary.org/search.json",
+                                   params={"title": title, "author": author or "", "limit": 3, "fields": "cover_i"})
+                if r.status_code == 200:
+                    for d in (r.json().get("docs") or []):
+                        if d.get("cover_i"):
+                            return f"https://covers.openlibrary.org/b/id/{d['cover_i']}-L.jpg"
+        except Exception:
+            pass
+    return None
+
+
+async def _backfill_cover(book_id: str, title, author, isbn):
+    try:
+        c = await _find_cover(title, author, isbn)
+        if c:
+            await db.books.update_one({"book_id": book_id, "cover": {"$in": [None, ""]}}, {"$set": {"cover": c}})
+    except Exception as e:
+        logger.warning("cover backfill failed: %s", e)
+
+
+async def _migrate_covers():
+    """Migration ponctuelle : récupère les couvertures manquantes de toute la base."""
+    if await db.meta.find_one({"key": "covers_migrated_v1"}):
+        return
+    books = await db.books.find(
+        {"$or": [{"cover": None}, {"cover": ""}]},
+        {"_id": 0, "book_id": 1, "title": 1, "author": 1, "isbn": 1},
+    ).to_list(1000)
+    found = 0
+    for b in books:
+        c = await _find_cover(b.get("title"), b.get("author"), b.get("isbn"))
+        if c:
+            await db.books.update_one({"book_id": b["book_id"]}, {"$set": {"cover": c}})
+            found += 1
+    cb_books = await db.club_books.find(
+        {"$or": [{"cover": None}, {"cover": ""}]},
+        {"_id": 0, "cb_id": 1, "title": 1, "author": 1, "isbn": 1},
+    ).to_list(500)
+    for b in cb_books:
+        c = await _find_cover(b.get("title"), b.get("author"), b.get("isbn"))
+        if c:
+            await db.club_books.update_one({"cb_id": b["cb_id"]}, {"$set": {"cover": c}})
+            found += 1
+    await db.meta.insert_one({"key": "covers_migrated_v1", "at": now_utc(), "found": found})
+    logger.info("cover migration done: %s covers found", found)
 
 
 @api.post("/books")
@@ -456,9 +531,21 @@ async def create_book(body: BookCreate, user=Depends(get_current_user)):
         "sheet": {},
         "progress_page": 0,
         "progress_chapter": 0,
+        "read_count": 0,
         "created_at": now_utc(),
     }
+    # Cohérence : un livre ajouté « Terminé » entre à 100 % sans passer par « En cours »
+    if body.status == "termine":
+        if body.type == "wattpad" and body.chapters:
+            doc["progress_chapter"] = body.chapters
+        elif body.pages:
+            doc["progress_page"] = body.pages
+        doc["finished_at"] = now_utc()
+        doc["read_count"] = 1
     await db.books.insert_one(doc.copy())
+    # Récupération de couverture en arrière-plan si absente
+    if not doc.get("cover"):
+        asyncio.create_task(_backfill_cover(book_id, doc.get("title"), doc.get("author"), doc.get("isbn")))
     return clean_doc(doc)
 
 
@@ -498,24 +585,60 @@ async def log_reading_event(user_id: str, pages: int = 0):
 
 @api.patch("/books/{book_id}")
 async def patch_book(book_id: str, body: BookPatch, user=Depends(get_current_user)):
+    book = await db.books.find_one({"book_id": book_id, "user_id": user["user_id"]}, {"_id": 0})
+    if not book:
+        raise HTTPException(status_code=404, detail="not_found")
     upd = {k: v for k, v in body.dict().items() if v is not None}
+    is_wattpad = book.get("type") == "wattpad"
+    prog_key = "progress_chapter" if is_wattpad else "progress_page"
+    total = (upd.get("chapters") or book.get("chapters")) if is_wattpad else (upd.get("pages") or book.get("pages"))
+    # La progression ne dépasse jamais le total
+    if prog_key in upd and total:
+        upd[prog_key] = max(0, min(int(total), upd[prog_key]))
     if "progress_page" in upd:
-        prev = await db.books.find_one({"book_id": book_id, "user_id": user["user_id"]}, {"_id": 0, "progress_page": 1})
-        delta = upd["progress_page"] - (prev.get("progress_page") or 0) if prev else 0
+        delta = upd["progress_page"] - (book.get("progress_page") or 0)
         await log_reading_event(user["user_id"], delta)
-    if upd.get("status") == "termine":
-        cur = await db.books.find_one({"book_id": book_id, "user_id": user["user_id"]}, {"_id": 0, "finished_at": 1})
-        if cur is not None and not cur.get("finished_at"):
+    # Cohérence statut ↔ progression (source de vérité unique)
+    new_status = upd.get("status")
+    if new_status == "termine":
+        if total:
+            upd[prog_key] = int(total)
+        if book.get("status") != "termine":
             upd["finished_at"] = now_utc()
+            upd["read_count"] = (book.get("read_count") or 0) + 1
+            upd["is_rereading"] = False
+    elif new_status == "a_lire":
+        upd[prog_key] = 0
+        upd["is_rereading"] = False
+    elif new_status == "en_cours" and book.get("status") == "termine":
+        # Relecture : l'historique (finished_at, read_count) est conservé, on repart de 0
+        upd["is_rereading"] = True
+        upd.setdefault(prog_key, 0)
     if upd:
         await db.books.update_one({"book_id": book_id, "user_id": user["user_id"]}, {"$set": upd})
     return await get_book(book_id, user)
 
 
+@api.get("/books/{book_id}/impact")
+async def book_delete_impact(book_id: str, user=Depends(get_current_user)):
+    """Ce qui sera perdu si le livre est supprimé (pour la confirmation)."""
+    quote_ids = [q["quote_id"] for q in await db.quotes.find(
+        {"book_id": book_id, "user_id": user["user_id"]}, {"_id": 0, "quote_id": 1}).to_list(1000)]
+    pins = await db.board_quotes.count_documents({"quote_id": {"$in": quote_ids}}) if quote_ids else 0
+    clubs = await db.clubs.count_documents({"book.book_id": book_id})
+    return {"quotes": len(quote_ids), "pins": pins, "clubs": clubs}
+
+
 @api.delete("/books/{book_id}")
 async def delete_book(book_id: str, user=Depends(get_current_user)):
+    quote_ids = [q["quote_id"] for q in await db.quotes.find(
+        {"book_id": book_id, "user_id": user["user_id"]}, {"_id": 0, "quote_id": 1}).to_list(1000)]
     await db.books.delete_one({"book_id": book_id, "user_id": user["user_id"]})
     await db.quotes.delete_many({"book_id": book_id, "user_id": user["user_id"]})
+    if quote_ids:
+        await db.board_quotes.delete_many({"quote_id": {"$in": quote_ids}})
+    # Retire la référence de lecture commune dans les cercles
+    await db.clubs.update_many({"book.book_id": book_id}, {"$unset": {"book": ""}})
     return {"ok": True}
 
 
@@ -691,6 +814,12 @@ class QuotePatch(BaseModel):
     themes: Optional[List[str]] = None
     is_public: Optional[bool] = None
     is_sensitive: Optional[bool] = None
+    is_hidden: Optional[bool] = None
+
+
+class QuotesBulkBody(BaseModel):
+    ids: List[str]
+    action: Literal['delete', 'hide', 'show', 'public', 'private']
 
 
 async def _ai_sensitivity_check(quote_id: str, text: str):
@@ -767,6 +896,23 @@ async def list_quotes(book_id: Optional[str] = None, user=Depends(get_current_us
     return {"quotes": quotes}
 
 
+@api.post("/quotes/bulk")
+async def quotes_bulk(body: QuotesBulkBody, user=Depends(get_current_user)):
+    q = {"quote_id": {"$in": body.ids}, "user_id": user["user_id"]}
+    if body.action == "delete":
+        await db.quotes.delete_many(q)
+        await db.board_quotes.delete_many({"quote_id": {"$in": body.ids}})
+    elif body.action == "hide":
+        await db.quotes.update_many(q, {"$set": {"is_hidden": True}})
+    elif body.action == "show":
+        await db.quotes.update_many(q, {"$set": {"is_hidden": False}})
+    elif body.action == "public":
+        await db.quotes.update_many(q, {"$set": {"is_public": True}})
+    elif body.action == "private":
+        await db.quotes.update_many(q, {"$set": {"is_public": False}})
+    return {"ok": True, "count": len(body.ids)}
+
+
 # IMPORTANT : routes fixes déclarées AVANT /quotes/{quote_id}
 @api.get("/quotes/daily")
 async def daily_quote(user=Depends(get_current_user)):
@@ -786,7 +932,7 @@ async def get_quote(quote_id: str, user=Depends(get_current_user)):
     if not q:
         raise HTTPException(status_code=404, detail="not_found")
     is_owner = q["user_id"] == user["user_id"]
-    if not is_owner and not q.get("is_public"):
+    if not is_owner and (not q.get("is_public") or q.get("is_hidden")):
         raise HTTPException(status_code=404, detail="not_found")
     if not is_owner and q.get("is_sensitive") and not _is_adult(user):
         raise HTTPException(status_code=404, detail="not_found")
@@ -1709,7 +1855,7 @@ async def discover_isbn(isbn: str, user=Depends(get_current_user)):
 # ============ Home feed (public quotes) ============
 @api.get("/feed")
 async def feed(theme: Optional[str] = None, user=Depends(get_current_user)):
-    q: dict = {"is_public": True, **sensitive_filter(user)}
+    q: dict = {"is_public": True, "is_hidden": {"$ne": True}, **sensitive_filter(user)}
     if theme:
         q["themes"] = theme
     followed = [f["followed_id"] for f in await db.follows.find(
@@ -1889,6 +2035,7 @@ async def on_startup():
     await db.follows.create_index([("follower_id", 1), ("followed_id", 1)], unique=True)
     await db.follows.create_index("followed_id")
     asyncio.get_event_loop().create_task(_watch_wattpad())
+    asyncio.get_event_loop().create_task(_migrate_covers())
     logger.info("Manent backend ready")
 
 
