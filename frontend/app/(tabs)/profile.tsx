@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Modal, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Modal, TextInput, KeyboardAvoidingView, Platform, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles, useScheme, useToggleScheme } from '@/src/themeCtx';
 import { useAuth } from '@/src/auth';
-import { api } from '@/src/api';
+import { api, getCachedToken } from '@/src/api';
+import * as ImagePicker from 'expo-image-picker';
 import { useT } from '@/src/i18n';
 
 export default function Profile() {
@@ -15,7 +16,30 @@ export default function Profile() {
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user, signOut } = useAuth();
+  const { user, signOut, updateUser } = useAuth();
+
+  // Photo de profil : galerie -> upload -> PATCH /users/me
+  const pickAvatar = async () => {
+    try {
+      const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.7 });
+      if (res.canceled || !res.assets?.[0]) return;
+      const asset = res.assets[0];
+      const form = new FormData();
+      if (Platform.OS === 'web') {
+        const blob = await (await fetch(asset.uri)).blob();
+        form.append('file', new File([blob], 'avatar.jpg', { type: blob.type || 'image/jpeg' }));
+      } else {
+        form.append('file', { uri: asset.uri, name: 'avatar.jpg', type: 'image/jpeg' } as any);
+      }
+      const r = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_URL}/api/upload`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${getCachedToken()}` },
+        body: form,
+      });
+      const j = await r.json();
+      if (j.url) await updateUser({ picture: j.url });
+    } catch {}
+  };
   const scheme = useScheme();
   const toggle = useToggleScheme();
   const [premium, setPremium] = useState<{ is_premium: boolean; plan?: string | null; captures_used: number; captures_limit: number } | null>(null);
@@ -43,15 +67,22 @@ export default function Profile() {
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.glacier }} contentContainerStyle={{ paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 80 }} testID="screen-profile">
       <View style={styles.header}>
-        <View style={styles.avatar}><Text style={styles.avatarText}>{(user?.pseudo?.[0] || 'M').toUpperCase()}</Text></View>
+        <Pressable testID="avatar-edit" onPress={pickAvatar} style={styles.avatar}>
+          {user?.picture ? (
+            <Image source={{ uri: user.picture }} style={{ width: 80, height: 80, borderRadius: 40 }} />
+          ) : (
+            <Text style={styles.avatarText}>{(user?.pseudo?.[0] || 'M').toUpperCase()}</Text>
+          )}
+          <View style={styles.avatarBadge}><Feather name="camera" size={11} color={colors.creme} /></View>
+        </Pressable>
         <Text style={styles.pseudo}>{user?.pseudo}</Text>
         <Text style={styles.handle}>@{user?.handle}</Text>
       </View>
       <View style={styles.statsRow}>
-        <View style={styles.stat}><Text style={styles.statNum}>{stats.books}</Text><Text style={styles.statLbl}>{t('livres')}</Text></View>
-        <View style={styles.stat}><Text style={styles.statNum}>{stats.quotes}</Text><Text style={styles.statLbl}>{t('citations')}</Text></View>
-        <View style={styles.stat}><Text style={styles.statNum}>{stats.boards}</Text><Text style={styles.statLbl}>{t('tableaux')}</Text></View>
-        <View style={styles.stat}><Text style={styles.statNum}>{user?.themes?.length || 0}</Text><Text style={styles.statLbl}>{t('thèmes')}</Text></View>
+        <View style={styles.stat}><Text style={styles.statNum}>{stats.books}</Text><Text style={styles.statLbl} numberOfLines={1} adjustsFontSizeToFit>{t('livres')}</Text></View>
+        <View style={styles.stat}><Text style={styles.statNum}>{stats.quotes}</Text><Text style={styles.statLbl} numberOfLines={1} adjustsFontSizeToFit>{t('citations')}</Text></View>
+        <View style={styles.stat}><Text style={styles.statNum}>{stats.boards}</Text><Text style={styles.statLbl} numberOfLines={1} adjustsFontSizeToFit>{t('tableaux')}</Text></View>
+        <View style={styles.stat}><Text style={styles.statNum}>{user?.themes?.length || 0}</Text><Text style={styles.statLbl} numberOfLines={1} adjustsFontSizeToFit>{t('thèmes')}</Text></View>
       </View>
 
       {reading && (
@@ -63,7 +94,7 @@ export default function Profile() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.readingTitle}>{t('Ta semaine de lecture')}</Text>
-              <Text style={styles.readingSub}>{t('{p} pages lues · {d} jours actifs ce mois-ci', { p: reading.week_pages, d: reading.active_days_month })}</Text>
+              <Text style={styles.readingSub}>{`${reading.week_pages} ${t(reading.week_pages > 1 ? 'pages lues' : 'page lue')} · ${reading.active_days_month} ${t(reading.active_days_month > 1 ? 'jours actifs' : 'jour actif')} ${t('ce mois-ci')}`}</Text>
             </View>
           </View>
           <View style={styles.weekRow}>
@@ -197,13 +228,14 @@ export default function Profile() {
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   header: { alignItems: 'center', paddingHorizontal: spacing.xl, gap: spacing.xs },
   avatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: colors.bisque, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm },
+  avatarBadge: { position: 'absolute', bottom: 0, right: 0, width: 24, height: 24, borderRadius: 12, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.glacier },
   avatarText: { fontFamily: fonts.displayMedium, fontSize: 34, color: colors.espresso },
   pseudo: { fontFamily: fonts.displayMedium, fontSize: 26, color: colors.espresso },
   handle: { fontFamily: fonts.body, fontSize: 13, color: colors.clay },
   statsRow: { flexDirection: 'row', paddingHorizontal: spacing.xl, marginTop: spacing.xl, gap: spacing.sm },
-  stat: { flex: 1, backgroundColor: colors.creme, borderRadius: radius.md, padding: spacing.md, alignItems: 'center', borderWidth: 1, borderColor: colors.borderSoft },
+  stat: { flex: 1, backgroundColor: colors.creme, borderRadius: radius.md, paddingVertical: spacing.md, paddingHorizontal: 4, alignItems: 'center', borderWidth: 1, borderColor: colors.borderSoft },
   statNum: { fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso },
-  statLbl: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase', marginTop: 2 },
+  statLbl: { fontFamily: fonts.bodyMedium, fontSize: 8.5, color: colors.clay, letterSpacing: 0.4, textTransform: 'uppercase', marginTop: 2, textAlign: 'center' },
   readingCard: { marginHorizontal: spacing.xl, marginTop: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },
   streakBox: { width: 84, alignItems: 'center', paddingVertical: spacing.sm, backgroundColor: colors.bisque, borderRadius: radius.md },
   streakNum: { fontFamily: fonts.displayMedium, fontSize: 30, color: colors.espresso, lineHeight: 34 },

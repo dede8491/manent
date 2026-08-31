@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, TextInput, Modal, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable, TextInput, Modal, KeyboardAvoidingView, Platform, ScrollView, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -116,7 +116,7 @@ export default function Community() {
               const isF = followedSet.has(r.handle);
               return (
                 <Pressable key={r.handle} testID={`suggest-reader-${r.handle}`} onPress={() => router.push({ pathname: '/reader/[handle]', params: { handle: r.handle } })} style={styles.readerCard}>
-                  <View style={styles.readerAvatar}><Text style={styles.readerInitial}>{(r.pseudo?.[0] || 'M').toUpperCase()}</Text></View>
+                  <View style={styles.readerAvatar}>{r.picture ? <Image source={{ uri: r.picture }} style={{ width: 44, height: 44, borderRadius: 22 }} /> : <Text style={styles.readerInitial}>{(r.pseudo?.[0] || 'M').toUpperCase()}</Text>}</View>
                   <Text style={styles.readerName} numberOfLines={1}>{r.pseudo}</Text>
                   <Text style={styles.readerMeta} numberOfLines={1}>
                     {r.shared_themes?.length ? r.shared_themes.join(' · ') : t('{n} citations publiques', { n: r.public_quotes })}

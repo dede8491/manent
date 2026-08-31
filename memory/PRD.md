@@ -165,3 +165,11 @@
 - app.json : expo.icon + android.adaptiveIcon.foregroundImage → assets/brand/icon-1024.png (fond #3A2119), web.favicon → assets/brand/favicon-32.png.
 - src/components/ManentLoader.tsx : version React Native du loader du kit (M écrit à la plume via strokeDashoffset animé + point Chambray, react-native-svg + Animated, variants clair/sombre, prop fullscreen). Utilisé : splash initial (_layout, pendant chargement des polices), transcription IA (capture.tsx, variant sombre), recherche ISBN (book/add.tsx).
 - Les logos existants (Wordmark/Monogram) correspondaient déjà à l'identité du kit — conservés.
+
+## Itération 20 — Sélecteur de livre avec recherche (capture) (juin 2026)
+- capture.tsx : les chips horizontales « Livre de rattachement » remplacées par un bouton sélecteur (cap-book-picker) → bottom sheet Modal avec champ de recherche (cap-book-search, filtre titre/auteur), option « Aucun » (cap-book-none), lignes cap-book-{id} avec check sur la sélection. i18n FR/EN. Testé e2e (filtre « cand » → Candide → sélection affichée).
+
+## Itération 21 — Textes corrigés + couvertures partout + photo de profil (juin 2026)
+- **Textes** : labels stats du profil ne débordent plus (fontSize 8.5, letterSpacing 0.4, padding réduit, numberOfLines) ; pluriels corrigés « 0 page lue · 1 jour actif ce mois-ci » (clés i18n page lue/pages lues/jour actif/jours actifs/ce mois-ci).
+- **Couvertures** : composant partagé src/components/BookCover.tsx (Image + repli initiale onError) appliqué : bibliothèque (BookCard), fiche livre (détail), fiche de lecture, carnet, découverte ISBN. add.tsx avait déjà son Cover.
+- **Photo de profil** : avatar cliquable (avatar-edit, badge caméra) → ImagePicker → POST /api/upload (FormData, File sur web) → PATCH /api/users/me {picture} (champ picture ajouté à UserPatch). Affichée sur profil, profil public lecteur, suggestions communauté. Validé par curl (upload→data URL→picture set).

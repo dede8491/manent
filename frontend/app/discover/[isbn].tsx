@@ -7,6 +7,7 @@ import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
 import { QuoteCard, Quote } from '@/src/components/QuoteCard';
 import { api } from '@/src/api';
+import { BookCover } from '@/src/components/BookCover';
 import { useT } from '@/src/i18n';
 
 type Discover = {
@@ -59,7 +60,7 @@ export default function DiscoverBook() {
       ) : (
         <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + spacing.xxl }}>
           <View style={styles.bookCard}>
-            <View style={styles.cover}><Text style={styles.coverInitial}>{(data.book.title?.[0] || 'M').toUpperCase()}</Text></View>
+            <BookCover uri={data.book.cover} title={data.book.title} width={56} height={78} initialSize={28} />
             <View style={{ flex: 1, gap: 3 }}>
               <Text style={styles.title}>{data.book.title}</Text>
               {!!data.book.author && <Text style={styles.meta}>{data.book.author}</Text>}

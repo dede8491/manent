@@ -6,6 +6,7 @@ import { Feather, Ionicons } from '@expo/vector-icons';
 import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
 import { api } from '@/src/api';
+import { BookCover } from '@/src/components/BookCover';
 import { useT } from '@/src/i18n';
 
 type Fiche = { book_id: string; title: string; author?: string; rating?: number; updated_at?: string; has_summary?: boolean };
@@ -77,7 +78,7 @@ export default function Carnet() {
                   onPress={() => router.push({ pathname: '/fiche/[bookId]', params: { bookId: f.book_id } })}
                   style={styles.card}
                 >
-                  <View style={styles.cover}><Text style={styles.coverInitial}>{(f.title?.[0] || 'M').toUpperCase()}</Text></View>
+                  <BookCover uri={(f as any).cover} title={f.title} width={44} height={60} initialSize={22} />
                   <View style={{ flex: 1, gap: 2 }}>
                     <Text style={styles.cardTitle} numberOfLines={1}>{f.title}</Text>
                     {!!f.author && <Text style={styles.cardMeta} numberOfLines={1}>{f.author}</Text>}

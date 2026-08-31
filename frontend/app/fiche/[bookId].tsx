@@ -10,6 +10,7 @@ import { useColors, useStyles } from '@/src/themeCtx';
 import { api } from '@/src/api';
 import { useT } from '@/src/i18n';
 import { buildFicheHtml, FicheData } from '@/src/fichePdf';
+import { BookCover } from '@/src/components/BookCover';
 
 type Passage = { text: string; note?: string };
 
@@ -208,7 +209,7 @@ export default function FicheDeLecture() {
         <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + spacing.xxl }} keyboardShouldPersistTaps="handled">
           <Section styles={styles} colors={colors} icon="book" label={t('Le livre')}>
             <View style={styles.bookCard}>
-              <View style={styles.cover}><Text style={styles.coverInitial}>{(book.title?.[0] || 'M').toUpperCase()}</Text></View>
+              <BookCover uri={book.cover} title={book.title} width={48} height={66} initialSize={24} />
               <View style={{ flex: 1, gap: 2 }}>
                 <Text style={styles.bookTitle}>{book.title}</Text>
                 {!!book.author && <Text style={styles.bookMeta}>{book.author}</Text>}

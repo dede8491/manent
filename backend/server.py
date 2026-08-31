@@ -202,6 +202,7 @@ class UserPatch(BaseModel):
     reading_mode: Optional[Literal['plaisir', 'etudes', 'both']] = None
     themes: Optional[List[str]] = None
     pseudo: Optional[str] = None
+    picture: Optional[str] = None
 
 
 @api.patch("/users/me")

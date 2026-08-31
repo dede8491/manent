@@ -13,6 +13,7 @@ import { StudySheet } from '@/src/components/StudySheet';
 import { toBase64 } from '@/src/image';
 import { buildSheetHtml } from '@/src/sheetPdf';
 import { api } from '@/src/api';
+import { BookCover } from '@/src/components/BookCover';
 import { useT } from '@/src/i18n';
 
 export default function BookDetail() {
@@ -177,7 +178,7 @@ export default function BookDetail() {
       </View>
       <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + spacing.xxl }}>
         <View style={styles.top}>
-          <View style={styles.cover}><Text style={styles.coverInitial}>{(book.title[0] || 'M').toUpperCase()}</Text></View>
+          <BookCover uri={book.cover} title={book.title} width={64} height={88} radius={8} initialSize={28} />
           <View style={{ flex: 1, gap: 4 }}>
             {isWattpad ? <Text style={styles.badge}>{t('HISTOIRE WATTPAD')}</Text> : isEtude ? <Text style={styles.badge}>{t('ÉTUDES')}</Text> : null}
             <Text style={styles.title}>{book.title}</Text>

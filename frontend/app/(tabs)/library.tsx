@@ -6,6 +6,7 @@ import { Feather } from '@expo/vector-icons';
 import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
 import { api } from '@/src/api';
+import { BookCover } from '@/src/components/BookCover';
 import { useT } from '@/src/i18n';
 
 type Book = {
@@ -41,9 +42,7 @@ function BookCard({ b, onPress }: { b: Book; onPress: () => void }) {
   const pct = total && progress ? Math.min(100, Math.round((progress / total) * 100)) : 0;
   return (
     <Pressable onPress={onPress} testID={`book-card-${b.book_id}`} style={styles.card}>
-      <View style={styles.cover}>
-        <Text style={styles.coverInitial}>{(b.title[0] || 'M').toUpperCase()}</Text>
-      </View>
+      <BookCover uri={(b as any).cover} title={b.title} width={52} height={72} initialSize={22} />
       <View style={{ flex: 1 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           {isWattpad && <Text style={styles.badge}>WATTPAD</Text>}

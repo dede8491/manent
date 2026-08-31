@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, useWindowDimensions, ActivityIndicator, Share, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, useWindowDimensions, ActivityIndicator, Share, Platform , Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -104,7 +104,11 @@ export default function ReaderProfile() {
         <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xxl }}>
           <View style={styles.hero}>
             <View style={styles.avatar}>
-              <Text style={styles.avatarInitial}>{(profile.user.pseudo[0] || 'M').toUpperCase()}</Text>
+              {profile.user.picture ? (
+                <Image source={{ uri: profile.user.picture }} style={{ width: 84, height: 84, borderRadius: 42 }} />
+              ) : (
+                <Text style={styles.avatarInitial}>{(profile.user.pseudo[0] || 'M').toUpperCase()}</Text>
+              )}
             </View>
             <Text style={styles.pseudo} testID="reader-pseudo">{profile.user.pseudo}</Text>
             <Text style={styles.handle}>@{profile.user.handle}</Text>

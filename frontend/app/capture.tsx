@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, ScrollView, Pressable, Image, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, TextInput, ScrollView, Pressable, Image, KeyboardAvoidingView, Platform, Modal, FlatList } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -28,6 +28,8 @@ export default function CaptureModal() {
   const [selectedThemes, setSelectedThemes] = useState<string[]>([]);
   const [books, setBooks] = useState<{ book_id: string; title: string; type: string }[]>([]);
   const [bookId, setBookId] = useState<string | null>(null);
+  const [bookModal, setBookModal] = useState(false);
+  const [bookQuery, setBookQuery] = useState('');
   const [themes, setThemes] = useState<string[]>(['résilience','amour','argent','foi','leadership','famille','confiance','deuil','spiritualité','santé','voyage','entrepreneuriat']);
   const [customTheme, setCustomTheme] = useState('');
   const [showCustom, setShowCustom] = useState(false);
@@ -152,16 +154,13 @@ export default function CaptureModal() {
         />
 
         <Text style={styles.label}>{t('Livre de rattachement')}</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-          <Pressable onPress={() => setBookId(null)} style={[styles.chip, !bookId && styles.chipActive]}>
-            <Text style={[styles.chipText, !bookId && styles.chipTextActive]}>{t('Aucun')}</Text>
-          </Pressable>
-          {books.map(b => (
-            <Pressable key={b.book_id} testID={`cap-book-${b.book_id}`} onPress={() => setBookId(b.book_id)} style={[styles.chip, bookId === b.book_id && styles.chipActive]}>
-              <Text style={[styles.chipText, bookId === b.book_id && styles.chipTextActive]} numberOfLines={1}>{b.title}</Text>
-            </Pressable>
-          ))}
-        </ScrollView>
+        <Pressable testID="cap-book-picker" onPress={() => { setBookQuery(''); setBookModal(true); }} style={styles.pickerBtn}>
+          <Feather name="book" size={15} color={colors.clay} />
+          <Text style={[styles.pickerText, !bookId && { color: colors.clay }]} numberOfLines={1}>
+            {bookId ? (books.find(b => b.book_id === bookId)?.title || '') : t('Aucun')}
+          </Text>
+          <Feather name="chevron-down" size={16} color={colors.clay} />
+        </Pressable>
 
         <View style={{ flexDirection: 'row', gap: spacing.md }}>
           <View style={{ flex: 1 }}>
@@ -214,11 +213,68 @@ export default function CaptureModal() {
         <PrimaryButton testID="btn-save-quote" title={t('Enregistrer la citation')} onPress={save} loading={saving} disabled={!text.trim()} />
         <GhostButton title={t('Annuler')} onPress={() => router.back()} />
       </ScrollView>
+
+      <Modal visible={bookModal} transparent animationType="slide" onRequestClose={() => setBookModal(false)}>
+        <View style={styles.pickerOverlay}>
+          <View style={styles.pickerSheet}>
+            <Text style={styles.pickerTitle}>{t('Livre de rattachement')}</Text>
+            <View style={styles.pickerSearchRow}>
+              <Feather name="search" size={15} color={colors.clay} />
+              <TextInput
+                testID="cap-book-search"
+                value={bookQuery}
+                onChangeText={setBookQuery}
+                placeholder={t('Cherche par titre ou auteur…')}
+                placeholderTextColor={colors.clay}
+                style={styles.pickerSearchInput}
+                autoFocus={Platform.OS !== 'web'}
+              />
+            </View>
+            <FlatList
+              data={books.filter(b => !bookQuery.trim() || (b.title + ' ' + ((b as any).author || '')).toLowerCase().includes(bookQuery.trim().toLowerCase()))}
+              keyExtractor={b => b.book_id}
+              style={{ maxHeight: 340 }}
+              keyboardShouldPersistTaps="handled"
+              ListHeaderComponent={
+                <Pressable testID="cap-book-none" onPress={() => { setBookId(null); setBookModal(false); }} style={styles.pickerRow}>
+                  <Feather name="slash" size={15} color={colors.clay} />
+                  <Text style={styles.pickerRowText}>{t('Aucun')}</Text>
+                  {!bookId && <Feather name="check" size={16} color={colors.chambray} />}
+                </Pressable>
+              }
+              renderItem={({ item: b }) => (
+                <Pressable testID={`cap-book-${b.book_id}`} onPress={() => { setBookId(b.book_id); setBookModal(false); }} style={styles.pickerRow}>
+                  <View style={styles.pickerInitial}><Text style={styles.pickerInitialText}>{(b.title?.[0] || 'M').toUpperCase()}</Text></View>
+                  <Text style={styles.pickerRowText} numberOfLines={1}>{b.title}</Text>
+                  {bookId === b.book_id && <Feather name="check" size={16} color={colors.chambray} />}
+                </Pressable>
+              )}
+              ListEmptyComponent={<Text style={styles.pickerEmpty}>{t('Aucun livre ne correspond.')}</Text>}
+            />
+            <Pressable testID="cap-book-close" onPress={() => setBookModal(false)} style={{ alignSelf: 'center', padding: spacing.md, minHeight: 44 }}>
+              <Text style={styles.pickerClose}>{t('Fermer')}</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
+  pickerBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48, paddingHorizontal: spacing.md, borderRadius: radius.md, backgroundColor: colors.creme, borderWidth: 1, borderColor: colors.borderSoft },
+  pickerText: { flex: 1, fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.espresso },
+  pickerOverlay: { flex: 1, backgroundColor: 'rgba(58,33,25,0.55)', justifyContent: 'flex-end' },
+  pickerSheet: { backgroundColor: colors.glacier, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: spacing.xl, paddingBottom: spacing.xxl },
+  pickerTitle: { fontFamily: fonts.displayMedium, fontSize: 22, color: colors.espresso, marginBottom: spacing.md },
+  pickerSearchRow: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, paddingHorizontal: spacing.md, height: 46, marginBottom: spacing.sm },
+  pickerSearchInput: { flex: 1, fontFamily: fonts.body, fontSize: 14.5, color: colors.espresso, height: '100%' },
+  pickerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 50, paddingHorizontal: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSoft },
+  pickerRowText: { flex: 1, fontFamily: fonts.bodyMedium, fontSize: 14.5, color: colors.espresso },
+  pickerInitial: { width: 28, height: 38, borderRadius: 4, backgroundColor: colors.bisque, alignItems: 'center', justifyContent: 'center' },
+  pickerInitialText: { fontFamily: fonts.displayMedium, fontSize: 15, color: colors.espresso },
+  pickerEmpty: { fontFamily: fonts.body, fontSize: 13.5, color: colors.clay, textAlign: 'center', paddingVertical: spacing.lg },
+  pickerClose: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.chambray },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSoft, backgroundColor: colors.glacier },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   h1: { fontFamily: fonts.displayMedium, fontSize: 20, color: colors.espresso },
