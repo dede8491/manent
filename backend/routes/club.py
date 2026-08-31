@@ -1,6 +1,7 @@
 """Club de lecture global — livres proposés, lectures collectives, discussions, avis."""
 import logging
 import re
+from datetime import timedelta, timezone
 from typing import Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -56,6 +57,23 @@ class ReportBody(BaseModel):
     kind: str  # 'post' | 'comment'
     target_id: str
     reason: Optional[str] = None
+
+
+class PollOption(BaseModel):
+    title: str
+    author: Optional[str] = None
+    cover: Optional[str] = None
+    cb_id: Optional[str] = None
+
+
+class PollCreate(BaseModel):
+    question: str = Field(min_length=3, max_length=200)
+    options: List[PollOption] = Field(min_length=2, max_length=6)
+    days: int = Field(default=7, ge=1, le=30)
+
+
+class VoteBody(BaseModel):
+    option: int = Field(ge=0)
 
 
 # ---------- Helpers ----------
@@ -311,6 +329,114 @@ async def report_content(body: ReportBody, user=Depends(get_current_user)):
         "created_at": now_utc(),
     })
     return {"ok": True}
+
+
+# ---------- Sondages : élire le prochain livre du mois ----------
+async def _close_poll(p: dict):
+    """Clôt le sondage : le gagnant devient Livre du mois du Club."""
+    votes = p.get("votes") or {}
+    counts = [0] * len(p["options"])
+    for v in votes.values():
+        if 0 <= v < len(counts):
+            counts[v] += 1
+    winner_idx = counts.index(max(counts)) if any(counts) else None
+    await db.club_polls.update_one({"poll_id": p["poll_id"]}, {"$set": {"closed": True, "winner": winner_idx}})
+    if winner_idx is not None:
+        opt = p["options"][winner_idx]
+        await db.club_books.update_many({}, {"$unset": {"book_of_month": ""}})
+        if opt.get("cb_id"):
+            await db.club_books.update_one({"cb_id": opt["cb_id"]}, {"$set": {"book_of_month": True}})
+        else:
+            key = _norm(opt["title"], opt.get("author"))
+            existing = await db.club_books.find_one({"norm_key": key})
+            if existing:
+                await db.club_books.update_one({"norm_key": key}, {"$set": {"book_of_month": True}})
+            else:
+                await db.club_books.insert_one({
+                    "cb_id": new_id("cb"), "title": opt["title"], "author": opt.get("author"),
+                    "cover": opt.get("cover"), "norm_key": key, "added_by": p["created_by"],
+                    "book_of_month": True, "created_at": now_utc(),
+                })
+
+
+def _poll_view(p: dict, user_id: str) -> dict:
+    votes = p.pop("votes", {}) or {}
+    counts = [0] * len(p["options"])
+    for v in votes.values():
+        if 0 <= v < len(counts):
+            counts[v] += 1
+    total = sum(counts)
+    p["total_votes"] = total
+    p["my_vote"] = votes.get(user_id)
+    for i, o in enumerate(p["options"]):
+        o["votes"] = counts[i]
+        o["pct"] = round(counts[i] / total * 100) if total else 0
+    return p
+
+
+@router.get("/polls")
+async def list_polls(user=Depends(get_current_user)):
+    polls = await db.club_polls.find({}, {"_id": 0}).sort("created_at", -1).to_list(20)
+    out = []
+    for p in polls:
+        ends = p.get("ends_at")
+        if ends and ends.tzinfo is None:
+            ends = ends.replace(tzinfo=timezone.utc)
+        if not p.get("closed") and ends and ends < now_utc():
+            await _close_poll(p)
+            p = await db.club_polls.find_one({"poll_id": p["poll_id"]}, {"_id": 0})
+        out.append(_poll_view(p, user["user_id"]))
+    return {"polls": out, "is_admin": bool(user.get("is_admin"))}
+
+
+@router.post("/polls")
+async def create_poll(body: PollCreate, user=Depends(get_current_user)):
+    if not user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="forbidden")
+    doc = {
+        "poll_id": new_id("pl"),
+        "question": body.question.strip(),
+        "options": [o.dict() for o in body.options],
+        "votes": {},
+        "ends_at": now_utc() + timedelta(days=body.days),
+        "closed": False,
+        "winner": None,
+        "created_by": user["user_id"],
+        "created_at": now_utc(),
+    }
+    await db.club_polls.insert_one(doc.copy())
+    return _poll_view(doc, user["user_id"])
+
+
+@router.post("/polls/{poll_id}/vote")
+async def vote_poll(poll_id: str, body: VoteBody, user=Depends(get_current_user)):
+    p = await db.club_polls.find_one({"poll_id": poll_id}, {"_id": 0})
+    if not p:
+        raise HTTPException(status_code=404, detail="not_found")
+    ends = p.get("ends_at")
+    if ends and ends.tzinfo is None:
+        ends = ends.replace(tzinfo=timezone.utc)
+    if p.get("closed") or (ends and ends < now_utc()):
+        raise HTTPException(status_code=400, detail="poll_closed")
+    if body.option >= len(p["options"]):
+        raise HTTPException(status_code=400, detail="invalid_option")
+    if user["user_id"] in (p.get("votes") or {}):
+        raise HTTPException(status_code=409, detail="already_voted")
+    await db.club_polls.update_one({"poll_id": poll_id}, {"$set": {f"votes.{user['user_id']}": body.option}})
+    p = await db.club_polls.find_one({"poll_id": poll_id}, {"_id": 0})
+    return _poll_view(p, user["user_id"])
+
+
+@router.post("/polls/{poll_id}/close")
+async def close_poll_now(poll_id: str, user=Depends(get_current_user)):
+    if not user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="forbidden")
+    p = await db.club_polls.find_one({"poll_id": poll_id}, {"_id": 0})
+    if not p:
+        raise HTTPException(status_code=404, detail="not_found")
+    await _close_poll(p)
+    p = await db.club_polls.find_one({"poll_id": poll_id}, {"_id": 0})
+    return _poll_view(p, user["user_id"])
 
 
 # ---------- Avis (notes multi-critères) ----------

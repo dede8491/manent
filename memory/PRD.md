@@ -231,3 +231,10 @@
 - app/discover/book.tsx : fiche de découverte (couverture, prix, titre/auteur/année/résumé, choix statut À lire/En cours/Déjà lu, « Ajouter à ma bibliothèque » → POST /books → fiche livre).
 ### Non fait (sections 4-6 restantes)
 - Épingles sponsorisées (pas d'annonceur), tableaux populaires/lecteurs sur l'accueil (données vides), scroll infini, mémorisation cartes vues, liens d'achat affiliés sur la fiche découverte, section 6 (dates relatives, capture création livre à la volée, niveau « abonnés », audit mode sombre nouveaux écrans).
+
+## Itération 26 — Sondages du Club (Livre du mois) (juin 2026)
+- Backend routes/club.py : db.club_polls {poll_id, question, options[{title,author,cover,cb_id}], votes{user_id:idx}, ends_at, closed, winner}.
+- GET /api/club/polls (auto-clôture si ends_at dépassé), POST /api/club/polls (admin, 2-6 options, 1-30 jours), POST /polls/{id}/vote (vote unique — 409 si déjà voté), POST /polls/{id}/close (admin).
+- Clôture → gagnant élu « Livre du mois » : club_books.book_of_month=true (créé s'il n'existait pas), affiché en tête de liste avec badge LIVRE DU MOIS.
+- Frontend ClubHome : carte sondage (options cliquables → résultats % avec barres, coche sur mon vote, award sur gagnant, méta votes + date de fin), bouton « Créer un sondage » (admin uniquement) → modal question + sélection livres du Club + durée 7 j.
+- Un sondage de démo est actif en base (3 options). Admin = akereydaisy@gmail.com uniquement.

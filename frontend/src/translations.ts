@@ -604,4 +604,18 @@ export const EN: Record<string, string> = {
   'Découverte': 'Discovery',
   'Déjà lu': 'Already read',
   'Ajouter à ma bibliothèque': 'Add to my library',
+
+  // ---- Sondages du Club
+  'SONDAGE DU CLUB': 'CLUB POLL',
+  'SONDAGE TERMINÉ': 'POLL CLOSED',
+  'LIVRE DU MOIS': 'BOOK OF THE MONTH',
+  '{n} votes': '{n} votes',
+  '{n} vote': '{n} vote',
+  'se termine le {date}': 'ends on {date}',
+  'Élu livre du mois : {title}': 'Elected book of the month: {title}',
+  'Créer un sondage': 'Create a poll',
+  'Nouveau sondage': 'New poll',
+  'Ta question…': 'Your question…',
+  'Choisis 2 à 6 livres du Club :': 'Pick 2 to 6 Club books:',
+  'Lancer le sondage (7 jours)': 'Launch the poll (7 days)',
 };
