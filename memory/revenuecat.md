@@ -11,7 +11,7 @@ This file is supposed to serve as a memory to you if you have to interact with u
   - $rc_monthly -> prod5823749452   (€3.99 / P1M, trial: none)
   - $rc_annual  -> prod3768d3c975   (€39.99 / P1Y, trial: none)
 - Dashboard: https://app.revenuecat.com/projects/projfb23fe8b
-- bundle_id / package_name: com.emergent.lecturecapture.xjqcj0
+- bundle_id / package_name: com.manent.app (mis à jour via /setup idempotent, juin 2026 — clés SDK inchangées)
 
 ## Check for project_state in revenuecat status api response. if the project_state is less then project_created, re-fetch RevenueCat playbook via the integration expert tool.
 Status check:

@@ -10,7 +10,7 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.emergent.lecturecapture.xjqcj0",
+      "bundleIdentifier": "com.manent.app",
       "infoPlist": {
         "NSCameraUsageDescription": "Photographier tes passages de livres",
         "NSPhotoLibraryUsageDescription": "Choisir des photos de tes lectures",
@@ -23,7 +23,7 @@
         "backgroundColor": "#3A2119"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.emergent.lecturecapture.xjqcj0",
+      "package": "com.manent.app",
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_MEDIA_IMAGES",
