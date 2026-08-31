@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Platform, ActivityIndicator, KeyboardAvoidingView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Platform, ActivityIndicator, KeyboardAvoidingView, Modal } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather, Ionicons } from '@expo/vector-icons';
@@ -66,7 +66,49 @@ export default function FicheDeLecture() {
   const [rating, setRating] = useState(0);
   const [saved, setSaved] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [filling, setFilling] = useState(false);
+  const [clubModal, setClubModal] = useState(false);
+  const [clubs, setClubs] = useState<any[]>([]);
+  const [sentTo, setSentTo] = useState('');
   const timer = useRef<any>(null);
+
+  // Remplissage IA des champs vides (genre, éditeur, auteur, résumé)
+  const autofill = async () => {
+    if (filling) return;
+    setFilling(true);
+    try {
+      const r = await api<{ suggestions: any }>(`/books/${bookId}/fiche/autofill`, { method: 'POST' });
+      const s = r.suggestions || {};
+      const next: FicheData = { ...fiche };
+      if (!next.genre && s.genre) next.genre = s.genre;
+      if (!next.publisher && s.publisher) next.publisher = s.publisher;
+      if (!next.author_bio && s.author_bio) next.author_bio = s.author_bio;
+      if (!next.summary && s.summary) next.summary = s.summary;
+      setFiche(next);
+      save(next, rating);
+    } catch {} finally {
+      setFilling(false);
+    }
+  };
+
+  // Envoi des questions « On en parle ? » dans un club
+  const openClubModal = async () => {
+    try {
+      const r = await api<{ clubs: any[] }>('/clubs');
+      setClubs(r.clubs || []);
+    } catch { setClubs([]); }
+    setSentTo('');
+    setClubModal(true);
+  };
+  const sendToClub = async (club: any) => {
+    const qs = (fiche.questions || []).filter(x => x.trim());
+    if (!qs.length) return;
+    const text = `${t('On en parle ?')} — ${book.title}\n` + qs.map((x, i) => `${i + 1}. ${x.trim()}`).join('\n');
+    try {
+      await api(`/clubs/${club.club_id}/messages`, { method: 'POST', body: JSON.stringify({ text }) });
+      setSentTo(club.name);
+    } catch {}
+  };
 
   useEffect(() => {
     (async () => {
@@ -179,6 +221,10 @@ export default function FicheDeLecture() {
               <TextInput testID="fiche-genre" value={fiche.genre || ''} onChangeText={v => upd({ genre: v })} style={[styles.input, { flex: 1 }]} placeholder={t('Genre (roman, essai…)')} placeholderTextColor={colors.clay} />
               <TextInput testID="fiche-publisher" value={fiche.publisher || ''} onChangeText={v => upd({ publisher: v })} style={[styles.input, { flex: 1 }]} placeholder={t('Éditeur')} placeholderTextColor={colors.clay} />
             </View>
+            <Pressable testID="fiche-autofill" onPress={autofill} disabled={filling} style={styles.aiBtn}>
+              {filling ? <ActivityIndicator size="small" color={colors.chambray} /> : <Feather name="zap" size={14} color={colors.chambray} />}
+              <Text style={styles.aiBtnText}>{filling ? t('L’IA rédige…') : t('Remplir avec l’IA (genre, éditeur, auteur, résumé)')}</Text>
+            </Pressable>
           </Section>
 
           <Section styles={styles} colors={colors} icon="user" label={t('L’auteur')}>
@@ -236,6 +282,12 @@ export default function FicheDeLecture() {
           <Section styles={styles} colors={colors} icon="message-circle" label={t('On en parle ?')}>
             <Text style={styles.hint}>{t('Des questions pour ton club : quel passage vous a marqué ? Étiez-vous d’accord avec l’auteur ?')}</Text>
             <ListEditor styles={styles} colors={colors} addLabel={t('Ajouter')} testID="fiche-question" items={fiche.questions || []} placeholder={t('Une question à débattre…')} onChange={v => upd({ questions: v })} />
+            {(fiche.questions || []).some(x => x.trim()) && (
+              <Pressable testID="fiche-send-club" onPress={openClubModal} style={styles.aiBtn}>
+                <Feather name="users" size={14} color={colors.chambray} />
+                <Text style={styles.aiBtnText}>{t('Envoyer ces questions à un club')}</Text>
+              </Pressable>
+            )}
           </Section>
 
           <Section styles={styles} colors={colors} icon="star" label={t('Mon avis')}>
@@ -263,6 +315,31 @@ export default function FicheDeLecture() {
           </Pressable>
           <Text style={styles.premiumNote}>{t('Export PDF réservé aux membres Premium.')}</Text>
         </ScrollView>
+
+        <Modal visible={clubModal} transparent animationType="fade" onRequestClose={() => setClubModal(false)}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalBox}>
+              <Text style={styles.modalTitle}>{t('Envoyer à un club')}</Text>
+              {sentTo ? (
+                <Text style={styles.modalText} testID="fiche-club-sent">{t('Questions envoyées à « {name} ».', { name: sentTo })}</Text>
+              ) : clubs.length === 0 ? (
+                <Text style={styles.modalText}>{t('Tu n’as pas encore de club. Crée-en un depuis Communauté.')}</Text>
+              ) : (
+                <View style={{ gap: spacing.sm, marginTop: spacing.sm }}>
+                  {clubs.map(c => (
+                    <Pressable key={c.club_id} testID={`fiche-club-${c.club_id}`} onPress={() => sendToClub(c)} style={styles.clubRow}>
+                      <Feather name="users" size={15} color={colors.chambray} />
+                      <Text style={styles.clubRowText}>{c.name}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+              <Pressable testID="fiche-club-close" onPress={() => setClubModal(false)} style={{ alignSelf: 'center', marginTop: spacing.md, padding: spacing.sm }}>
+                <Text style={styles.aiBtnText}>{t('Fermer')}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
       </View>
     </KeyboardAvoidingView>
   );
@@ -293,4 +370,12 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   exportBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 50, borderRadius: radius.md, backgroundColor: colors.chambray, marginTop: spacing.sm },
   exportText: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.creme },
   premiumNote: { fontFamily: fonts.body, fontSize: 11.5, color: colors.clay, textAlign: 'center', marginTop: spacing.sm, fontStyle: 'italic' },
+  aiBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: spacing.sm, minHeight: 44, paddingHorizontal: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, backgroundColor: colors.creme },
+  aiBtnText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.chambray, flexShrink: 1 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(58,33,25,0.55)', justifyContent: 'center', padding: spacing.xl },
+  modalBox: { backgroundColor: colors.creme, borderRadius: 20, padding: spacing.xl },
+  modalTitle: { fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso },
+  modalText: { fontFamily: fonts.body, fontSize: 14, color: colors.clay, marginTop: spacing.sm, lineHeight: 20 },
+  clubRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 48, paddingHorizontal: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, backgroundColor: colors.glacier },
+  clubRowText: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.espresso },
 });

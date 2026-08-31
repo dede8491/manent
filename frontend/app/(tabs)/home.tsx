@@ -59,10 +59,13 @@ export default function Home() {
         <View style={{ paddingHorizontal: spacing.xl }}>
           <Wordmark size={19} variant="horizontal" />
         </View>
-        <View style={styles.searchRow}>
-          <Pressable testID="home-search" onPress={() => router.push('/search')} style={styles.search}>
+        <View style={[styles.searchRow, { flexDirection: 'row', gap: 8, alignItems: 'center' }]}>
+          <Pressable testID="home-search" onPress={() => router.push('/search')} style={[styles.search, { flex: 1 }]}>
             <Feather name="search" size={16} color={colors.clay} />
             <Text style={styles.searchPlaceholder}>{t('Cherche une citation, un livre…')}</Text>
+          </Pressable>
+          <Pressable testID="home-scan" onPress={() => router.push('/discover/scan')} style={styles.scanBtn}>
+            <Feather name="maximize" size={17} color={colors.espresso} />
           </Pressable>
         </View>
         <View style={styles.chipRow}>
@@ -124,6 +127,7 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   searchRow: { paddingHorizontal: spacing.xl },
   search: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 44, paddingHorizontal: spacing.md, backgroundColor: colors.creme, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft },
   searchPlaceholder: { flex: 1, fontFamily: fonts.body, fontSize: 14, color: colors.clay },
+  scanBtn: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: colors.creme, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center' },
   dailyLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: spacing.sm },
   chipRow: { height: 44 },
   chip: { height: 36, paddingHorizontal: 14, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },

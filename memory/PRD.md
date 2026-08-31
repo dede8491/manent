@@ -139,3 +139,9 @@
 - **Carnet** (/carnet, row-carnet dans profil avec tag PREMIUM) : liste des fiches (étoiles, date). Non-premium → verrou carnet-locked + CTA /premium. Export/partage PDF (src/fichePdf.ts, buildFicheHtml) réservé premium (redirect /premium sinon).
 - **Recherche accueil** : /search interroge AUSSI /api/books/search (débounce 450 ms, 6 résultats max, section « Catalogue en ligne », testID search-catalog-{i}) → tap → /book/add prérempli (params title/author/cover/isbn/pages/year, prefill étendu dans add.tsx). Section locale renommée « Dans ta bibliothèque ({n}) ».
 - Testé : 9/9 backend (test_iteration13.py) + e2e frontend complet (focus test 100 chars OK, premium/non-premium).
+
+## Itération 15 — Autofill IA fiche + Découverte par ISBN + Fiche→Club (juin 2026)
+- **Autofill IA** : POST /api/books/{id}/fiche/autofill (Claude Sonnet 4.6, JSON genre/publisher/author_bio/summary). Frontend bouton fiche-autofill dans « Le livre » — ne remplit QUE les champs vides (préserve les saisies).
+- **Fiche → Club** : bouton fiche-send-club dans « On en parle ? » → modal des clubs → POST /clubs/{id}/messages avec texte multi-lignes (titre + questions numérotées).
+- **Découverte code-barres** : bouton home-scan dans l'accueil → /discover/scan (CameraView ean13 mobile / saisie ISBN web+repli) → /discover/[isbn] : GET /api/discover/isbn/{isbn} (métadonnées via routes.book_search.search_isbn + communauté : lecteurs, note moyenne des books partageant l'ISBN, citations publiques via book_ids, in_library) → CTA « Ajouter à ma bibliothèque » (prérempli).
+- Testé : 5/5 backend (test_iteration14.py) + 4 flows e2e frontend. Toujours en attente : google-services.json Firebase.

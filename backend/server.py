@@ -1502,6 +1502,66 @@ async def list_fiches(user=Depends(get_current_user)):
     return {"fiches": out}
 
 
+@api.post("/books/{book_id}/fiche/autofill")
+async def autofill_fiche(book_id: str, user=Depends(get_current_user)):
+    """Remplit genre, éditeur, bio de l'auteur et résumé via l'IA (ne touche pas aux champs déjà remplis côté client)."""
+    book = await db.books.find_one({"book_id": book_id, "user_id": user["user_id"]}, {"_id": 0})
+    if not book:
+        raise HTTPException(status_code=404, detail="not_found")
+    from emergentintegrations.llm.chat import LlmChat, UserMessage
+    import json as _json
+    system = (
+        "Tu es un libraire francophone érudit. On te donne un livre ; tu renvoies UNIQUEMENT un objet JSON "
+        "avec ces clés : genre (ex: roman, essai, biographie…), publisher (éditeur français principal, ou null si incertain), "
+        "author_bio (3-4 phrases en français : vie, parcours, œuvres majeures, contexte d'écriture de CE livre), "
+        "summary (résumé en 5-8 phrases en français, sans divulgâcher la fin). "
+        "Aucun texte hors du JSON. Si tu ne connais pas le livre, fais au mieux depuis le titre et l'auteur."
+    )
+    ident = f"« {book.get('title')} »" + (f" de {book.get('author')}" if book.get("author") else "") + (f" ({book.get('year')})" if book.get("year") else "")
+    chat = LlmChat(
+        api_key=EMERGENT_LLM_KEY,
+        session_id=f"fiche_{user['user_id']}_{uuid.uuid4().hex[:8]}",
+        system_message=system,
+    ).with_model("anthropic", "claude-sonnet-4-6")
+    try:
+        resp = await chat.send_message(UserMessage(text=f"Livre : {ident}. Renvoie le JSON."))
+        raw = str(resp).strip()
+        raw = re.sub(r'^```(?:json)?|```$', '', raw, flags=re.M).strip()
+        data = _json.loads(raw)
+    except Exception as e:
+        logger.warning("fiche autofill failed: %s", e)
+        raise HTTPException(status_code=502, detail="autofill_failed")
+    out = {k: (data.get(k) or None) for k in ("genre", "publisher", "author_bio", "summary")}
+    return {"suggestions": out}
+
+
+@api.get("/discover/isbn/{isbn}")
+async def discover_isbn(isbn: str, user=Depends(get_current_user)):
+    """Découverte d'un livre par ISBN : métadonnées + communauté Manent (lecteurs, note moyenne, citations publiques)."""
+    from routes.book_search import search_isbn
+    meta = None
+    try:
+        meta = await search_isbn(isbn)
+    except HTTPException:
+        meta = None
+    community_books = await db.books.find({"isbn": isbn}, {"_id": 0, "book_id": 1, "user_id": 1, "rating": 1, "title": 1, "author": 1, "cover": 1, "pages": 1, "year": 1}).to_list(500)
+    if meta is None and community_books:
+        b = community_books[0]
+        meta = {"title": b.get("title"), "author": b.get("author"), "isbn": isbn, "pages": b.get("pages"), "year": b.get("year"), "cover": b.get("cover"), "source": "community"}
+    if meta is None:
+        raise HTTPException(status_code=404, detail="isbn_not_found")
+    readers = len({b["user_id"] for b in community_books})
+    ratings = [b["rating"] for b in community_books if b.get("rating")]
+    avg_rating = round(sum(ratings) / len(ratings), 1) if ratings else None
+    book_ids = [b["book_id"] for b in community_books]
+    quotes = []
+    if book_ids:
+        quotes = await db.quotes.find({"book_id": {"$in": book_ids}, "is_public": True}, {"_id": 0}).sort("created_at", -1).limit(30).to_list(30)
+        await _attach_public_meta(quotes)
+    in_library = any(b["user_id"] == user["user_id"] for b in community_books)
+    return {"book": meta, "readers": readers, "avg_rating": avg_rating, "ratings_count": len(ratings), "quotes": quotes, "in_library": in_library}
+
+
 # ============ Home feed (public quotes) ============
 @api.get("/feed")
 async def feed(theme: Optional[str] = None, user=Depends(get_current_user)):
