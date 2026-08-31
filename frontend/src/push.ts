@@ -15,7 +15,6 @@ export async function registerForPush(userId: string) {
     await api('/register-push', {
       method: 'POST',
       body: JSON.stringify({
-        user_id: userId,
         platform: Platform.OS,
         device_token: tokenResp.data,
       }),

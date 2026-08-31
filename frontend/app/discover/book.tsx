@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -19,6 +19,19 @@ export default function DiscoverBook() {
   const { title, author, cover, year, summary, prize } = useLocalSearchParams<any>();
   const [status, setStatus] = useState<'a_lire' | 'en_cours' | 'termine'>('a_lire');
   const [adding, setAdding] = useState(false);
+  const [desc, setDesc] = useState<string | null>(summary || null);
+
+  // Synopsis (4e de couverture) récupéré automatiquement si absent
+  useEffect(() => {
+    if (summary || !title) return;
+    (async () => {
+      try {
+        const r = await api<{ summary: string | null }>(`/books-summary?title=${encodeURIComponent(title)}&author=${encodeURIComponent(author || '')}`);
+        if (r.summary) setDesc(r.summary);
+      } catch {}
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const add = async () => {
     setAdding(true);
@@ -45,7 +58,12 @@ export default function DiscoverBook() {
         {prize ? <View style={styles.prizeTag}><Text style={styles.prizeText}>{prize}</Text></View> : null}
         <Text style={styles.title}>{title}</Text>
         {!!author && <Text style={styles.author}>{author}{year ? `  ·  ${year}` : ''}</Text>}
-        {!!summary && <Text style={styles.summary}>{summary}</Text>}
+        {!!desc && (
+          <View style={{ alignSelf: 'stretch', marginTop: spacing.md }}>
+            <Text style={styles.summaryLabel}>{t('Résumé')}</Text>
+            <Text style={styles.summary}>{desc}</Text>
+          </View>
+        )}
 
         <View style={styles.statusRow}>
           {([['a_lire', 'À lire'], ['en_cours', 'En cours'], ['termine', 'Déjà lu']] as const).map(([sid, lbl]) => (
@@ -68,6 +86,7 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   prizeText: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.creme, letterSpacing: 1, textTransform: 'uppercase' },
   title: { fontFamily: fonts.displayMedium, fontSize: 26, color: colors.espresso, textAlign: 'center', marginTop: spacing.md },
   author: { fontFamily: fonts.body, fontSize: 14, color: colors.clay, marginTop: 4 },
+  summaryLabel: { fontFamily: fonts.bodyMedium, fontSize: 10.5, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6 },
   summary: { fontFamily: fonts.body, fontSize: 13.5, color: colors.espresso, lineHeight: 20, marginTop: spacing.md },
   statusRow: { flexDirection: 'row', gap: 8, marginVertical: spacing.lg, alignSelf: 'stretch' },
   chip: { flex: 1, height: 38, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.creme },

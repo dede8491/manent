@@ -161,13 +161,24 @@ async def register(body: RegisterBody):
     return {"session_token": sess["session_token"], "user": clean_doc({**user, "password_hash": None})}
 
 
+_login_fails: dict = {}  # email -> [count, first_ts] — protection force brute
+
+
 @api.post("/auth/login")
 async def login(body: LoginBody):
-    user = await db.users.find_one({"email": body.email.lower()})
-    if not user or not user.get("password_hash"):
+    email = body.email.lower()
+    rec = _login_fails.get(email)
+    now_ts = now_utc().timestamp()
+    if rec and rec[0] >= 5 and now_ts - rec[1] < 900:
+        raise HTTPException(status_code=429, detail="too_many_attempts")
+    if rec and now_ts - rec[1] >= 900:
+        _login_fails.pop(email, None)
+    user = await db.users.find_one({"email": email})
+    if not user or not user.get("password_hash") or not bcrypt.checkpw(body.password.encode(), user["password_hash"].encode()):
+        r = _login_fails.setdefault(email, [0, now_ts])
+        r[0] += 1
         raise HTTPException(status_code=401, detail="invalid_credentials")
-    if not bcrypt.checkpw(body.password.encode(), user["password_hash"].encode()):
-        raise HTTPException(status_code=401, detail="invalid_credentials")
+    _login_fails.pop(email, None)
     sess = await create_session(user["user_id"])
     user.pop("_id", None); user.pop("password_hash", None)
     return {"session_token": sess["session_token"], "user": user}
@@ -685,13 +696,28 @@ async def delete_book(book_id: str, user=Depends(get_current_user)):
 
 
 # ---- Wattpad metadata scrape ----
+_WATTPAD_HOSTS = {"www.wattpad.com", "wattpad.com", "embed.wattpad.com"}
+
+
 @api.get("/wattpad/scrape")
-async def scrape_wattpad(url: str):
-    if "wattpad.com" not in url:
+async def scrape_wattpad(url: str, user=Depends(get_current_user)):
+    # SSRF : hôte strictement limité à Wattpad, https forcé, redirections contrôlées
+    from urllib.parse import urlparse
+    parsed = urlparse(url if url.startswith("http") else f"https://{url}")
+    if parsed.hostname not in _WATTPAD_HOSTS:
         raise HTTPException(status_code=400, detail="invalid_url")
+    safe_url = f"https://{parsed.hostname}{parsed.path}" + (f"?{parsed.query}" if parsed.query else "")
     try:
-        async with httpx.AsyncClient(timeout=20, follow_redirects=True) as http:
-            r = await http.get(url, headers={"User-Agent": "Mozilla/5.0"})
+        async with httpx.AsyncClient(timeout=20, follow_redirects=False) as http:
+            r = await http.get(safe_url, headers={"User-Agent": "Mozilla/5.0"})
+            hops = 0
+            while r.status_code in (301, 302, 303, 307, 308) and hops < 3:
+                loc = urlparse(r.headers.get("location", ""))
+                if loc.hostname and loc.hostname not in _WATTPAD_HOSTS:
+                    raise HTTPException(status_code=400, detail="invalid_redirect")
+                nxt = f"https://{loc.hostname or parsed.hostname}{loc.path}" + (f"?{loc.query}" if loc.query else "")
+                r = await http.get(nxt, headers={"User-Agent": "Mozilla/5.0"})
+                hops += 1
         soup = BeautifulSoup(r.text, "html.parser")
         og = lambda p: (soup.find("meta", property=p) or {}).get("content") if soup.find("meta", property=p) else None
         title = og("og:title") or (soup.title.string if soup.title else "")
@@ -755,6 +781,26 @@ async def premium_status(user=Depends(get_current_user)):
 
 @api.post("/premium/activate")
 async def premium_activate(body: PremiumActivate, user=Depends(get_current_user)):
+    # Vérification serveur de l'abonnement RevenueCat (entitlement « pro ») — pas d'auto-activation gratuite
+    rc_key = os.environ.get("RC_PUBLIC_API_KEY")
+    verified = False
+    if rc_key:
+        try:
+            async with httpx.AsyncClient(timeout=10) as http:
+                r = await http.get(
+                    f"https://api.revenuecat.com/v1/subscribers/{user['user_id']}",
+                    headers={"Authorization": f"Bearer {rc_key}"},
+                )
+                if r.status_code == 200:
+                    ent = (r.json().get("subscriber") or {}).get("entitlements") or {}
+                    pro = ent.get("pro") or {}
+                    exp = pro.get("expires_date")
+                    if pro and (exp is None or datetime.fromisoformat(exp.replace("Z", "+00:00")) > now_utc()):
+                        verified = True
+        except Exception as e:
+            logger.warning("revenuecat verify failed: %s", e)
+    if not verified:
+        raise HTTPException(status_code=403, detail="subscription_not_verified")
     await db.users.update_one(
         {"user_id": user["user_id"]},
         {"$set": {"is_premium": True, "premium_plan": body.plan, "premium_since": now_utc()}},
@@ -1224,6 +1270,16 @@ async def pin_quote(board_id: str, body: PinBody, user=Depends(get_current_user)
     existing = await db.board_quotes.find_one({"board_id": board_id, "quote_id": body.quote_id}, {"_id": 0})
     if existing:
         return {"ok": True, "already_pinned": True}
+    # La citation épinglée doit m'appartenir ou m'être visible
+    qt = await db.quotes.find_one({"quote_id": body.quote_id}, {"_id": 0, "user_id": 1, "is_public": 1, "visibility": 1, "is_hidden": 1})
+    if not qt:
+        raise HTTPException(status_code=404, detail="quote_not_found")
+    if qt["user_id"] != user["user_id"]:
+        visible = qt.get("is_public") and not qt.get("is_hidden")
+        if not visible and qt.get("visibility") == "followers" and not qt.get("is_hidden"):
+            visible = await db.follows.find_one({"follower_id": user["user_id"], "followed_id": qt["user_id"]}) is not None
+        if not visible:
+            raise HTTPException(status_code=403, detail="quote_not_visible")
     await db.board_quotes.insert_one({
         "board_id": board_id,
         "quote_id": body.quote_id,
@@ -1909,6 +1965,44 @@ async def discover_isbn(isbn: str, user=Depends(get_current_user)):
     return {"book": meta, "readers": readers, "avg_rating": avg_rating, "ratings_count": len(ratings), "quotes": quotes, "in_library": in_library}
 
 
+# ---- Synopsis (4e de couverture) d'un livre, avec cache ----
+@api.get("/books-summary")
+async def book_summary(title: str, author: str = "", user=Depends(get_current_user)):
+    key = re.sub(r"\W+", "", f"{title}{author}".lower())[:80]
+    cached = await db.book_summaries.find_one({"key": key}, {"_id": 0})
+    if cached:
+        return {"summary": cached.get("summary")}
+    summary = None
+    try:
+        async with httpx.AsyncClient(timeout=10) as http:
+            r = await http.get("https://www.googleapis.com/books/v1/volumes",
+                               params={"q": f"intitle:{title} inauthor:{author}".strip(), "maxResults": 3, "langRestrict": "fr"})
+            if r.status_code == 200:
+                for it in (r.json().get("items") or []):
+                    d = (it.get("volumeInfo") or {}).get("description")
+                    if d:
+                        summary = d[:900]
+                        break
+            if not summary:
+                r2 = await http.get("https://openlibrary.org/search.json",
+                                    params={"title": title, "author": author, "limit": 1, "fields": "key"})
+                if r2.status_code == 200 and (r2.json().get("docs") or []):
+                    wk = r2.json()["docs"][0].get("key")
+                    if wk:
+                        r3 = await http.get(f"https://openlibrary.org{wk}.json")
+                        if r3.status_code == 200:
+                            d = r3.json().get("description")
+                            if isinstance(d, dict):
+                                d = d.get("value")
+                            if d:
+                                summary = str(d)[:900]
+    except Exception as e:
+        logger.warning("book summary failed: %s", e)
+    if summary:
+        await db.book_summaries.update_one({"key": key}, {"$set": {"summary": summary, "at": now_utc()}}, upsert=True)
+    return {"summary": summary}
+
+
 # ============ Accueil vivant : découverte ============
 AWARDED_SEED = [
     {"title": "Houris", "author": "Kamel Daoud", "prize": "Goncourt", "year": "2024"},
@@ -1990,11 +2084,17 @@ async def home_discover(user=Depends(get_current_user)):
         {"$group": {"_id": {"$toLower": "$title"}, "title": {"$first": "$title"}, "author": {"$first": "$author"},
                     "cover": {"$max": "$cover"}, "readers": {"$addToSet": "$user_id"}}},
         {"$project": {"_id": 0, "title": 1, "author": 1, "cover": 1, "readers_count": {"$size": "$readers"}}},
-        {"$match": {"cover": {"$ne": None}}},
         {"$sort": {"readers_count": -1}},
         {"$limit": 8},
     ]
     popular = await db.books.aggregate(pipeline).to_list(8)
+    # Complète les couvertures manquantes des plus lus (persisté pour les prochains chargements)
+    for p in popular:
+        if not p.get("cover"):
+            c = await _find_cover(p["title"], p.get("author"), None)
+            if c:
+                p["cover"] = c
+                await db.books.update_many({"title": p["title"], "cover": {"$in": [None, ""]}}, {"$set": {"cover": c}})
     # Collections thématiques : thèmes les plus épinglés + couvertures associées
     collections = []
     theme_counts = await db.quotes.aggregate([
@@ -2088,6 +2188,8 @@ async def upload(file: UploadFile = File(...), user=Depends(get_current_user)):
 # ============ Seed demo data ============
 @api.post("/dev/seed")
 async def seed(user=Depends(get_current_user)):
+    if not user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="forbidden")
     # Seed public quotes for the feed if empty
     existing_public = await db.quotes.count_documents({"is_public": True})
     if existing_public > 5:

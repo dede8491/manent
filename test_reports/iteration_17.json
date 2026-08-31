@@ -1,0 +1,43 @@
+{
+  "summary": "Iteration 17 — Testing du lot Sécurité (SSRF wattpad, RevenueCat activate, register-push auth, pin visibility, rate-limit login, /dev/seed admin-only) et Couvertures + Synopsis. Backend: 18/18 tests pytest passent (test_iteration17.py). Frontend: connexion test.manent@example.com/Test1234! OK, screen-home rendu, section « Les plus lus cette semaine » avec popular-0 = Candide (couverture visible), tap sur popular-0 → screen-discover-book affiche la section « RÉSUMÉ » avec un synopsis substantiel sous l'auteur (mise en cache dans db.book_summaries confirmée par 2e appel identique). Backend /home/discover après nettoyage de mes données de test → popular contient bien Candide, L'Alchimiste, Une si longue lettre, Les impatientes AVEC couvertures (7/8 couvertures, seul le seed wattpad @lunemauve n'en a pas — hors périmètre). /books/search?q=africain → 10 résultats, majorité avec couverture via repli leslibraires.fr. SSRF: evil.com → 400 invalid_url, sans token → 401. Premium: activate sans abonnement RC → 403 subscription_not_verified ; test.manent reste is_premium:true. Push: 401 sans token. Pin: user B ne peut pas épingler citation privée de A → 403 quote_not_visible, peut épingler publique → 200. Rate-limit: 6e login mauvais mdp → 429 too_many_attempts sur email dédié, login valide toujours OK. Seed: 403 sur non-admin (incl. compte premium). Aucun bug bloquant.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/home/discover", "issue": "L'agrégation 'popular' est sensible à la pollution par des livres de test (chaque utilisateur test créant un livre distinct fait entrer un titre dans le top-8). Non bloquant en prod car la sortie est triée par readers_count et les vrais livres cumulent >1 lecteur, mais cela peut brouiller les rapports de test si le testing agent ne nettoie pas ses données. Suggestion: filtrer les titres commençant par TEST_ dans l'agrégation ou dédupliquer à ratio min de lecteurs."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "Console warning récurrent", "issue": "'Received `%s` for a non-boolean attribute' + 'props.pointerEvents is deprecated. Use style.pointerEvents'. Non bloquants, présents depuis plusieurs itérations. À investiguer côté Pressable/PrimaryButton (probablement un prop passé conditionnellement type disabled={condition && value})."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration17.py",
+    "/app/test_reports/pytest/iteration17.xml"
+  ],
+  "action_items": [
+    "RAS côté correctifs sécurité et couvertures/synopsis — tout est vert.",
+    "Optionnel: envisager de filtrer les livres TEST_ dans l'agrégation /home/discover pour éviter la pollution lors des tests automatisés.",
+    "Optionnel: nettoyer le warning console 'non-boolean attribute' (Pressable/PrimaryButton) qui traîne depuis it.16."
+  ],
+  "critical_code_review_comments": [
+    "server.py atteint ~2340 lignes (>700). Toujours candidat à un split en modules (routes/auth.py, routes/quotes.py, routes/books.py, routes/premium.py, routes/clubs.py, routes/boards.py).",
+    "_login_fails est un dict Python en mémoire → non partagé entre workers/instances. Suffit pour un déploiement mono-worker, mais si l'app scale horizontalement le rate-limit deviendra inefficace. À terme: Redis ou un compteur MongoDB TTL.",
+    "premium_activate: en cas d'échec réseau vers RevenueCat (Exception), verified reste False → 403 correct. OK. Mais logger.warning masque un vrai problème d'intégration ; envisager un metric/alert quand rc_key est présent mais la requête échoue."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration17.py (nouveau)"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "100%"
+  },
+  "seed_data_creation": "Aucune donnée persistante ajoutée (2 comptes utilisateurs test_it17_* créés en session, 2 livres/quotes TEST_it17_* + 2 boards nettoyés à la fin). Aucun compte admin créé (le test seed 403 se contente d'un compte non-admin). Cache book_summaries pour 'Candide/Voltaire' ajouté (comportement attendu du endpoint).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Tests du lot sécurité + couvertures dans /app/backend/tests/test_iteration17.py. Le test rate-limit utilise un email dédié 'bruteforce_it17_*' pour ne pas verrouiller les comptes de test (verrou 15 min par email dans _login_fails). Le test wattpad accepte 200 OU 500 (scrape_failed) car Wattpad peut throttler — seul 400/401 sont vraiment testés pour la SSRF. Le test premium suppose test.manent@example.com reste PREMIUM (miroir DB is_premium=true) et NON admin — vérifié. Le test seed vérifie 403 sur compte non-admin ET compte premium non-admin. Comptes akereydaisy@gmail.com et vrais livres (Candide, Alchimiste, etc.) NON touchés. Pas de mock — tout tape le backend live via EXPO_PUBLIC_BACKEND_URL.",
+  "rca_of_issue": "N/A — aucun bug détecté. Les correctifs sécurité (SSRF, RC verify, push auth, pin visibility, rate-limit, seed admin-only) fonctionnent tous conformément à la spec. Couvertures et synopsis affichés correctement côté UI et backend."
+}

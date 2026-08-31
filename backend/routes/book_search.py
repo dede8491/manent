@@ -135,6 +135,7 @@ async def _search_google(http: httpx.AsyncClient, q: str) -> list:
                 "pages": v.get("pageCount"),
                 "year": (v.get("publishedDate") or "")[:4] or None,
                 "cover": ((v.get("imageLinks") or {}).get("thumbnail", "").replace("http://", "https://") + "&zoom=1") if (v.get("imageLinks") or {}).get("thumbnail") else None,
+                "summary": (v.get("description") or "")[:600] or None,
                 "_fr": (v.get("language") == "fr"),
             })
     except Exception:
@@ -208,6 +209,21 @@ async def _search_bnf(http: httpx.AsyncClient, q: str) -> list:
     return out
 
 
+async def _libraires_cover(http: httpx.AsyncClient, title: str, author: str = "") -> str | None:
+    """Couverture de repli via la librairie partenaire (leslibraires.fr)."""
+    try:
+        r = await http.get("https://www.leslibraires.fr/recherche/",
+                           params={"q": f"{title} {author or ''}".strip()},
+                           headers={"User-Agent": "Mozilla/5.0"}, follow_redirects=True, timeout=8)
+        if r.status_code == 200:
+            m = re.search(r'itemprop="image"\s+src="(//[^"]+)"', r.text)
+            if m:
+                return "https:" + m.group(1)
+    except Exception:
+        pass
+    return None
+
+
 @router.get("/books/search")
 async def search_books(q: str):
     # Interroge les 3 sources en parallèle, priorité aux éditions françaises, doublons retirés.
@@ -231,4 +247,12 @@ async def search_books(q: str):
         merged.append(x)
         if len(merged) >= 10:
             break
+    # Complète les couvertures manquantes via la librairie partenaire (en parallèle)
+    missing = [b for b in merged if not b.get("cover")][:6]
+    if missing:
+        async with httpx.AsyncClient() as http2:
+            covers = await asyncio.gather(*[_libraires_cover(http2, b["title"], b.get("author") or "") for b in missing])
+        for b, c in zip(missing, covers):
+            if c:
+                b["cover"] = c
     return {"results": merged}

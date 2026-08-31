@@ -2,8 +2,10 @@
 import os
 import logging
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
+
+from deps import get_current_user
 
 logger = logging.getLogger("manent")
 
@@ -20,14 +22,15 @@ router = APIRouter(prefix="/api")
 
 
 class RegisterPushBody(BaseModel):
-    user_id: str
     platform: str  # "android" | "ios"
     device_token: str
 
 
 @router.post("/register-push", status_code=201)
-async def register_push(body: RegisterPushBody):
-    resp = await _client.post("/api/v1/push/users/register", json=body.model_dump())
+async def register_push(body: RegisterPushBody, user=Depends(get_current_user)):
+    # L'identité vient de la session — jamais du client
+    payload = {"user_id": user["user_id"], "platform": body.platform, "device_token": body.device_token}
+    resp = await _client.post("/api/v1/push/users/register", json=payload)
     if resp.status_code == 401:
         raise HTTPException(500, "EMERGENT_PUSH_KEY missing or invalid")
     if resp.status_code >= 500:
