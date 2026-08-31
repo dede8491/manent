@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 110" width="120" height="110" role="img" aria-label="Chargement Manent">
+<style>
+@keyframes mDraw{0%{stroke-dashoffset:1;opacity:1}55%{stroke-dashoffset:0;opacity:1}82%{stroke-dashoffset:0;opacity:1}92%,100%{stroke-dashoffset:0;opacity:0}}
+@keyframes dotPop{0%,54%{transform:scale(0);opacity:1}62%{transform:scale(1.35);opacity:1}68%{transform:scale(1);opacity:1}82%{transform:scale(1);opacity:1}92%,100%{transform:scale(1);opacity:0}}
+.mstroke{fill:none;stroke:#F5EDE4;stroke-width:7;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:1;animation:mDraw 3s cubic-bezier(.45,0,.25,1) infinite}
+.mdot{transform-origin:center;transform-box:fill-box;animation:dotPop 3s ease infinite}
+</style>
+<path class="mstroke" pathLength="1" d="M 10 95 C 18 90 26 60 34 26 C 36 18 40 16 41 22 C 42 26 40 40 37 58 L 33 82 C 32 92 35 95 39 88 C 47 72 55 44 61 28 C 63 22 67 19 69 24 C 71 28 69 42 66 60 L 62 84 C 61 93 65 96 72 88"/>
+<circle class="mdot" cx="86" cy="89" r="5.5" fill="#79A3C3"/>
+</svg>

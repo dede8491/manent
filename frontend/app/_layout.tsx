@@ -15,6 +15,7 @@ import { AuthProvider, useAuth } from '@/src/auth';
 import { ThemeProvider, useColors, useScheme } from '@/src/themeCtx';
 import { I18nProvider, useT } from '@/src/i18n';
 import { initializeRevenueCat, SubscriptionProvider } from '@/src/revenuecat';
+import ManentLoader from '@/src/components/ManentLoader';
 
 LogBox.ignoreAllLogs(true);
 SplashScreen.preventAutoHideAsync();
@@ -139,7 +140,7 @@ export default function RootLayout() {
     if (ready) SplashScreen.hideAsync();
   }, [ready]);
 
-  if (!ready) return null;
+  if (!ready) return <ManentLoader fullscreen variant="clair" size={110} />;
 
   return (
     <ThemeProvider>

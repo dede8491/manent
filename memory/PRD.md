@@ -159,3 +159,9 @@
 
 ## Itération 18 — google-services.json reçu et câblé (juin 2026)
 - Fichier Firebase (projet manent-ce772, package com.manent.app) enregistré dans /app/frontend/google-services.json et câblé via expo.android.googleServicesFile. Les notifications push Android seront actives dans le prochain build natif (EMERGENT_PUSH_KEY injecté au déploiement).
+
+## Itération 19 — Kit de marque Manent intégré (juin 2026)
+- Assets du kit copiés dans /app/frontend/assets/brand/ (logos SVG, icônes PNG 192/512/1024, favicon, apple-touch-icon).
+- app.json : expo.icon + android.adaptiveIcon.foregroundImage → assets/brand/icon-1024.png (fond #3A2119), web.favicon → assets/brand/favicon-32.png.
+- src/components/ManentLoader.tsx : version React Native du loader du kit (M écrit à la plume via strokeDashoffset animé + point Chambray, react-native-svg + Animated, variants clair/sombre, prop fullscreen). Utilisé : splash initial (_layout, pendant chargement des polices), transcription IA (capture.tsx, variant sombre), recherche ISBN (book/add.tsx).
+- Les logos existants (Wordmark/Monogram) correspondaient déjà à l'identité du kit — conservés.

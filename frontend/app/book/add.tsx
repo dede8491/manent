@@ -9,6 +9,7 @@ import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
 import { PrimaryButton, GhostButton } from '@/src/components/Button';
 import { api } from '@/src/api';
+import ManentLoader from '@/src/components/ManentLoader';
 import { useT } from '@/src/i18n';
 
 type Method = 'title' | 'isbn' | 'wattpad';
@@ -310,7 +311,7 @@ export default function AddBook() {
               <>
                 {lookingUp ? (
                   <View style={styles.lookupBox}>
-                    <ActivityIndicator color={colors.chambray} />
+                    <ManentLoader size={56} />
                     <Text style={styles.lookupText}>{t('Recherche du livre…')}</Text>
                   </View>
                 ) : scanFail ? (

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, ScrollView, Pressable, Image, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TextInput, ScrollView, Pressable, Image, KeyboardAvoidingView, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -9,6 +9,7 @@ import { useColors, useStyles } from '@/src/themeCtx';
 import { PrimaryButton, GhostButton } from '@/src/components/Button';
 import { toBase64 } from '@/src/image';
 import { api } from '@/src/api';
+import ManentLoader from '@/src/components/ManentLoader';
 import { useT } from '@/src/i18n';
 
 export default function CaptureModal() {
@@ -122,7 +123,7 @@ export default function CaptureModal() {
             <Image source={{ uri: imageUri }} style={styles.img} resizeMode="cover" />
             {transcribing && (
               <View style={styles.transcribing}>
-                <ActivityIndicator color={colors.creme} />
+                <ManentLoader size={56} variant="sombre" />
                 <Text style={styles.transcribingText}>{t('Transcription en cours…')}</Text>
               </View>
             )}
