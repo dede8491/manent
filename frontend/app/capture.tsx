@@ -23,7 +23,7 @@ export default function CaptureModal() {
   const [text, setText] = useState('');
   const [page, setPage] = useState('');
   const [note, setNote] = useState('');
-  const [isPublic, setIsPublic] = useState(false);
+  const [visibility, setVisibility] = useState<'private' | 'followers' | 'public'>('private');
   const [isSensitive, setIsSensitive] = useState(false);
   const [saving, setSaving] = useState(false);
   const [selectedThemes, setSelectedThemes] = useState<string[]>([]);
@@ -44,7 +44,7 @@ export default function CaptureModal() {
       try { const t = await api<{ themes: string[] }>('/themes/mine'); setThemes(t.themes); } catch {}
       try {
         const s = await api<{ default_public: boolean }>('/me/settings', { method: 'PATCH', body: JSON.stringify({}) });
-        if (s.default_public) setIsPublic(true);
+        if (s.default_public) setVisibility('public');
       } catch {}
     })();
   }, []);
@@ -93,8 +93,9 @@ export default function CaptureModal() {
           page: page ? parseInt(page, 10) : undefined,
           note: note || undefined,
           themes: selectedThemes,
-          is_public: isPublic,
-          is_sensitive: isPublic ? isSensitive : false,
+          visibility,
+          is_public: visibility === 'public',
+          is_sensitive: visibility !== 'private' ? isSensitive : false,
         }),
       });
       router.replace({ pathname: '/quote/[id]', params: { id: q.quote_id } });
@@ -206,11 +207,16 @@ export default function CaptureModal() {
           </View>
         )}
 
-        <Pressable testID="toggle-public" onPress={() => setIsPublic(v => !v)} style={styles.visRow}>
-          <Feather name={isPublic ? 'check-square' : 'square'} size={20} color={colors.chambray} />
-          <Text style={styles.visText}>{t('Rendre cette citation publique')}</Text>
-        </Pressable>
-        {isPublic && (
+        <Text style={styles.visLabel}>{t('Qui peut voir cette citation ?')}</Text>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          {([['private', 'Privée', 'lock'], ['followers', 'Abonnés', 'users'], ['public', 'Publique', 'globe']] as const).map(([v, lbl, icon]) => (
+            <Pressable key={v} testID={`vis-${v}`} onPress={() => setVisibility(v)} style={[styles.visChip, visibility === v && styles.visChipActive]}>
+              <Feather name={icon} size={13} color={visibility === v ? colors.creme : colors.espresso} />
+              <Text style={[styles.visChipText, visibility === v && { color: colors.creme }]}>{t(lbl)}</Text>
+            </Pressable>
+          ))}
+        </View>
+        {visibility !== 'private' && (
           <Pressable testID="toggle-sensitive" onPress={() => setIsSensitive(v => !v)} style={styles.visRow}>
             <Feather name={isSensitive ? 'check-square' : 'square'} size={20} color={colors.chambray} />
             <Text style={styles.visText}>{t('Contenu sensible (réservé aux 18 ans et plus)')}</Text>
@@ -257,7 +263,25 @@ export default function CaptureModal() {
                   {bookId === b.book_id && <Feather name="check" size={16} color={colors.chambray} />}
                 </Pressable>
               )}
-              ListEmptyComponent={<Text style={styles.pickerEmpty}>{t('Aucun livre ne correspond.')}</Text>}
+              ListEmptyComponent={
+                <Pressable
+                  testID="cap-book-create"
+                  onPress={async () => {
+                    const title = bookQuery.trim();
+                    if (!title) return;
+                    try {
+                      const b = await api<any>('/books', { method: 'POST', body: JSON.stringify({ type: 'papier', title, status: 'en_cours' }) });
+                      setBooks(prev => [b, ...prev]);
+                      setBookId(b.book_id);
+                      setBookModal(false);
+                    } catch {}
+                  }}
+                  style={styles.pickerRow}
+                >
+                  <Feather name="plus-circle" size={16} color={colors.chambray} />
+                  <Text style={[styles.pickerRowText, { color: colors.chambray }]} numberOfLines={1}>{t('Créer « {title} »', { title: bookQuery.trim() })}</Text>
+                </Pressable>
+              }
             />
             <Pressable testID="cap-book-close" onPress={() => setBookModal(false)} style={{ alignSelf: 'center', padding: spacing.md, minHeight: 44 }}>
               <Text style={styles.pickerClose}>{t('Fermer')}</Text>
@@ -303,6 +327,10 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   chipTextActive: { color: colors.creme, fontFamily: fonts.bodyMedium },
   visRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: spacing.lg },
   visText: { fontFamily: fonts.body, fontSize: 14, color: colors.espresso },
+  visLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1, textTransform: 'uppercase', marginTop: spacing.lg, marginBottom: spacing.sm },
+  visChip: { flex: 1, height: 40, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.creme },
+  visChipActive: { backgroundColor: colors.chambray, borderColor: colors.chambray },
+  visChipText: { fontFamily: fonts.body, fontSize: 12.5, color: colors.espresso },
   captureQuota: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: spacing.md },
   limitBox: { backgroundColor: colors.bisque, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.md },
   limitTitle: { fontFamily: fonts.displayMedium, fontSize: 20, color: colors.espresso },

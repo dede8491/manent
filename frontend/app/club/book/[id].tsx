@@ -9,7 +9,8 @@ import { api } from '@/src/api';
 import { BookCover } from '@/src/components/BookCover';
 import ManentLoader from '@/src/components/ManentLoader';
 import { PrimaryButton, GhostButton } from '@/src/components/Button';
-import { useT } from '@/src/i18n';
+import { useT, useLang } from '@/src/i18n';
+import { timeAgo } from '@/src/timeago';
 
 const CRITERIA: [string, string][] = [['histoire', 'Histoire'], ['ecriture', 'Écriture'], ['personnages', 'Personnages'], ['emotion', 'Émotion']];
 
@@ -28,6 +29,7 @@ function Stars({ value, size = 14, onSet, testID }: { value: number; size?: numb
 
 export default function ClubBookDetail() {
   const t = useT();
+  const lang = useLang();
   const colors = useColors();
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
@@ -284,6 +286,7 @@ export default function ClubBookDetail() {
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <View style={styles.avatarSm}>{p.author?.picture ? <Image source={{ uri: p.author.picture }} style={{ width: 26, height: 26, borderRadius: 13 }} /> : <Text style={styles.avatarSmText}>{(p.author?.pseudo?.[0] || 'M').toUpperCase()}</Text>}</View>
                     <Text style={styles.postAuthor}>{p.author?.pseudo}</Text>
+                    <Text style={styles.postTime}>{timeAgo(p.created_at, lang)}</Text>
                     <View style={{ flex: 1 }} />
                     {!p.is_mine && (
                       <Pressable testID={`club-post-report-${p.post_id}`} onPress={() => report('post', p.post_id)} hitSlop={8}>
@@ -457,6 +460,7 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   avatarSm: { width: 26, height: 26, borderRadius: 13, backgroundColor: colors.bisque, alignItems: 'center', justifyContent: 'center' },
   avatarSmText: { fontFamily: fonts.displayMedium, fontSize: 12, color: colors.espresso },
   postAuthor: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.espresso },
+  postTime: { fontFamily: fonts.body, fontSize: 10.5, color: colors.clay },
   postBody: { fontFamily: fonts.body, fontSize: 14, color: colors.espresso, lineHeight: 20, marginTop: spacing.sm },
   spoilerBox: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.glacier, borderRadius: radius.sm, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.chambray, padding: spacing.md, marginTop: spacing.sm },
   spoilerBoxText: { flex: 1, fontFamily: fonts.bodyMedium, fontSize: 12.5, color: colors.chambray },

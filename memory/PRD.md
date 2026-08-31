@@ -238,3 +238,12 @@
 - Clôture → gagnant élu « Livre du mois » : club_books.book_of_month=true (créé s'il n'existait pas), affiché en tête de liste avec badge LIVRE DU MOIS.
 - Frontend ClubHome : carte sondage (options cliquables → résultats % avec barres, coche sur mon vote, award sur gagnant, méta votes + date de fin), bouton « Créer un sondage » (admin uniquement) → modal question + sélection livres du Club + durée 7 j.
 - Un sondage de démo est actif en base (3 options). Admin = akereydaisy@gmail.com uniquement.
+
+## Itération 27 — Club Premium + Événements + Gamification + Dashboard admin + Corrections (juin 2026)
+- **Club premium** : /premium/status vérifié dans ClubHome → paywall (club-paywall + CTA /premium) si non-premium.
+- **Événements** : db.club_events, GET/POST(/api/club/events, admin), join/leave, DELETE admin ; UI ClubHome « Prochains événements » (Je participe/J'y participe), modal admin (titre, 6 types, date JJ/MM/AAAA HHhMM, lieu/lien) ; passés masqués après 12 h.
+- **Gamification** : GET /api/club/gamification — points (terminé*100 + fiche*30 + post*10 + avis*5 + challenge 200), badges (Premier livre/Bibliophile/Lecteur assidu/Grand bavard/Marathonien), challenge annuel 12 livres, leaderboard top10 + rank ; carte CHALLENGE dans ClubHome.
+- **Dashboard admin** : app/admin.tsx (ligne row-admin Profil si is_admin) — GET /api/club/admin/overview (stats 11 métriques + reports enrichis), POST /admin/reports/{id} {ignore|delete}. Admin réel = akereydaisy@gmail.com ; compte admin de TEST créé par testing agent : test_it16_admin_388258@manent.app / Test1234!.
+- **Visibilité 3 niveaux** : quotes.visibility private|followers|public (is_public synchro) — capture 3 chips (vis-*), feed inclut followers des suivis, profil public inclut followers si le visiteur suit, get_quote 404 sinon.
+- **Corrections** : dates relatives FR (src/timeago.ts — timeAgo/dateFr) appliquées (discussions actives, posts club, admin) ; création de livre à la volée depuis la capture (cap-book-create) ; doublons i18n purgés (609 clés uniques).
+- Testé : iteration_16 (14/14 backend + frontend complet, tout vert).

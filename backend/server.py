@@ -379,7 +379,11 @@ async def public_profile(handle: str, user=Depends(get_current_user)):
     if not profile_public and u["user_id"] != user["user_id"]:
         return {"user": {"pseudo": u["pseudo"], "handle": u["handle"], "picture": u.get("picture")},
                 "is_me": False, "private": True}
-    q = {"user_id": u["user_id"], "is_public": True, "is_hidden": {"$ne": True}, **sensitive_filter(user)}
+    vis_or = [{"is_public": True}]
+    if u["user_id"] != user["user_id"]:
+        if await db.follows.find_one({"follower_id": user["user_id"], "followed_id": u["user_id"]}):
+            vis_or.append({"visibility": "followers"})
+    q = {"user_id": u["user_id"], "$or": vis_or, "is_hidden": {"$ne": True}, **sensitive_filter(user)}
     total = await db.quotes.count_documents(q)
     books = len([b for b in await db.quotes.distinct("book_id", q) if b])
     boards = await db.boards.count_documents({"user_id": u["user_id"], "visibility": "public"})
@@ -816,6 +820,7 @@ class QuoteCreate(BaseModel):
     themes: List[str] = []
     is_public: bool = False
     is_sensitive: bool = False
+    visibility: Optional[Literal['private', 'followers', 'public']] = None
 
 
 class QuotePatch(BaseModel):
@@ -827,6 +832,7 @@ class QuotePatch(BaseModel):
     is_public: Optional[bool] = None
     is_sensitive: Optional[bool] = None
     is_hidden: Optional[bool] = None
+    visibility: Optional[Literal['private', 'followers', 'public']] = None
 
 
 class QuotesBulkBody(BaseModel):
@@ -865,13 +871,18 @@ async def create_quote(body: QuoteCreate, user=Depends(get_current_user)):
         **body.dict(),
         "created_at": now_utc(),
     }
+    # Cohérence visibilité à trois niveaux
+    if body.visibility:
+        doc["is_public"] = body.visibility == "public"
+    else:
+        doc["visibility"] = "public" if body.is_public else "private"
     await db.quotes.insert_one(doc.copy())
     await log_reading_event(user["user_id"], 0)
-    # Filet de sécurité IA sur les citations publiques non marquées sensibles
-    if body.is_public and not body.is_sensitive:
+    # Filet de sécurité IA sur les citations visibles par d'autres, non marquées sensibles
+    if doc["visibility"] != "private" and not body.is_sensitive:
         asyncio.create_task(_ai_sensitivity_check(quote_id, body.text))
     # Notifier les abonnés quand une citation devient publique
-    if body.is_public:
+    if doc["is_public"] or doc["visibility"] == "followers":
         try:
             followers = [f["follower_id"] for f in await db.follows.find(
                 {"followed_id": user["user_id"]}, {"_id": 0, "follower_id": 1}).to_list(500)]
@@ -944,8 +955,12 @@ async def get_quote(quote_id: str, user=Depends(get_current_user)):
     if not q:
         raise HTTPException(status_code=404, detail="not_found")
     is_owner = q["user_id"] == user["user_id"]
-    if not is_owner and (not q.get("is_public") or q.get("is_hidden")):
-        raise HTTPException(status_code=404, detail="not_found")
+    if not is_owner:
+        allowed = q.get("is_public")
+        if not allowed and q.get("visibility") == "followers":
+            allowed = await db.follows.find_one({"follower_id": user["user_id"], "followed_id": q["user_id"]}) is not None
+        if not allowed or q.get("is_hidden"):
+            raise HTTPException(status_code=404, detail="not_found")
     if not is_owner and q.get("is_sensitive") and not _is_adult(user):
         raise HTTPException(status_code=404, detail="not_found")
     if q.get("book_id"):
@@ -959,6 +974,10 @@ async def get_quote(quote_id: str, user=Depends(get_current_user)):
 @api.patch("/quotes/{quote_id}")
 async def patch_quote(quote_id: str, body: QuotePatch, user=Depends(get_current_user)):
     upd = {k: v for k, v in body.dict().items() if v is not None}
+    if "visibility" in upd:
+        upd["is_public"] = upd["visibility"] == "public"
+    elif "is_public" in upd:
+        upd["visibility"] = "public" if upd["is_public"] else "private"
     if upd:
         await db.quotes.update_one({"quote_id": quote_id, "user_id": user["user_id"]}, {"$set": upd})
         # Filet IA quand la citation devient/reste publique et non marquée sensible
@@ -1984,11 +2003,15 @@ async def home_discover(user=Depends(get_current_user)):
 # ============ Home feed (public quotes) ============
 @api.get("/feed")
 async def feed(theme: Optional[str] = None, user=Depends(get_current_user)):
-    q: dict = {"is_public": True, "is_hidden": {"$ne": True}, **sensitive_filter(user)}
-    if theme:
-        q["themes"] = theme
     followed = [f["followed_id"] for f in await db.follows.find(
         {"follower_id": user["user_id"]}, {"_id": 0, "followed_id": 1}).to_list(500)]
+    # Visible : public, ou réservé aux abonnés si je suis l'auteur·e
+    vis_or = [{"is_public": True}]
+    if followed:
+        vis_or.append({"visibility": "followers", "user_id": {"$in": followed}})
+    q: dict = {"$or": vis_or, "is_hidden": {"$ne": True}, **sensitive_filter(user)}
+    if theme:
+        q["themes"] = theme
     quotes = await db.quotes.find(q, {"_id": 0}).sort("created_at", -1).limit(80).to_list(80)
     # Les citations des lecteurs suivis remontent en tête (récentes d'abord dans chaque groupe)
     if followed:

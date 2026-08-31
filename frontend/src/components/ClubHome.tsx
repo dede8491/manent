@@ -7,7 +7,8 @@ import { useColors, useStyles } from '@/src/themeCtx';
 import { api } from '@/src/api';
 import { BookCover } from '@/src/components/BookCover';
 import ManentLoader from '@/src/components/ManentLoader';
-import { useT } from '@/src/i18n';
+import { timeAgo, dateFr } from '@/src/timeago';
+import { useT, useLang } from '@/src/i18n';
 
 type ClubBook = {
   cb_id: string; title: string; author?: string; cover?: string; book_of_month?: boolean;
@@ -24,9 +25,19 @@ export function ClubHome({ clubs, onOpenCircle, onCreateCircle, onJoinCircle }: 
   onJoinCircle: () => void;
 }) {
   const t = useT();
+  const lang = useLang();
   const colors = useColors();
   const styles = useStyles(makeStyles);
   const router = useRouter();
+  const [premium, setPremium] = useState<boolean | null>(null);
+  const [events, setEvents] = useState<any[]>([]);
+  const [gami, setGami] = useState<any>(null);
+  const [eventModal, setEventModal] = useState(false);
+  const [evTitle, setEvTitle] = useState('');
+  const [evType, setEvType] = useState<'discussion' | 'visio' | 'rencontre' | 'rencontre_auteur' | 'audio' | 'challenge'>('discussion');
+  const [evDate, setEvDate] = useState('');
+  const [evLoc, setEvLoc] = useState('');
+  const [creatingEvent, setCreatingEvent] = useState(false);
   const [books, setBooks] = useState<ClubBook[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
   const [polls, setPolls] = useState<any[]>([]);
@@ -41,6 +52,11 @@ export function ClubHome({ clubs, onOpenCircle, onCreateCircle, onJoinCircle }: 
   useFocusEffect(React.useCallback(() => {
     (async () => {
       try {
+        const st = await api<{ is_premium: boolean }>('/premium/status');
+        setPremium(st.is_premium);
+        if (!st.is_premium) { setLoaded(true); return; }
+      } catch { setPremium(true); }
+      try {
         const r = await api<{ books: ClubBook[]; active_posts: Post[]; is_admin: boolean }>('/club/home');
         setBooks(r.books); setPosts(r.active_posts); setIsAdmin(r.is_admin);
       } catch {}
@@ -48,9 +64,43 @@ export function ClubHome({ clubs, onOpenCircle, onCreateCircle, onJoinCircle }: 
         const p = await api<{ polls: any[] }>('/club/polls');
         setPolls(p.polls);
       } catch {}
+      try {
+        const e = await api<{ events: any[] }>('/club/events');
+        setEvents(e.events);
+      } catch {}
+      try {
+        setGami(await api<any>('/club/gamification'));
+      } catch {}
       setLoaded(true);
     })();
   }, []));
+
+  const toggleEvent = async (ev: any) => {
+    try {
+      const r = await api<{ i_participate: boolean }>(`/club/events/${ev.event_id}/${ev.i_participate ? 'leave' : 'join'}`, { method: 'POST' });
+      setEvents(prev => prev.map(x => x.event_id === ev.event_id
+        ? { ...x, i_participate: r.i_participate, participants_count: x.participants_count + (r.i_participate ? 1 : -1) }
+        : x));
+    } catch {}
+  };
+
+  const evDateIso = React.useMemo(() => {
+    const m = evDate.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{1,2})[:h](\d{2}))?$/);
+    if (!m) return null;
+    const [, d, mo, y, h, mi] = m;
+    const dt = new Date(`${y}-${mo}-${d}T${(h || '18').padStart(2, '0')}:${mi || '00'}:00`);
+    return isNaN(dt.getTime()) || dt < new Date() ? null : dt.toISOString();
+  }, [evDate]);
+
+  const createEvent = async () => {
+    if (!evTitle.trim() || !evDateIso) return;
+    setCreatingEvent(true);
+    try {
+      const e = await api<any>('/club/events', { method: 'POST', body: JSON.stringify({ title: evTitle.trim(), type: evType, date: evDateIso, location: evLoc.trim() || undefined }) });
+      setEvents(prev => [...prev, e].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
+      setEventModal(false); setEvTitle(''); setEvDate(''); setEvLoc('');
+    } finally { setCreatingEvent(false); }
+  };
 
   const vote = async (pollId: string, option: number) => {
     try {
@@ -81,6 +131,22 @@ export function ClubHome({ clubs, onOpenCircle, onCreateCircle, onJoinCircle }: 
   }, [books, sort]);
 
   const SORTS: [typeof sort, string][] = [['tous', 'Tous'], ['populaires', 'Populaires'], ['nouveaux', 'Nouveautés'], ['notes', 'Mieux notés']];
+
+  const EVENT_TYPES: [typeof evType, string][] = [['discussion', 'Discussion de livre'], ['rencontre_auteur', 'Rencontre avec un auteur'], ['visio', 'Visioconférence'], ['rencontre', 'Rencontre physique'], ['audio', 'Discussion audio'], ['challenge', 'Challenge']];
+  const typeLabel = (ty: string) => (EVENT_TYPES.find(([k]) => k === ty)?.[1]) || ty;
+
+  if (premium === false) {
+    return (
+      <View style={styles.paywall} testID="club-paywall">
+        <View style={styles.paywallIcon}><Feather name="lock" size={22} color={colors.chambray} /></View>
+        <Text style={styles.paywallTitle}>{t('Le Club de lecture est réservé aux membres Premium.')}</Text>
+        <Text style={styles.paywallSub}>{t('Lectures communes, discussions, sondages, événements et challenges — rejoins la communauté.')}</Text>
+        <Pressable testID="club-paywall-cta" onPress={() => router.push('/premium')} style={styles.paywallBtn}>
+          <Text style={styles.paywallBtnText}>{t('Découvrir Premium')}</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   return (
     <ScrollView contentContainerStyle={{ paddingBottom: 100 }} testID="club-home">
@@ -178,13 +244,71 @@ export function ClubHome({ clubs, onOpenCircle, onCreateCircle, onJoinCircle }: 
         ))}
       </View>
 
+      {gami && (
+        <View style={styles.gamiCard} testID="club-gami">
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
+            <Text style={styles.pollLabel}>{t('CHALLENGE {year}', { year: gami.challenge.year })}</Text>
+            <Text style={styles.gamiPoints}>{gami.me.points} {t('pts')}{gami.me.rank ? ` · ${gami.me.rank}ᵉ` : ''}</Text>
+          </View>
+          <Text style={styles.gamiTitle}>{t('Lire 12 livres en 12 mois')}</Text>
+          <View style={styles.progressBar}><View style={[styles.progressFill, { width: `${Math.min(100, Math.round(gami.challenge.progress / gami.challenge.goal * 100))}%` }]} /></View>
+          <Text style={styles.gamiMeta}>{gami.challenge.progress} / {gami.challenge.goal}</Text>
+          {gami.me.badges.length > 0 && (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: spacing.sm }}>
+              {gami.me.badges.map((b: any) => (
+                <View key={b.id} style={styles.badgeChip}><Feather name="award" size={10} color={colors.chambray} /><Text style={styles.badgeChipText}>{t(b.label)}</Text></View>
+              ))}
+            </View>
+          )}
+          {gami.leaderboard.length > 0 && (
+            <View style={{ marginTop: spacing.sm }}>
+              {gami.leaderboard.slice(0, 3).map((u: any, i: number) => (
+                <View key={i} style={styles.leaderRow}>
+                  <Text style={styles.leaderRank}>{i + 1}{i === 0 ? 'ᵉʳ' : 'ᵉ'}</Text>
+                  <Text style={styles.leaderName} numberOfLines={1}>{u.pseudo}</Text>
+                  <Text style={styles.gamiMeta}>{u.points} {t('pts')}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+      )}
+
+      {(events.length > 0 || isAdmin) && (
+        <View style={{ marginTop: spacing.xl }}>
+          <Text style={styles.sectionLabel}>{t('Prochains événements')}</Text>
+          <View style={{ paddingHorizontal: spacing.xl, gap: spacing.sm }}>
+            {events.map(ev => (
+              <View key={ev.event_id} style={styles.eventCard} testID={`event-${ev.event_id}`}>
+                <Text style={styles.pollLabel}>{t(typeLabel(ev.type)).toUpperCase()} · {dateFr(ev.date, lang)}</Text>
+                <Text style={styles.eventTitle}>{ev.title}</Text>
+                {!!ev.location && <Text style={styles.gamiMeta}>{ev.location}</Text>}
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.sm }}>
+                  <Text style={styles.gamiMeta}>{t(ev.participants_count > 1 ? '{n} participants' : '{n} participant', { n: ev.participants_count })}</Text>
+                  <Pressable testID={`event-join-${ev.event_id}`} onPress={() => toggleEvent(ev)} style={[styles.joinEvBtn, ev.i_participate && styles.joinEvBtnActive]}>
+                    <Feather name={ev.i_participate ? 'check' : 'calendar'} size={13} color={ev.i_participate ? colors.espresso : colors.creme} />
+                    <Text style={[styles.joinEvText, ev.i_participate && { color: colors.espresso }]}>{ev.i_participate ? t('J’y participe') : t('Je participe')}</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ))}
+            {isAdmin && (
+              <Pressable testID="btn-create-event" onPress={() => setEventModal(true)} style={styles.createPollBtn2}>
+                <Feather name="calendar" size={15} color={colors.chambray} />
+                <Text style={styles.createPollText}>{t('Créer un événement')}</Text>
+              </Pressable>
+            )}
+          </View>
+        </View>
+      )}
+
       {posts.length > 0 && (
         <View style={{ marginTop: spacing.xl }}>
           <Text style={styles.sectionLabel}>{t('Discussions actives')}</Text>
           <View style={{ paddingHorizontal: spacing.xl, gap: spacing.sm }}>
             {posts.map(p => (
               <Pressable key={p.post_id} testID={`club-active-post-${p.post_id}`} onPress={() => router.push({ pathname: '/club/book/[id]', params: { id: (p as any).cb_id, tab: 'posts' } })} style={styles.postCard}>
-                <Text style={styles.postMeta}>{p.author?.pseudo} · {p.book_title}</Text>
+                <Text style={styles.postMeta}>{p.author?.pseudo} · {p.book_title} · {timeAgo(p.created_at, lang)}</Text>
                 <Text style={styles.postText} numberOfLines={2}>{p.spoiler ? t('⚠ Spoiler masqué — ouvre la discussion pour révéler.') : p.text}</Text>
                 <View style={styles.metaRow}><Feather name="heart" size={11} color={colors.clay} /><Text style={styles.meta}>{p.likes_count}</Text></View>
               </Pressable>
@@ -217,6 +341,30 @@ export function ClubHome({ clubs, onOpenCircle, onCreateCircle, onJoinCircle }: 
           </View>
         </View>
       </View>
+
+      <Modal visible={eventModal} transparent animationType="slide" onRequestClose={() => setEventModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.pollQuestion}>{t('Nouvel événement')}</Text>
+            <TextInput testID="event-title-input" value={evTitle} onChangeText={setEvTitle} placeholder={t('Titre (ex. Discussion finale — Houris)')} placeholderTextColor={colors.clay} style={styles.pollInput} />
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, marginBottom: spacing.sm }}>
+              {EVENT_TYPES.map(([k, lbl]) => (
+                <Pressable key={k} onPress={() => setEvType(k)} style={[styles.chip, evType === k && styles.chipActive]}>
+                  <Text style={[styles.chipText, evType === k && styles.chipTextActive]}>{t(lbl)}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+            <TextInput testID="event-date-input" value={evDate} onChangeText={setEvDate} placeholder={t('Date : JJ/MM/AAAA 18h30')} placeholderTextColor={colors.clay} style={styles.pollInput} />
+            <TextInput testID="event-loc-input" value={evLoc} onChangeText={setEvLoc} placeholder={t('Lieu ou lien (optionnel)')} placeholderTextColor={colors.clay} style={styles.pollInput} />
+            <Pressable testID="event-create-confirm" onPress={createEvent} disabled={!evTitle.trim() || !evDateIso || creatingEvent} style={[styles.pollSubmit, (!evTitle.trim() || !evDateIso || creatingEvent) && { opacity: 0.5 }]}>
+              <Text style={styles.pollSubmitText}>{t('Créer l’événement')}</Text>
+            </Pressable>
+            <Pressable onPress={() => setEventModal(false)} style={{ alignSelf: 'center', padding: spacing.sm }}>
+              <Text style={styles.cancelText}>{t('Annuler')}</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={pollModal} transparent animationType="slide" onRequestClose={() => setPollModal(false)}>
         <View style={styles.modalOverlay}>
@@ -303,4 +451,25 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   pollSubmit: { height: 48, borderRadius: radius.md, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center', marginTop: spacing.md },
   pollSubmitText: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.creme },
   cancelText: { fontFamily: fonts.body, fontSize: 13, color: colors.clay, textDecorationLine: 'underline' },
+  paywall: { alignItems: 'center', paddingHorizontal: spacing.xxl, paddingVertical: spacing.xxl },
+  paywallIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.creme, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center' },
+  paywallTitle: { fontFamily: fonts.displayMedium, fontSize: 22, color: colors.espresso, textAlign: 'center', marginTop: spacing.lg, lineHeight: 28 },
+  paywallSub: { fontFamily: fonts.body, fontSize: 13.5, color: colors.clay, textAlign: 'center', lineHeight: 20, marginTop: spacing.sm },
+  paywallBtn: { height: 48, paddingHorizontal: spacing.xxl, borderRadius: radius.pill, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center', marginTop: spacing.lg },
+  paywallBtnText: { fontFamily: fonts.bodyMedium, fontSize: 14.5, color: colors.creme },
+  gamiCard: { marginHorizontal: spacing.xl, marginTop: spacing.md, backgroundColor: colors.bisque, borderRadius: 16, padding: spacing.md },
+  gamiTitle: { fontFamily: fonts.displayMedium, fontSize: 19, color: colors.espresso, marginTop: 2, marginBottom: spacing.sm },
+  gamiPoints: { fontFamily: fonts.bodyMedium, fontSize: 12, color: colors.espresso },
+  gamiMeta: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.clay, letterSpacing: 0.8, textTransform: 'uppercase', marginTop: 4 },
+  badgeChip: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 24, paddingHorizontal: 10, borderRadius: radius.pill, backgroundColor: colors.creme },
+  badgeChipText: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.espresso },
+  leaderRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 3 },
+  leaderRank: { fontFamily: fonts.displayMedium, fontSize: 14, color: colors.chambray, width: 30 },
+  leaderName: { flex: 1, fontFamily: fonts.body, fontSize: 13, color: colors.espresso },
+  eventCard: { backgroundColor: colors.creme, borderRadius: 16, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },
+  eventTitle: { fontFamily: fonts.displayMedium, fontSize: 18, color: colors.espresso, marginTop: 2 },
+  joinEvBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 32, paddingHorizontal: 12, borderRadius: radius.pill, backgroundColor: colors.chambray },
+  joinEvBtnActive: { backgroundColor: colors.creme, borderWidth: 1, borderColor: colors.borderSoft },
+  joinEvText: { fontFamily: fonts.bodyMedium, fontSize: 11.5, color: colors.creme },
+  createPollBtn2: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 42, borderRadius: radius.md, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.chambray, backgroundColor: colors.creme },
 });

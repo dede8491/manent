@@ -1,8 +1,8 @@
 """Club de lecture global — livres proposés, lectures collectives, discussions, avis."""
 import logging
 import re
-from datetime import timedelta, timezone
-from typing import Optional, List
+from datetime import datetime, timedelta, timezone
+from typing import Optional, List, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -74,6 +74,18 @@ class PollCreate(BaseModel):
 
 class VoteBody(BaseModel):
     option: int = Field(ge=0)
+
+
+class EventCreate(BaseModel):
+    title: str = Field(min_length=2, max_length=120)
+    description: Optional[str] = None
+    type: Literal['discussion', 'rencontre_auteur', 'visio', 'rencontre', 'audio', 'challenge'] = 'discussion'
+    date: str  # ISO datetime
+    location: Optional[str] = None  # lieu ou lien
+
+
+class ReportResolve(BaseModel):
+    action: Literal['ignore', 'delete']
 
 
 # ---------- Helpers ----------
@@ -437,6 +449,179 @@ async def close_poll_now(poll_id: str, user=Depends(get_current_user)):
     await _close_poll(p)
     p = await db.club_polls.find_one({"poll_id": poll_id}, {"_id": 0})
     return _poll_view(p, user["user_id"])
+
+
+# ---------- Événements ----------
+@router.get("/events")
+async def list_events(user=Depends(get_current_user)):
+    events = await db.club_events.find({}, {"_id": 0}).sort("date", 1).to_list(50)
+    out = []
+    for e in events:
+        d = e.get("date")
+        if d and d.tzinfo is None:
+            d = d.replace(tzinfo=timezone.utc)
+        if d and d < now_utc() - timedelta(hours=12):
+            continue  # événements passés masqués
+        parts = e.get("participants") or []
+        e["participants_count"] = len(parts)
+        e["i_participate"] = user["user_id"] in parts
+        e.pop("participants", None)
+        out.append(e)
+    return {"events": out, "is_admin": bool(user.get("is_admin"))}
+
+
+@router.post("/events")
+async def create_event(body: EventCreate, user=Depends(get_current_user)):
+    if not user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="forbidden")
+    try:
+        d = datetime.fromisoformat(body.date.replace("Z", "+00:00"))
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=timezone.utc)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="invalid_date")
+    doc = {
+        "event_id": new_id("ev"),
+        "title": body.title.strip(),
+        "description": (body.description or "").strip() or None,
+        "type": body.type,
+        "date": d,
+        "location": (body.location or "").strip() or None,
+        "participants": [],
+        "created_by": user["user_id"],
+        "created_at": now_utc(),
+    }
+    await db.club_events.insert_one(doc.copy())
+    doc["participants_count"] = 0
+    doc["i_participate"] = False
+    doc.pop("participants", None)
+    return doc
+
+
+@router.post("/events/{event_id}/join")
+async def join_event(event_id: str, user=Depends(get_current_user)):
+    r = await db.club_events.update_one({"event_id": event_id}, {"$addToSet": {"participants": user["user_id"]}})
+    if not r.matched_count:
+        raise HTTPException(status_code=404, detail="not_found")
+    return {"ok": True, "i_participate": True}
+
+
+@router.post("/events/{event_id}/leave")
+async def leave_event(event_id: str, user=Depends(get_current_user)):
+    await db.club_events.update_one({"event_id": event_id}, {"$pull": {"participants": user["user_id"]}})
+    return {"ok": True, "i_participate": False}
+
+
+@router.delete("/events/{event_id}")
+async def delete_event(event_id: str, user=Depends(get_current_user)):
+    if not user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="forbidden")
+    await db.club_events.delete_one({"event_id": event_id})
+    return {"ok": True}
+
+
+# ---------- Gamification : points, badges, classement, challenge annuel ----------
+async def _user_points(uid: str) -> dict:
+    year_start = datetime(now_utc().year, 1, 1, tzinfo=timezone.utc)
+    finished = await db.books.count_documents({"user_id": uid, "status": "termine"})
+    finished_year = await db.books.count_documents({"user_id": uid, "status": "termine", "finished_at": {"$gte": year_start}})
+    fiches = await db.books.count_documents({"user_id": uid, "sheet": {"$exists": True, "$nin": [None, {}]}})
+    posts = await db.club_posts.count_documents({"user_id": uid})
+    reviews = await db.club_reviews.count_documents({"user_id": uid})
+    challenge_done = finished_year >= 12
+    points = finished * 100 + fiches * 30 + posts * 10 + reviews * 5 + (200 if challenge_done else 0)
+    return {"points": points, "finished": finished, "finished_year": finished_year,
+            "fiches": fiches, "posts": posts, "reviews": reviews}
+
+
+@router.get("/gamification")
+async def gamification(user=Depends(get_current_user)):
+    me = await _user_points(user["user_id"])
+    badges = []
+    if me["finished"] >= 1:
+        badges.append({"id": "premier_livre", "label": "Premier livre"})
+    if me["finished"] >= 10:
+        badges.append({"id": "bibliophile", "label": "Bibliophile"})
+    if me["finished_year"] >= 5:
+        badges.append({"id": "assidu", "label": "Lecteur assidu"})
+    if me["posts"] >= 20:
+        badges.append({"id": "bavard", "label": "Grand bavard"})
+    if me["finished_year"] >= 12:
+        badges.append({"id": "marathonien", "label": "Marathonien"})
+    # Classement (toute la communauté)
+    uids = set(await db.books.distinct("user_id")) | set(await db.club_posts.distinct("user_id"))
+    board = []
+    for uid in list(uids)[:100]:
+        p = await _user_points(uid)
+        if p["points"] > 0:
+            u = await db.users.find_one({"user_id": uid}, {"_id": 0, "pseudo": 1, "handle": 1, "picture": 1})
+            if u:
+                board.append({**u, "points": p["points"], "user_id": uid})
+    board.sort(key=lambda x: -x["points"])
+    rank = next((i + 1 for i, b in enumerate(board) if b["user_id"] == user["user_id"]), None)
+    for b in board:
+        b.pop("user_id", None)
+    return {
+        "me": {"points": me["points"], "rank": rank, "badges": badges},
+        "challenge": {"goal": 12, "progress": me["finished_year"], "year": now_utc().year},
+        "leaderboard": board[:10],
+    }
+
+
+# ---------- Dashboard admin ----------
+@router.get("/admin/overview")
+async def admin_overview(user=Depends(get_current_user)):
+    if not user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="forbidden")
+    week_ago = now_utc() - timedelta(days=7)
+    stats = {
+        "members": await db.users.count_documents({}),
+        "active_members": len(await db.reading_events.distinct("user_id", {"date": {"$gte": week_ago.strftime('%Y-%m-%d')}})) if await db.reading_events.count_documents({}) else len(await db.quotes.distinct("user_id", {"created_at": {"$gte": week_ago}})),
+        "club_books": await db.club_books.count_documents({}),
+        "readings": await db.club_readers.count_documents({"status": "reading"}),
+        "finished": await db.club_readers.count_documents({"status": "finished"}),
+        "posts": await db.club_posts.count_documents({}),
+        "comments": await db.club_comments.count_documents({}),
+        "reviews": await db.club_reviews.count_documents({}),
+        "events": await db.club_events.count_documents({}),
+        "polls": await db.club_polls.count_documents({}),
+        "quotes_public": await db.quotes.count_documents({"is_public": True}),
+    }
+    reports = await db.reports.find({"status": "open"}, {"_id": 0}).sort("created_at", -1).to_list(50)
+    for r in reports:
+        target = None
+        if r["kind"] == "post":
+            target = await db.club_posts.find_one({"post_id": r["target_id"]}, {"_id": 0, "text": 1, "user_id": 1})
+        elif r["kind"] == "comment":
+            target = await db.club_comments.find_one({"comment_id": r["target_id"]}, {"_id": 0, "text": 1, "user_id": 1})
+        elif r["kind"] == "quote":
+            target = await db.quotes.find_one({"quote_id": r["target_id"]}, {"_id": 0, "text": 1, "user_id": 1})
+        r["content"] = (target or {}).get("text")
+        if target:
+            au = await db.users.find_one({"user_id": target["user_id"]}, {"_id": 0, "pseudo": 1})
+            r["content_author"] = (au or {}).get("pseudo")
+        reporter = await db.users.find_one({"user_id": r["user_id"]}, {"_id": 0, "pseudo": 1})
+        r["reporter"] = (reporter or {}).get("pseudo")
+    return {"stats": stats, "reports": reports}
+
+
+@router.post("/admin/reports/{report_id}")
+async def resolve_report(report_id: str, body: ReportResolve, user=Depends(get_current_user)):
+    if not user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="forbidden")
+    r = await db.reports.find_one({"report_id": report_id}, {"_id": 0})
+    if not r:
+        raise HTTPException(status_code=404, detail="not_found")
+    if body.action == "delete":
+        if r["kind"] == "post":
+            await db.club_posts.delete_one({"post_id": r["target_id"]})
+            await db.club_comments.delete_many({"post_id": r["target_id"]})
+        elif r["kind"] == "comment":
+            await db.club_comments.delete_one({"comment_id": r["target_id"]})
+        elif r["kind"] == "quote":
+            await db.quotes.update_one({"quote_id": r["target_id"]}, {"$set": {"is_hidden": True}})
+    await db.reports.update_one({"report_id": report_id}, {"$set": {"status": "closed", "resolution": body.action, "resolved_at": now_utc()}})
+    return {"ok": True}
 
 
 # ---------- Avis (notes multi-critères) ----------
