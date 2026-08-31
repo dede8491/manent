@@ -6,6 +6,7 @@ import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
 import { api } from '@/src/api';
 import { BookCover } from '@/src/components/BookCover';
+import ManentLoader from '@/src/components/ManentLoader';
 import { useT } from '@/src/i18n';
 
 type ClubBook = {
@@ -68,7 +69,11 @@ export function ClubHome({ clubs, onOpenCircle, onCreateCircle, onJoinCircle }: 
       </ScrollView>
 
       <View style={{ paddingHorizontal: spacing.xl, marginTop: spacing.md, gap: spacing.sm }}>
-        {loaded && books.length === 0 ? (
+        {!loaded ? (
+          <View style={{ alignItems: 'center', paddingVertical: spacing.xl }}>
+            <ManentLoader size={56} />
+          </View>
+        ) : loaded && books.length === 0 ? (
           <View style={styles.emptyBox}>
             <Text style={styles.emptyTitle}>{t('Le Club attend son premier livre.')}</Text>
             <Text style={styles.emptySub}>{t('Propose une lecture, la communauté te suivra.')}</Text>

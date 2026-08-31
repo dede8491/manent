@@ -7,6 +7,7 @@ import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
 import { api } from '@/src/api';
 import { BookCover } from '@/src/components/BookCover';
+import ManentLoader from '@/src/components/ManentLoader';
 import { useT } from '@/src/i18n';
 
 export default function ClubAddBook() {
@@ -75,7 +76,7 @@ export default function ClubAddBook() {
       <Text style={styles.hint}>{t('Le livre rejoindra le Club pour toute la communauté — il ne sera pas ajouté à ta bibliothèque.')}</Text>
       <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingTop: spacing.md, paddingBottom: insets.bottom + spacing.xxl }} keyboardShouldPersistTaps="handled">
         {loading ? (
-          <View style={{ paddingTop: spacing.xl, alignItems: 'center' }}><ActivityIndicator color={colors.chambray} /></View>
+          <View style={{ paddingTop: spacing.xl, alignItems: 'center' }}><ManentLoader size={56} /></View>
         ) : results.length === 0 && q.trim().length >= 2 ? (
           <Text style={styles.empty}>{t('Aucun résultat. Essaie un autre titre.')}</Text>
         ) : (
