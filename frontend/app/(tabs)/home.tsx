@@ -12,6 +12,7 @@ import { useAuth } from '@/src/auth';
 import { Wordmark } from '@/src/components/Wordmark';
 import { BookCardFeed, AwardCard, CollectionCard, ResumeCard } from '@/src/components/FeedCards';
 import ManentLoader from '@/src/components/ManentLoader';
+import { InfoTooltip } from '@/src/components/InfoTooltip';
 import { useT } from '@/src/i18n';
 
 const BIRTH_PROMPT_KEY = 'manent_birth_prompted';
@@ -112,8 +113,13 @@ export default function Home() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.glacier }} testID="screen-home">
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-        <View style={{ paddingHorizontal: spacing.xl }}>
+        <View style={{ paddingHorizontal: spacing.xl, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <Wordmark size={19} variant="horizontal" />
+          <InfoTooltip
+            testID="info-home"
+            title={t('Ton fil de lecture')}
+            text={t("C'est ici que Manent respire : ta citation du matin, les passages des lecteurs que tu suis, les livres primés et les plus lus de la semaine. Tape un thème en haut pour explorer, ou l'icône de scan pour identifier un livre par sa couverture ou son code-barres.")}
+          />
         </View>
         <View style={[styles.searchRow, { flexDirection: 'row', gap: 8, alignItems: 'center' }]}>
           <Pressable testID="home-search" onPress={() => router.push('/search')} style={[styles.search, { flex: 1 }]}>

@@ -10,6 +10,7 @@ import { PrimaryButton, GhostButton } from '@/src/components/Button';
 import { toBase64 } from '@/src/image';
 import { api } from '@/src/api';
 import ManentLoader from '@/src/components/ManentLoader';
+import { InfoTooltip } from '@/src/components/InfoTooltip';
 import { useT } from '@/src/i18n';
 
 export default function CaptureModal() {
@@ -109,7 +110,13 @@ export default function CaptureModal() {
           <Feather name="x" size={22} color={colors.espresso} />
         </Pressable>
         <Text style={styles.h1}>{t('Capturer un passage')}</Text>
-        <View style={{ width: 40 }} />
+        <View style={{ width: 40, alignItems: 'center' }}>
+          <InfoTooltip
+            testID="info-capture"
+            title={t('Capturer un passage')}
+            text={t("Photographie une page ou choisis une image : l'IA transcrit le texte pour toi. Relie la citation à un livre de ta bibliothèque, choisis sa visibilité (privée, abonnés ou publique) et garde-la pour toujours.")}
+          />
+        </View>
       </View>
       <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + spacing.xxl }} keyboardShouldPersistTaps="handled">
         {limitReached ? (

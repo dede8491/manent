@@ -15,6 +15,7 @@ import { buildSheetHtml } from '@/src/sheetPdf';
 import { api, getCachedToken } from '@/src/api';
 import { BookCover } from '@/src/components/BookCover';
 import { useT } from '@/src/i18n';
+import { InfoTooltip } from '@/src/components/InfoTooltip';
 import ManentLoader from '@/src/components/ManentLoader';
 
 export default function BookDetail() {
@@ -258,6 +259,11 @@ export default function BookDetail() {
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
         <Pressable onPress={() => router.back()} testID="book-back" style={styles.iconBtn}><Feather name="chevron-left" size={22} color={colors.espresso} /></Pressable>
         <Text style={styles.headerTitle} numberOfLines={1}>{book.title}</Text>
+        <InfoTooltip
+          testID="info-book"
+          title={t('Ta fiche livre')}
+          text={t("Fais vivre ta lecture : mets à jour ta page pour suivre ta progression, note le livre une fois terminé, et retrouve toutes les citations que tu y as capturées. Les flashcards et la fiche de lecture t'aident à retenir l'essentiel.")}
+        />
         <Pressable onPress={openDelete} testID="book-delete" style={styles.iconBtn}>
           <Feather name="trash-2" size={19} color={colors.clay} />
         </Pressable>

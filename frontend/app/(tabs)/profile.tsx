@@ -8,6 +8,7 @@ import { useColors, useStyles } from '@/src/themeCtx';
 import { useAuth } from '@/src/auth';
 import { api, getCachedToken } from '@/src/api';
 import * as ImagePicker from 'expo-image-picker';
+import { InfoTooltip } from '@/src/components/InfoTooltip';
 import { useT } from '@/src/i18n';
 
 export default function Profile() {
@@ -66,6 +67,13 @@ export default function Profile() {
   }, []));
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.glacier }} contentContainerStyle={{ paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 80 }} testID="screen-profile">
+      <View style={{ alignItems: 'flex-end', paddingHorizontal: spacing.xl }}>
+        <InfoTooltip
+          testID="info-profile"
+          title={t('Ton profil')}
+          text={t("Ton espace personnel : tes statistiques de lecture, ta série de jours d'affilée, tes tableaux et tes thèmes. Tape sur ton avatar pour changer ta photo, et sur Paramètres pour régler la langue, le thème et la confidentialité.")}
+        />
+      </View>
       <View style={styles.header}>
         <Pressable testID="avatar-edit" onPress={pickAvatar} style={styles.avatar}>
           {user?.picture ? (

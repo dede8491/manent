@@ -265,3 +265,9 @@
 - Couvertures : /home/discover backfill des « plus lus » (persisté), /books/search complète jusqu'à 6 couvertures manquantes via leslibraires.fr en parallèle ; livres TEST_ purgés de la base.
 - Synopsis : GET /api/books-summary (Google → Open Library, cache db.book_summaries) ; fiche de découverte affiche « Résumé » automatiquement.
 - Mises à jour automatiques de la base : migrations one-shot au démarrage (covers_migrated_v1, featured_seeded_v1 dans db.meta), caches auto-rafraîchis (nouveautés 12 h, thèmes 7 j), sondages auto-clôturés, rappels d'événements en boucle 2 h, stats calculées en direct (jamais stockées à part).
+
+## Itération 31 — Petits « i » d'information (juin 2026)
+- Nouveau composant `src/components/InfoTooltip.tsx` : icône ⓘ discrète (Feather info, clay) → modale centrée Crème (titre Cormorant, texte Inter, bouton « Compris » Chambray). Fermeture au tap sur l'overlay ou le bouton. testID `info-{écran}` / `info-{écran}-close`.
+- Placements : Accueil (à côté du wordmark), Bibliothèque (à côté du titre), Communauté (texte dynamique Tableaux/Club), Profil (haut droite), Capture (header), Mes citations (header), Fiche livre (header, avant la corbeille).
+- Traductions EN ajoutées dans translations.ts (+ « Compris » → « Got it »).
+- Vérifié par screenshots sur les 5 écrans principaux + capture. Compte de test test_tooltip@manent.app créé puis supprimé de la base (base toujours propre : admin + demo uniquement).

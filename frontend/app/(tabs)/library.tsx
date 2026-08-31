@@ -8,6 +8,7 @@ import { useColors, useStyles } from '@/src/themeCtx';
 import { api } from '@/src/api';
 import { BookCover } from '@/src/components/BookCover';
 import { QuotesManager } from '@/src/components/QuotesManager';
+import { InfoTooltip } from '@/src/components/InfoTooltip';
 import { useT } from '@/src/i18n';
 
 type Book = {
@@ -89,7 +90,14 @@ export default function Library() {
     <View style={{ flex: 1, backgroundColor: colors.glacier }} testID="screen-library">
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
         <View style={styles.headerRow}>
-          <Text style={styles.h1}>{t('Bibliothèque')}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+            <Text style={styles.h1}>{t('Bibliothèque')}</Text>
+            <InfoTooltip
+              testID="info-library"
+              title={t('Ta bibliothèque')}
+              text={t("Range tes lectures en trois étapes : À lire, En cours, Terminés. Ta progression se met à jour à mesure que tu avances dans les pages. L'onglet Citations rassemble tous les passages que tu as capturés, pour les retoucher ou changer leur visibilité en un geste.")}
+            />
+          </View>
           <Pressable testID="btn-library-add" onPress={() => router.push('/book/add')} style={styles.addBtn}>
             <Feather name="plus" size={22} color={colors.creme} />
           </Pressable>

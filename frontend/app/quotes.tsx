@@ -6,6 +6,7 @@ import { Feather } from '@expo/vector-icons';
 import { fonts, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
 import { QuotesManager } from '@/src/components/QuotesManager';
+import { InfoTooltip } from '@/src/components/InfoTooltip';
 import { useT } from '@/src/i18n';
 
 export default function MyQuotesScreen() {
@@ -21,7 +22,13 @@ export default function MyQuotesScreen() {
           <Feather name="chevron-left" size={22} color={colors.espresso} />
         </Pressable>
         <Text style={styles.h1}>{t('Mes citations')}</Text>
-        <View style={{ width: 40 }} />
+        <View style={{ width: 40, alignItems: 'center' }}>
+          <InfoTooltip
+            testID="info-quotes"
+            title={t('Mes citations')}
+            text={t("Toutes tes citations au même endroit. Sélectionnes-en plusieurs pour changer leur visibilité ou les supprimer d'un coup. Une citation publique peut inspirer d'autres lecteurs dans le fil de découverte.")}
+          />
+        </View>
       </View>
       <QuotesManager />
     </View>
