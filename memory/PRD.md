@@ -132,3 +132,10 @@
 - **Nettoyage BnF** : helper _clean_bnf_title (retire « (Éd. collector) », « ([Éd. en gros caractères]) », « : roman … »), appliqué titre + ISBN → meilleure déduplication.
 - **Suppression de livre** : icône corbeille (book-delete) dans l'en-tête de la fiche livre → modal de confirmation custom (compatible web, Alert.alert ne marche pas sur web) → DELETE /api/books/{id} → retour bibliothèque. Les citations sont conservées. i18n FR/EN.
 - Testé e2e : recherche « jacaranda » vide → CTA → ajout depuis le catalogue → suppression → disparu de la bibliothèque.
+
+## Itération 14 — Fiche de lecture interactive + Carnet premium + recherche accueil→internet (juin 2026)
+- **Fiche de lecture** (/fiche/[bookId], bouton btn-fiche sur toute fiche livre) : 9 sections éditoriales (Le livre + genre/éditeur, L'auteur, En 5 minutes, Les 5 idées à retenir (max 5), Les passages marquants pré-remplis depuis les citations, Ce que j'en retiens, On en parle ?, Mon avis (étoiles Ionicons pleines + texte), À qui je le recommande ?). Auto-save débounce 1,2 s (PUT /api/books/{id}/fiche), rating synchronisé sur book.rating. IMPORTANT : Section/ListEditor hoistés au niveau module (sinon perte de focus TextInput à chaque frappe).
+- **Backend** : book.fiche dict (FICHE_FIELDS), GET/PUT /api/books/{id}/fiche (pré-remplissage passages via quotes), GET /api/fiches (tri updated_at desc).
+- **Carnet** (/carnet, row-carnet dans profil avec tag PREMIUM) : liste des fiches (étoiles, date). Non-premium → verrou carnet-locked + CTA /premium. Export/partage PDF (src/fichePdf.ts, buildFicheHtml) réservé premium (redirect /premium sinon).
+- **Recherche accueil** : /search interroge AUSSI /api/books/search (débounce 450 ms, 6 résultats max, section « Catalogue en ligne », testID search-catalog-{i}) → tap → /book/add prérempli (params title/author/cover/isbn/pages/year, prefill étendu dans add.tsx). Section locale renommée « Dans ta bibliothèque ({n}) ».
+- Testé : 9/9 backend (test_iteration13.py) + e2e frontend complet (focus test 100 chars OK, premium/non-premium).

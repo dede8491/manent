@@ -1436,6 +1436,72 @@ async def get_badges(user=Depends(get_current_user)):
     return {"badges": badges, "earned_count": sum(1 for b in badges if b["earned"])}
 
 
+# ============ Fiche de lecture (carnet) ============
+FICHE_FIELDS = ("genre", "publisher", "author_bio", "summary", "ideas", "passages", "takeaways", "questions", "review", "recommend")
+
+
+class FichePatch(BaseModel):
+    genre: Optional[str] = None
+    publisher: Optional[str] = None
+    author_bio: Optional[str] = None
+    summary: Optional[str] = None
+    ideas: Optional[List[str]] = None
+    passages: Optional[List[dict]] = None   # [{text, note}]
+    takeaways: Optional[List[str]] = None
+    questions: Optional[List[str]] = None
+    review: Optional[str] = None
+    recommend: Optional[str] = None
+    rating: Optional[int] = None
+
+
+@api.get("/books/{book_id}/fiche")
+async def get_fiche(book_id: str, user=Depends(get_current_user)):
+    book = await db.books.find_one({"book_id": book_id, "user_id": user["user_id"]}, {"_id": 0})
+    if not book:
+        raise HTTPException(status_code=404, detail="not_found")
+    fiche = book.get("fiche") or {}
+    # Pré-remplissage des passages depuis les citations capturées si la fiche n'en a pas encore
+    if not fiche.get("passages"):
+        qs = await db.quotes.find({"book_id": book_id, "user_id": user["user_id"]},
+                                  {"_id": 0, "text": 1, "note": 1}).sort("created_at", 1).limit(10).to_list(10)
+        fiche["passages"] = [{"text": q["text"], "note": q.get("note") or ""} for q in qs]
+    return {
+        "book": {k: book.get(k) for k in ("book_id", "title", "author", "cover", "pages", "year", "type", "isbn")},
+        "fiche": {k: fiche.get(k) for k in FICHE_FIELDS} | {"passages": fiche.get("passages", []), "updated_at": fiche.get("updated_at")},
+        "rating": book.get("rating") or 0,
+    }
+
+
+@api.put("/books/{book_id}/fiche")
+async def save_fiche(book_id: str, body: FichePatch, user=Depends(get_current_user)):
+    book = await db.books.find_one({"book_id": book_id, "user_id": user["user_id"]}, {"_id": 0, "fiche": 1})
+    if book is None:
+        raise HTTPException(status_code=404, detail="not_found")
+    patch = {k: v for k, v in body.dict().items() if v is not None and k != "rating"}
+    upd: dict = {f"fiche.{k}": v for k, v in patch.items()}
+    upd["fiche.updated_at"] = now_utc().isoformat()
+    if body.rating is not None:
+        upd["rating"] = max(0, min(5, body.rating))
+    await db.books.update_one({"book_id": book_id, "user_id": user["user_id"]}, {"$set": upd})
+    return {"ok": True}
+
+
+@api.get("/fiches")
+async def list_fiches(user=Depends(get_current_user)):
+    books = await db.books.find(
+        {"user_id": user["user_id"], "fiche": {"$exists": True}},
+        {"_id": 0, "book_id": 1, "title": 1, "author": 1, "cover": 1, "rating": 1, "fiche.updated_at": 1, "fiche.summary": 1},
+    ).to_list(300)
+    out = []
+    for b in books:
+        f = b.pop("fiche", {}) or {}
+        b["updated_at"] = f.get("updated_at")
+        b["has_summary"] = bool(f.get("summary"))
+        out.append(b)
+    out.sort(key=lambda x: x.get("updated_at") or "", reverse=True)
+    return {"fiches": out}
+
+
 # ============ Home feed (public quotes) ============
 @api.get("/feed")
 async def feed(theme: Optional[str] = None, user=Depends(get_current_user)):

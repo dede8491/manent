@@ -32,15 +32,22 @@ export default function AddBook() {
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const params = useLocalSearchParams<{ title?: string; author?: string; cover?: string; q?: string }>();
+  const params = useLocalSearchParams<{ title?: string; author?: string; cover?: string; q?: string; isbn?: string; pages?: string; year?: string }>();
   const [method, setMethod] = useState<Method>('title');
   const selectedRef = useRef(false);
 
-  // Préremplissage depuis une suggestion (page thème)
+  // Préremplissage depuis une suggestion (page thème, recherche accueil)
   useEffect(() => {
     if (params.title && !selectedRef.current) {
       selectedRef.current = true;
-      setSelected({ title: params.title, author: params.author || null, cover: params.cover || null });
+      setSelected({
+        title: params.title,
+        author: params.author || null,
+        cover: params.cover || null,
+        isbn: params.isbn || null,
+        pages: params.pages ? parseInt(String(params.pages), 10) || null : null,
+        year: params.year || null,
+      });
     }
     if (params.q && !selectedRef.current) {
       selectedRef.current = true;

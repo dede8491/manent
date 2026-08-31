@@ -24,8 +24,11 @@ export default function SearchScreen() {
   const [themes, setThemes] = useState<string[]>([]);
   const [myBooks, setMyBooks] = useState<{ book_id: string; title: string }[]>([]);
   const [results, setResults] = useState<{ quotes: Quote[]; books: any[] }>({ quotes: [], books: [] });
+  const [catalog, setCatalog] = useState<any[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const timer = useRef<any>(null);
+  const catalogTimer = useRef<any>(null);
 
   useEffect(() => {
     (async () => {
@@ -59,6 +62,28 @@ export default function SearchScreen() {
     timer.current = setTimeout(() => run(q, scope, theme, bookId), 350);
     return () => clearTimeout(timer.current);
   }, [q, scope, theme, bookId, run]);
+
+  // Recherche internet (catalogue) en parallèle de la recherche locale
+  useEffect(() => {
+    if (catalogTimer.current) clearTimeout(catalogTimer.current);
+    const qv = q.trim();
+    if (qv.length < 2 || scope === 'quotes' || theme || bookId) {
+      setCatalog([]);
+      setCatalogLoading(false);
+      return;
+    }
+    setCatalogLoading(true);
+    catalogTimer.current = setTimeout(async () => {
+      try {
+        const r = await api<{ results: any[] }>(`/books/search?q=${encodeURIComponent(qv)}`);
+        setCatalog((r.results || []).slice(0, 6));
+      } catch {
+        setCatalog([]);
+      }
+      setCatalogLoading(false);
+    }, 450);
+    return () => clearTimeout(catalogTimer.current);
+  }, [q, scope, theme, bookId]);
 
   const filtersActive = theme || bookId;
   const showBooks = scope !== 'quotes' && !filtersActive;
@@ -128,36 +153,16 @@ export default function SearchScreen() {
             <View style={{ paddingTop: spacing.xxl, alignItems: 'center' }}>
               <ActivityIndicator color={colors.chambray} />
             </View>
-          ) : total === 0 ? (
+          ) : total === 0 && catalog.length === 0 && !catalogLoading ? (
             <View style={{ paddingVertical: spacing.xxl, alignItems: 'center' }}>
               <Text style={styles.emptyTitle}>{t('Rien pour l’instant.')}</Text>
-              <Text style={styles.emptySub}>{t('Cette recherche fouille ta bibliothèque et tes citations.')}</Text>
-              {q.trim().length >= 2 && (
-                <Pressable
-                  testID="search-catalog-cta"
-                  onPress={() => router.push({ pathname: '/book/add', params: { q: q.trim() } })}
-                  style={styles.catalogBtn}
-                >
-                  <Feather name="globe" size={15} color={colors.creme} />
-                  <Text style={styles.catalogBtnText}>{t('Chercher « {q} » dans le catalogue en ligne', { q: q.trim() })}</Text>
-                </Pressable>
-              )}
+              <Text style={styles.emptySub}>{t('Essaie un autre mot, ou retire un filtre.')}</Text>
             </View>
           ) : (
             <>
-              {q.trim().length >= 2 && showBooks && (
-                <Pressable
-                  testID="search-catalog-link"
-                  onPress={() => router.push({ pathname: '/book/add', params: { q: q.trim() } })}
-                  style={styles.catalogLinkRow}
-                >
-                  <Feather name="globe" size={14} color={colors.chambray} />
-                  <Text style={styles.catalogLink}>{t('Chercher dans le catalogue en ligne')}</Text>
-                </Pressable>
-              )}
               {showBooks && results.books.length > 0 && (
                 <>
-                  <Text style={styles.sectionLabel}>{t('Livres ({n})', { n: results.books.length })}</Text>
+                  <Text style={styles.sectionLabel}>{t('Dans ta bibliothèque ({n})', { n: results.books.length })}</Text>
                   {results.books.map((b: any) => (
                     <Pressable key={b.book_id} testID={`search-result-book-${b.book_id}`} onPress={() => router.push({ pathname: '/book/[id]', params: { id: b.book_id } })} style={styles.bookRow}>
                       <View style={styles.bookCover}><Text style={styles.bookInitial}>{(b.title?.[0] || 'M').toUpperCase()}</Text></View>
@@ -175,6 +180,30 @@ export default function SearchScreen() {
                   <Text style={styles.sectionLabel}>{t('Citations ({n})', { n: results.quotes.length })}</Text>
                   {results.quotes.map(x => (
                     <QuoteCard key={x.quote_id} quote={x} onPress={() => router.push({ pathname: '/quote/[id]', params: { id: x.quote_id } })} />
+                  ))}
+                </>
+              )}
+              {(catalog.length > 0 || catalogLoading) && (
+                <>
+                  <View style={styles.catalogHead}>
+                    <Feather name="globe" size={13} color={colors.chambray} />
+                    <Text style={[styles.sectionLabel, { marginBottom: 0, color: colors.chambray }]}>{t('Catalogue en ligne')}</Text>
+                    {catalogLoading && <ActivityIndicator size="small" color={colors.chambray} style={{ marginLeft: 6 }} />}
+                  </View>
+                  {catalog.map((b: any, i: number) => (
+                    <Pressable
+                      key={`cat-${i}`}
+                      testID={`search-catalog-${i}`}
+                      onPress={() => router.push({ pathname: '/book/add', params: { title: b.title || '', author: b.author || '', cover: b.cover || '', isbn: b.isbn || '', pages: b.pages ? String(b.pages) : '', year: b.year || '' } })}
+                      style={styles.bookRow}
+                    >
+                      <View style={styles.bookCover}><Text style={styles.bookInitial}>{(b.title?.[0] || 'M').toUpperCase()}</Text></View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.bookTitle} numberOfLines={1}>{b.title}</Text>
+                        <Text style={styles.bookAuthor} numberOfLines={1}>{[b.author, b.year].filter(Boolean).join('  ·  ')}</Text>
+                      </View>
+                      <Feather name="plus-circle" size={19} color={colors.chambray} />
+                    </Pressable>
                   ))}
                 </>
               )}
@@ -211,8 +240,5 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   bookAuthor: { fontFamily: fonts.body, fontSize: 13, color: colors.clay, marginTop: 2 },
   emptyTitle: { fontFamily: fonts.displayMedium, fontSize: 22, color: colors.espresso, textAlign: 'center' },
   emptySub: { fontFamily: fonts.body, fontSize: 14, color: colors.clay, textAlign: 'center', marginTop: spacing.sm },
-  catalogBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: spacing.lg, minHeight: 44, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.pill, backgroundColor: colors.chambray },
-  catalogBtnText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.creme, flexShrink: 1 },
-  catalogLinkRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: spacing.sm, marginBottom: spacing.xs },
-  catalogLink: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.chambray, textDecorationLine: 'underline' },
+  catalogHead: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.md, marginBottom: spacing.sm },
 });

@@ -231,6 +231,15 @@ export default function BookDetail() {
           </View>
         )}
 
+        <Pressable testID="btn-fiche" onPress={() => router.push({ pathname: '/fiche/[bookId]', params: { bookId: id } })} style={styles.ficheBtn}>
+          <Feather name="edit-3" size={17} color={colors.chambray} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.ficheTitle}>{t('Fiche de lecture')}</Text>
+            <Text style={styles.ficheSub}>{t('Résumé, idées clés, passages, avis — ton carnet interactif.')}</Text>
+          </View>
+          <Feather name="chevron-right" size={18} color={colors.clay} />
+        </Pressable>
+
         {isEtude && (
           <>
             <Text style={styles.sectionLabel}>{t('Fiche scolaire')}</Text>
@@ -346,6 +355,9 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   deleteBtnText: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.creme },
   cancelBtn: { marginTop: spacing.sm, height: 44, alignItems: 'center', justifyContent: 'center' },
   cancelBtnText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.espresso },
+  ficheBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md, marginTop: spacing.lg },
+  ficheTitle: { fontFamily: fonts.displayMedium, fontSize: 18, color: colors.espresso },
+  ficheSub: { fontFamily: fonts.body, fontSize: 12, color: colors.clay, marginTop: 1 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSoft, backgroundColor: colors.glacier },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontFamily: fonts.displayMedium, fontSize: 18, color: colors.espresso, flex: 1, textAlign: 'center', marginHorizontal: spacing.md },
