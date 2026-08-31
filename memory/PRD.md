@@ -145,3 +145,9 @@
 - **Fiche → Club** : bouton fiche-send-club dans « On en parle ? » → modal des clubs → POST /clubs/{id}/messages avec texte multi-lignes (titre + questions numérotées).
 - **Découverte code-barres** : bouton home-scan dans l'accueil → /discover/scan (CameraView ean13 mobile / saisie ISBN web+repli) → /discover/[isbn] : GET /api/discover/isbn/{isbn} (métadonnées via routes.book_search.search_isbn + communauté : lecteurs, note moyenne des books partageant l'ISBN, citations publiques via book_ids, in_library) → CTA « Ajouter à ma bibliothèque » (prérempli).
 - Testé : 5/5 backend (test_iteration14.py) + 4 flows e2e frontend. Toujours en attente : google-services.json Firebase.
+
+## Itération 16 — Lecteurs à découvrir (juin 2026)
+- GET /api/readers/suggestions : candidats hors soi/déjà-suivis, score = 3×thèmes partagés + min(citations publiques,10), top 10. Enregistré AVANT /readers/{handle} (ordre FastAPI).
+- Communauté : section horizontale « Lecteurs à découvrir » (suggest-reader-{handle}) sous les onglets — avatar initiale, pseudo, thèmes partagés (ou nb citations publiques), bouton Suivre/Suivi inline (suggest-follow-{handle}), tap carte → profil public. i18n FR/EN.
+- Testé : curl backend + e2e Playwright (section visible, toggle Suivre→Suivi→Suivre).
+- Info donnée au user : package Android = com.emergent.lecturecapture.xjqcj0.

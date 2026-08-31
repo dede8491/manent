@@ -250,6 +250,8 @@ export const EN: Record<string, string> = {
   'note moyenne': 'average rating',
   'Ce que les lecteurs en retiennent': 'What readers take away',
   'Aucune citation publique pour ce livre — sois la première à en partager une.': 'No public quotes for this book yet — be the first to share one.',
+  'Lecteurs à découvrir': 'Readers to discover',
+  '{n} citations publiques': '{n} public quotes',
   "Rassemble tes citations autour d'un thème.": 'Gather your quotes around a theme.',
   'Créer un club': 'Create a club',
   'Rejoindre avec un code': 'Join with a code',

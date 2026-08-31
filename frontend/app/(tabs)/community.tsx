@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, TextInput, Modal, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable, TextInput, Modal, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -38,12 +38,26 @@ export default function Community() {
   const [joinModal, setJoinModal] = useState(false);
   const [joinCode, setJoinCode] = useState('');
   const [joinError, setJoinError] = useState('');
+  const [readers, setReaders] = useState<any[]>([]);
+  const [followedSet, setFollowedSet] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     const r = await api<{ boards: Board[] }>('/boards'); setBoards(r.boards);
     try { const c = await api<{ clubs: any[] }>('/clubs'); setClubs(c.clubs); } catch {}
+    try { const s = await api<{ readers: any[] }>('/readers/suggestions'); setReaders(s.readers); } catch {}
   }, []);
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  const followReader = async (handle: string) => {
+    try {
+      const r = await api<{ following: boolean }>(`/readers/${encodeURIComponent(handle)}/follow`, { method: 'POST' });
+      setFollowedSet(prev => {
+        const next = new Set(prev);
+        if (r.following) next.add(handle); else next.delete(handle);
+        return next;
+      });
+    } catch {}
+  };
 
   const create = async () => {
     if (!name.trim()) return;
@@ -94,6 +108,28 @@ export default function Community() {
           ))}
         </View>
       </View>
+      {readers.length > 0 && (
+        <View style={styles.suggestBlock}>
+          <Text style={styles.suggestLabel}>{t('Lecteurs à découvrir')}</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.xl, gap: spacing.sm }}>
+            {readers.map(r => {
+              const isF = followedSet.has(r.handle);
+              return (
+                <Pressable key={r.handle} testID={`suggest-reader-${r.handle}`} onPress={() => router.push({ pathname: '/reader/[handle]', params: { handle: r.handle } })} style={styles.readerCard}>
+                  <View style={styles.readerAvatar}><Text style={styles.readerInitial}>{(r.pseudo?.[0] || 'M').toUpperCase()}</Text></View>
+                  <Text style={styles.readerName} numberOfLines={1}>{r.pseudo}</Text>
+                  <Text style={styles.readerMeta} numberOfLines={1}>
+                    {r.shared_themes?.length ? r.shared_themes.join(' · ') : t('{n} citations publiques', { n: r.public_quotes })}
+                  </Text>
+                  <Pressable testID={`suggest-follow-${r.handle}`} onPress={() => followReader(r.handle)} style={[styles.readerFollowBtn, isF && styles.readerFollowingBtn]} hitSlop={6}>
+                    <Text style={[styles.readerFollowText, isF && { color: colors.espresso }]}>{isF ? t('Suivi') : t('Suivre')}</Text>
+                  </Pressable>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
       {tab === 'boards' ? (
       <FlatList
         key="list-boards"
@@ -229,6 +265,16 @@ export default function Community() {
 }
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
+  suggestBlock: { marginBottom: spacing.md },
+  suggestLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase', paddingHorizontal: spacing.xl, marginBottom: spacing.sm },
+  readerCard: { width: 150, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md, alignItems: 'center', gap: 4 },
+  readerAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.bisque, alignItems: 'center', justifyContent: 'center' },
+  readerInitial: { fontFamily: fonts.displayMedium, fontSize: 20, color: colors.espresso },
+  readerName: { fontFamily: fonts.displayMedium, fontSize: 16, color: colors.espresso },
+  readerMeta: { fontFamily: fonts.body, fontSize: 11, color: colors.clay },
+  readerFollowBtn: { marginTop: 6, paddingHorizontal: spacing.md, paddingVertical: 7, borderRadius: radius.pill, backgroundColor: colors.chambray, minHeight: 30, justifyContent: 'center' },
+  readerFollowingBtn: { backgroundColor: colors.glacier, borderWidth: 1, borderColor: colors.borderSoft },
+  readerFollowText: { fontFamily: fonts.bodyMedium, fontSize: 12, color: colors.creme },
   header: { paddingHorizontal: spacing.xl, paddingBottom: spacing.md, backgroundColor: colors.glacier },
   h1: { fontFamily: fonts.displayMedium, fontSize: 30, color: colors.espresso },
   sub: { fontFamily: fonts.body, fontSize: 14, color: colors.clay, marginTop: 4 },

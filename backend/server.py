@@ -273,6 +273,35 @@ async def theme_page(theme: str, user=Depends(get_current_user)):
     return {"theme": theme, "stats": {"quotes": total, "readers": readers, "books": books}, "quotes": quotes, "suggested_books": suggestions}
 
 
+@api.get("/readers/suggestions")
+async def reader_suggestions(user=Depends(get_current_user)):
+    """Lecteurs aux goûts proches : thèmes partagés + activité publique, hors soi-même et déjà suivis."""
+    followed = {f["followed_id"] for f in await db.follows.find(
+        {"follower_id": user["user_id"]}, {"_id": 0, "followed_id": 1}).to_list(1000)}
+    my_themes = set(user.get("themes") or [])
+    candidates = await db.users.find(
+        {"user_id": {"$ne": user["user_id"]}},
+        {"_id": 0, "user_id": 1, "pseudo": 1, "handle": 1, "picture": 1, "themes": 1},
+    ).to_list(300)
+    out = []
+    for c in candidates:
+        if c["user_id"] in followed or not c.get("handle"):
+            continue
+        shared = sorted(my_themes & set(c.get("themes") or []))
+        pub = await db.quotes.count_documents({"user_id": c["user_id"], "is_public": True})
+        if not shared and pub == 0:
+            continue
+        out.append({
+            "pseudo": c["pseudo"], "handle": c["handle"], "picture": c.get("picture"),
+            "shared_themes": shared[:3], "public_quotes": pub,
+            "_score": 3 * len(shared) + min(pub, 10),
+        })
+    out.sort(key=lambda x: -x["_score"])
+    for o in out:
+        o.pop("_score")
+    return {"readers": out[:10]}
+
+
 @api.post("/readers/{handle}/follow")
 async def toggle_follow(handle: str, user=Depends(get_current_user)):
     target = await db.users.find_one({"handle": handle}, {"_id": 0, "user_id": 1, "pseudo": 1})
