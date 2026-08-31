@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Modal, FlatList, Platform, Alert, Linking, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Modal, FlatList, Platform, Alert, Linking } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -13,6 +13,7 @@ import { QuoteCard, Quote } from '@/src/components/QuoteCard';
 import { api } from '@/src/api';
 import { useT } from '@/src/i18n';
 import { PrimaryButton, GhostButton } from '@/src/components/Button';
+import ManentLoader from '@/src/components/ManentLoader';
 
 export default function QuoteDetail() {
   const t = useT();
@@ -216,7 +217,7 @@ export default function QuoteDetail() {
         <View style={{ height: spacing.lg }} />
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <Pressable testID="btn-save-image" onPress={saveToGallery} disabled={busy !== null} style={[styles.shareBtn, styles.shareBtnGhost]}>
-            {busy === 'save' ? <ActivityIndicator size="small" color={colors.espresso} /> : (
+            {busy === 'save' ? <ManentLoader size={20} /> : (
               <>
                 <Feather name="download" size={16} color={colors.espresso} />
                 <Text style={styles.shareBtnGhostText}>{t('Galerie')}</Text>
@@ -224,7 +225,7 @@ export default function QuoteDetail() {
             )}
           </Pressable>
           <Pressable testID="btn-share-image" onPress={shareImage} disabled={busy !== null} style={styles.shareBtn}>
-            {busy === 'share' ? <ActivityIndicator size="small" color={colors.creme} /> : (
+            {busy === 'share' ? <ManentLoader size={20} /> : (
               <>
                 <Feather name="share" size={16} color={colors.creme} />
                 <Text style={styles.shareBtnText}>{t('Partager l’image')}</Text>

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -88,7 +88,7 @@ export default function ClubAddBook() {
                 <Text style={styles.author} numberOfLines={1}>{[b.author, b.year].filter(Boolean).join('  ·  ') || '—'}</Text>
               </View>
               <Pressable testID={`club-add-btn-${i}`} onPress={() => addToClub(b, i)} disabled={addingIdx !== null} style={styles.addBtn}>
-                {addingIdx === i ? <ActivityIndicator size="small" color={colors.creme} /> : <Feather name="plus" size={18} color={colors.creme} />}
+                {addingIdx === i ? <ManentLoader size={20} variant="sombre" /> : <Feather name="plus" size={18} color={colors.creme} />}
               </Pressable>
             </View>
           ))

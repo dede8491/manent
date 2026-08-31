@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Modal, KeyboardAvoidingView, Platform, Share, FlatList, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Modal, KeyboardAvoidingView, Platform, Share, FlatList } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -8,6 +8,7 @@ import { useColors, useStyles } from '@/src/themeCtx';
 import { api } from '@/src/api';
 import { useT } from '@/src/i18n';
 import { PrimaryButton, GhostButton } from '@/src/components/Button';
+import ManentLoader from '@/src/components/ManentLoader';
 
 export default function ClubDetail() {
   const t = useT();
@@ -140,7 +141,7 @@ export default function ClubDetail() {
   if (!club) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.glacier, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator color={colors.chambray} />
+        <ManentLoader size={48} />
       </View>
     );
   }
@@ -316,7 +317,7 @@ export default function ClubDetail() {
           returnKeyType="send"
         />
         <Pressable testID="club-msg-send" onPress={send} disabled={sending || !msg.trim()} style={[styles.sendBtn, (!msg.trim() || sending) && { opacity: 0.5 }]}>
-          {sending ? <ActivityIndicator size="small" color={colors.creme} /> : <Feather name="arrow-up" size={20} color={colors.creme} />}
+          {sending ? <ManentLoader size={20} /> : <Feather name="arrow-up" size={20} color={colors.creme} />}
         </Pressable>
       </View>
 

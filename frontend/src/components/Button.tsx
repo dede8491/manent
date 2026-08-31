@@ -1,7 +1,8 @@
 import React from 'react';
-import { Pressable, Text, StyleSheet, ActivityIndicator, ViewStyle } from 'react-native';
+import { Pressable, Text, StyleSheet, ViewStyle } from 'react-native';
 import { fonts, radius } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
+import ManentLoader from '@/src/components/ManentLoader';
 
 export function PrimaryButton({ title, onPress, loading, disabled, testID, style }: {
   title: string; onPress: () => void; loading?: boolean; disabled?: boolean; testID?: string; style?: ViewStyle;
@@ -19,7 +20,7 @@ export function PrimaryButton({ title, onPress, loading, disabled, testID, style
         style,
       ]}
     >
-      {loading ? <ActivityIndicator color={colors.creme} /> : <Text style={styles.btnText}>{title}</Text>}
+      {loading ? <ManentLoader size={20} variant="sombre" /> : <Text style={styles.btnText}>{title}</Text>}
     </Pressable>
   );
 }

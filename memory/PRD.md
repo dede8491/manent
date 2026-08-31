@@ -247,3 +247,10 @@
 - **Visibilité 3 niveaux** : quotes.visibility private|followers|public (is_public synchro) — capture 3 chips (vis-*), feed inclut followers des suivis, profil public inclut followers si le visiteur suit, get_quote 404 sinon.
 - **Corrections** : dates relatives FR (src/timeago.ts — timeAgo/dateFr) appliquées (discussions actives, posts club, admin) ; création de livre à la volée depuis la capture (cap-book-create) ; doublons i18n purgés (609 clés uniques).
 - Testé : iteration_16 (14/14 backend + frontend complet, tout vert).
+
+## Itération 28 — Loader Manent partout (juin 2026)
+- 16 fichiers : tous les <ActivityIndicator> remplacés par <ManentLoader> (script python) — size 20 dans les boutons (variant "sombre" sur fonds Chambray : PrimaryButton, club/add addBtn), size 48-56 dans les zones.
+- ManentLoader : variant par défaut "auto" (suit le thème via useScheme — encre Espresso/Glacier en clair, Crème/Espresso en sombre).
+- Textes « Chargement… » supprimés (home masonry → ManentLoader 56, book/[id] flashcards → '…').
+- Splash HTML web (app/+html.tsx) : bloc #manent-splash exact du kit (keyframes mD/mP, prefers-color-scheme) affiché avant React, retiré au mount dans app/_layout.tsx (web only).
+- Interdiction maintenue : plus aucun spinner circulaire ni mot « Chargement » dans l'app.

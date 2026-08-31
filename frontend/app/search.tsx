@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -8,6 +8,7 @@ import { useColors, useStyles } from '@/src/themeCtx';
 import { QuoteCard, Quote } from '@/src/components/QuoteCard';
 import { api } from '@/src/api';
 import { useT } from '@/src/i18n';
+import ManentLoader from '@/src/components/ManentLoader';
 
 type Scope = 'all' | 'quotes' | 'books';
 
@@ -152,7 +153,7 @@ export default function SearchScreen() {
         <View style={{ paddingHorizontal: spacing.xl }}>
           {loading ? (
             <View style={{ paddingTop: spacing.xxl, alignItems: 'center' }}>
-              <ActivityIndicator color={colors.chambray} />
+              <ManentLoader size={48} />
             </View>
           ) : total === 0 && catalog.length === 0 && !catalogLoading ? (
             <View style={{ paddingVertical: spacing.xxl, alignItems: 'center' }}>
@@ -206,7 +207,7 @@ export default function SearchScreen() {
                   <View style={styles.catalogHead}>
                     <Feather name="globe" size={13} color={colors.chambray} />
                     <Text style={[styles.sectionLabel, { marginBottom: 0, color: colors.chambray }]}>{t('Catalogue en ligne')}</Text>
-                    {catalogLoading && <ActivityIndicator size="small" color={colors.chambray} style={{ marginLeft: 6 }} />}
+                    {catalogLoading && <ManentLoader size={20} />}
                   </View>
                   {catalog.map((b: any, i: number) => (
                     <Pressable

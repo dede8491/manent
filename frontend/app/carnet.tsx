@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Feather, Ionicons } from '@expo/vector-icons';
@@ -8,6 +8,7 @@ import { useColors, useStyles } from '@/src/themeCtx';
 import { api } from '@/src/api';
 import { BookCover } from '@/src/components/BookCover';
 import { useT } from '@/src/i18n';
+import ManentLoader from '@/src/components/ManentLoader';
 
 type Fiche = { book_id: string; title: string; author?: string; rating?: number; updated_at?: string; has_summary?: boolean };
 
@@ -50,7 +51,7 @@ export default function Carnet() {
 
       {isPremium === null || fiches === null ? (
         <View style={{ paddingTop: spacing.xxl, alignItems: 'center' }}>
-          <ActivityIndicator color={colors.chambray} />
+          <ManentLoader size={48} />
         </View>
       ) : !isPremium ? (
         <View style={styles.lockBox} testID="carnet-locked">

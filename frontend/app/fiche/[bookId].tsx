@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Platform, ActivityIndicator, KeyboardAvoidingView, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Platform, KeyboardAvoidingView, Modal } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather, Ionicons } from '@expo/vector-icons';
@@ -11,6 +11,7 @@ import { api } from '@/src/api';
 import { useT } from '@/src/i18n';
 import { buildFicheHtml, FicheData } from '@/src/fichePdf';
 import { BookCover } from '@/src/components/BookCover';
+import ManentLoader from '@/src/components/ManentLoader';
 
 type Passage = { text: string; note?: string };
 
@@ -188,7 +189,7 @@ export default function FicheDeLecture() {
   if (!book) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.glacier, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator color={colors.chambray} />
+        <ManentLoader size={48} />
       </View>
     );
   }
@@ -202,7 +203,7 @@ export default function FicheDeLecture() {
           </Pressable>
           <Text style={styles.headerLabel}>{t('Fiche de lecture')}</Text>
           <View style={{ width: 40, alignItems: 'center' }}>
-            {saved ? <Feather name="check" size={16} color={colors.chambray} /> : <ActivityIndicator size="small" color={colors.clay} />}
+            {saved ? <Feather name="check" size={16} color={colors.chambray} /> : <ManentLoader size={20} />}
           </View>
         </View>
 
@@ -223,7 +224,7 @@ export default function FicheDeLecture() {
               <TextInput testID="fiche-publisher" value={fiche.publisher || ''} onChangeText={v => upd({ publisher: v })} style={[styles.input, { flex: 1 }]} placeholder={t('Éditeur')} placeholderTextColor={colors.clay} />
             </View>
             <Pressable testID="fiche-autofill" onPress={autofill} disabled={filling} style={styles.aiBtn}>
-              {filling ? <ActivityIndicator size="small" color={colors.chambray} /> : <Feather name="zap" size={14} color={colors.chambray} />}
+              {filling ? <ManentLoader size={20} /> : <Feather name="zap" size={14} color={colors.chambray} />}
               <Text style={styles.aiBtnText}>{filling ? t('L’IA rédige…') : t('Remplir avec l’IA (genre, éditeur, auteur, résumé)')}</Text>
             </Pressable>
           </Section>
@@ -307,7 +308,7 @@ export default function FicheDeLecture() {
           </Section>
 
           <Pressable testID="fiche-export" onPress={exportPdf} disabled={exporting} style={styles.exportBtn}>
-            {exporting ? <ActivityIndicator color={colors.creme} size="small" /> : (
+            {exporting ? <ManentLoader size={20} /> : (
               <>
                 <Feather name="download" size={15} color={colors.creme} />
                 <Text style={styles.exportText}>{t('Exporter et partager en PDF')}</Text>

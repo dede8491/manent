@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Modal, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Modal, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -9,6 +9,7 @@ import { api } from '@/src/api';
 import { useT } from '@/src/i18n';
 import { useAuth } from '@/src/auth';
 import { useSubscription, rcEnabled } from '@/src/revenuecat';
+import ManentLoader from '@/src/components/ManentLoader';
 
 type Status = { is_premium: boolean; plan?: string | null; captures_used: number; captures_limit: number };
 
@@ -104,7 +105,7 @@ export default function Premium() {
             <Text style={styles.activeSub}>{t('Formule {plan} — captures IA illimitées, exports débloqués.', { plan: t(status?.plan === 'annuel' ? 'annuelle' : 'mensuelle') })}</Text>
             <Text style={styles.note}>{t('Abonnement géré par l’App Store / Google Play. Résiliable à tout moment.')}</Text>
             <Pressable testID="btn-restore" onPress={doRestore} disabled={isRestoring} style={styles.ghostBtn}>
-              {isRestoring ? <ActivityIndicator size="small" color={colors.bisque} /> : <Text style={styles.ghostBtnText}>{t('Restaurer mes achats')}</Text>}
+              {isRestoring ? <ManentLoader size={20} /> : <Text style={styles.ghostBtnText}>{t('Restaurer mes achats')}</Text>}
             </Pressable>
             {feedback ? <Text style={styles.feedback} testID="premium-feedback">{feedback}</Text> : null}
           </View>
@@ -135,7 +136,7 @@ export default function Premium() {
               </View>
             ) : !offerings ? (
               <View style={{ marginTop: spacing.xl, alignItems: 'center' }}>
-                <ActivityIndicator color={colors.chambray} />
+                <ManentLoader size={48} />
               </View>
             ) : (
               <>
@@ -165,12 +166,12 @@ export default function Premium() {
                   disabled={isPurchasing || !pkg || !identityReady}
                   style={[styles.cta, (isPurchasing || !pkg || !identityReady) && { opacity: 0.6 }]}
                 >
-                  {isPurchasing ? <ActivityIndicator color={colors.creme} /> : <Text style={styles.ctaText}>{t("S'abonner")}</Text>}
+                  {isPurchasing ? <ManentLoader size={48} /> : <Text style={styles.ctaText}>{t("S'abonner")}</Text>}
                 </Pressable>
                 {errMsg ? <Text style={[styles.feedback, { marginTop: spacing.sm }]} testID="premium-error">{errMsg}</Text> : null}
                 {feedback ? <Text style={[styles.feedback, { marginTop: spacing.sm }]} testID="premium-feedback">{feedback}</Text> : null}
                 <Pressable testID="btn-restore" onPress={doRestore} disabled={isRestoring} style={{ alignSelf: 'center', marginTop: spacing.md, padding: spacing.xs }}>
-                  {isRestoring ? <ActivityIndicator size="small" color={colors.bisque} /> : <Text style={styles.restoreLink}>{t('Restaurer mes achats')}</Text>}
+                  {isRestoring ? <ManentLoader size={20} /> : <Text style={styles.restoreLink}>{t('Restaurer mes achats')}</Text>}
                 </Pressable>
                 <Text style={styles.note}>
                   {isTestStore

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, useWindowDimensions, ActivityIndicator, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, useWindowDimensions, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -8,6 +8,7 @@ import { useColors, useStyles } from '@/src/themeCtx';
 import { QuoteCard, Quote } from '@/src/components/QuoteCard';
 import { api } from '@/src/api';
 import { useT } from '@/src/i18n';
+import ManentLoader from '@/src/components/ManentLoader';
 
 export default function ThemePage() {
   const t = useT();
@@ -65,7 +66,7 @@ export default function ThemePage() {
           </View>
         ) : (
           <View style={{ paddingVertical: spacing.xxl, alignItems: 'center' }}>
-            <ActivityIndicator color={colors.chambray} />
+            <ManentLoader size={48} />
           </View>
         )}
 

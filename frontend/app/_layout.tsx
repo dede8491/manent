@@ -53,6 +53,13 @@ function NavGate() {
   const colors = useColors();
   const t = useT();
 
+  // Retire le splash HTML Manent dès que React est monté (web)
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      document.getElementById('manent-splash')?.remove();
+    }
+  }, []);
+
   // Notifications : navigation au tap (app ouverte + démarrage à froid) et relance hebdo si refusées
   useEffect(() => {
     if (Platform.OS === 'web') return;

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -8,6 +8,7 @@ import { useColors, useStyles } from '@/src/themeCtx';
 import { api } from '@/src/api';
 import { PrimaryButton } from '@/src/components/Button';
 import { useT } from '@/src/i18n';
+import ManentLoader from '@/src/components/ManentLoader';
 
 type Card = { card_id: string; question: string; answer: string; due: string };
 
@@ -59,7 +60,7 @@ export default function FlashcardsReview() {
       </View>
 
       {queue === null ? (
-        <View style={styles.center}><ActivityIndicator color={colors.chambray} /></View>
+        <View style={styles.center}><ManentLoader size={48} /></View>
       ) : !current ? (
         <View style={styles.center} testID="fc-done">
           <Feather name="check-circle" size={40} color={colors.chambray} />

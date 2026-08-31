@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Modal, Platform, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Modal, Platform, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -11,6 +11,7 @@ import { useAuth } from '@/src/auth';
 import { useI18n } from '@/src/i18n';
 import { api } from '@/src/api';
 import { PrimaryButton, GhostButton } from '@/src/components/Button';
+import ManentLoader from '@/src/components/ManentLoader';
 
 const PRIVACY_EN = `Manent complies with the GDPR (General Data Protection Regulation).
 
@@ -206,7 +207,7 @@ export default function Settings() {
             </View>
           }
         />
-        <Row testID="settings-export" icon="download" label={busy === 'export' ? t('Export en cours…') : t('Télécharger mes données')} onPress={exportData} right={busy === 'export' ? <ActivityIndicator size="small" color={colors.chambray} /> : <Feather name="chevron-right" size={18} color={colors.clay} />} />
+        <Row testID="settings-export" icon="download" label={busy === 'export' ? t('Export en cours…') : t('Télécharger mes données')} onPress={exportData} right={busy === 'export' ? <ManentLoader size={20} /> : <Feather name="chevron-right" size={18} color={colors.clay} />} />
         {feedback ? <Text style={styles.feedback} testID="settings-feedback">{feedback}</Text> : null}
         <Row testID="settings-privacy" icon="shield" label={t('Politique de confidentialité (RGPD)')} onPress={() => setDoc('privacy')} right={<Feather name="chevron-right" size={18} color={colors.clay} />} />
         <Row testID="settings-terms" icon="file-text" label={t("Conditions d'utilisation")} onPress={() => setDoc('terms')} right={<Feather name="chevron-right" size={18} color={colors.clay} />} />

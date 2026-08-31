@@ -11,6 +11,7 @@ import { api } from '@/src/api';
 import { useAuth } from '@/src/auth';
 import { Wordmark } from '@/src/components/Wordmark';
 import { BookCardFeed, AwardCard, CollectionCard, ResumeCard } from '@/src/components/FeedCards';
+import ManentLoader from '@/src/components/ManentLoader';
 import { useT } from '@/src/i18n';
 
 const BIRTH_PROMPT_KEY = 'manent_birth_prompted';
@@ -158,7 +159,7 @@ export default function Home() {
           </View>
         )}
         {loading ? (
-          <Text style={styles.empty}>{t('Chargement…')}</Text>
+          <View style={{ alignItems: 'center', paddingVertical: spacing.xl }}><ManentLoader size={56} /></View>
         ) : shown.length === 0 ? (
           <View style={{ paddingVertical: spacing.xxxl, alignItems: 'center' }}>
             <Text style={styles.emptyTitle}>{t('Le fil est encore silencieux.')}</Text>

@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Platform, Alert, Linking, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Platform, Alert, Linking, Modal } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -15,6 +15,7 @@ import { buildSheetHtml } from '@/src/sheetPdf';
 import { api, getCachedToken } from '@/src/api';
 import { BookCover } from '@/src/components/BookCover';
 import { useT } from '@/src/i18n';
+import ManentLoader from '@/src/components/ManentLoader';
 
 export default function BookDetail() {
   const t = useT();
@@ -326,7 +327,7 @@ export default function BookDetail() {
             {detectedPage === null ? (
               <Pressable testID="btn-photo-page" onPress={photoProgress} disabled={detecting} style={styles.photoBtn}>
                 {detecting
-                  ? <ActivityIndicator size="small" color={colors.creme} />
+                  ? <ManentLoader size={20} />
                   : <Feather name="camera" size={16} color={colors.creme} />}
                 <Text style={styles.photoBtnText}>{detecting ? t('Analyse de la page…') : t('Photographier ma dernière page lue')}</Text>
               </Pressable>
@@ -368,7 +369,7 @@ export default function BookDetail() {
             <StudySheet key={book.book_id} sheet={book.sheet} onSave={(s) => saveField({ sheet: s })} />
             <Pressable testID="btn-export-pdf" onPress={exportPdf} disabled={exportingPdf} style={styles.pdfBtn}>
               {exportingPdf
-                ? <ActivityIndicator size="small" color={colors.espresso} />
+                ? <ManentLoader size={20} />
                 : <Feather name="file-text" size={16} color={colors.espresso} />}
               <Text style={styles.pdfBtnText}>{exportingPdf ? t('Génération…') : t('Exporter la fiche en PDF')}</Text>
             </Pressable>
@@ -376,12 +377,12 @@ export default function BookDetail() {
             <Text style={styles.sectionLabel}>{t('Flashcards de révision')}</Text>
             <View style={styles.fcBox} testID="flashcards-box">
               <Text style={styles.fcCount}>
-                {fc ? t(fc.total > 1 ? '{n} cartes · {due} à réviser' : '{n} carte · {due} à réviser', { n: fc.total, due: fc.due }) : t('Chargement…')}
+                {fc ? t(fc.total > 1 ? '{n} cartes · {due} à réviser' : '{n} carte · {due} à réviser', { n: fc.total, due: fc.due }) : '…'}
               </Text>
               <View style={{ flexDirection: 'row', gap: 8, marginTop: spacing.sm }}>
                 <Pressable testID="btn-generate-cards" onPress={generateCards} disabled={generating || quotes.length === 0} style={[styles.fcGhost, (generating || quotes.length === 0) && { opacity: 0.5 }]}>
                   {generating
-                    ? <ActivityIndicator size="small" color={colors.espresso} />
+                    ? <ManentLoader size={20} />
                     : <Text style={styles.fcGhostText}>{t('Générer avec l’IA')}</Text>}
                 </Pressable>
                 <Pressable testID="btn-review-cards" onPress={() => router.push({ pathname: '/flashcards/[bookId]', params: { bookId: String(id) } })} disabled={!fc || fc.due === 0} style={[styles.fcPrimary, (!fc || fc.due === 0) && { opacity: 0.5 }]}>
@@ -459,7 +460,7 @@ export default function BookDetail() {
               {impact ? `\n\n${t('Seront aussi supprimées :')}\n· ${t(impact.quotes > 1 ? '{n} citations' : '{n} citation', { n: impact.quotes })}${impact.pins > 0 ? `\n· ${t(impact.pins > 1 ? '{n} épingles retirées de tes tableaux' : '{n} épingle retirée de tes tableaux', { n: impact.pins })}` : ''}${impact.clubs > 0 ? `\n· ${t('la lecture commune de {n} cercle(s)', { n: impact.clubs })}` : ''}` : ''}
             </Text>
             <Pressable testID="book-delete-confirm" onPress={deleteBook} disabled={deleting} style={styles.deleteBtn}>
-              {deleting ? <ActivityIndicator color={colors.creme} size="small" /> : <Text style={styles.deleteBtnText}>{t('Supprimer définitivement')}</Text>}
+              {deleting ? <ManentLoader size={20} /> : <Text style={styles.deleteBtnText}>{t('Supprimer définitivement')}</Text>}
             </Pressable>
             <Pressable testID="book-delete-cancel" onPress={() => setConfirmDelete(false)} style={styles.cancelBtn}>
               <Text style={styles.cancelBtnText}>{t('Garder ce livre')}</Text>

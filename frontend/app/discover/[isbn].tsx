@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather, Ionicons } from '@expo/vector-icons';
@@ -9,6 +9,7 @@ import { QuoteCard, Quote } from '@/src/components/QuoteCard';
 import { api } from '@/src/api';
 import { BookCover } from '@/src/components/BookCover';
 import { useT } from '@/src/i18n';
+import ManentLoader from '@/src/components/ManentLoader';
 
 type Discover = {
   book: { title: string; author?: string; isbn?: string; pages?: number; year?: string; cover?: string };
@@ -55,7 +56,7 @@ export default function DiscoverBook() {
         </View>
       ) : !data ? (
         <View style={{ paddingTop: spacing.xxl, alignItems: 'center' }}>
-          <ActivityIndicator color={colors.chambray} />
+          <ManentLoader size={48} />
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + spacing.xxl }}>

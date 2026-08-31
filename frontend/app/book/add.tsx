@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, ScrollView, Pressable, ActivityIndicator, KeyboardAvoidingView, Platform, Image, Linking } from 'react-native';
+import { View, Text, StyleSheet, TextInput, ScrollView, Pressable, KeyboardAvoidingView, Platform, Image, Linking } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -266,7 +266,7 @@ export default function AddBook() {
                     style={styles.searchInput}
                     autoCapitalize="none"
                   />
-                  {searching ? <ActivityIndicator size="small" color={colors.chambray} /> : null}
+                  {searching ? <ManentLoader size={20} /> : null}
                 </View>
 
                 <View style={{ marginTop: spacing.md, gap: spacing.sm }}>
@@ -369,7 +369,7 @@ export default function AddBook() {
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   <TextInput testID="wattpad-url" value={wattpadUrl} onChangeText={setWattpadUrl} placeholder="https://www.wattpad.com/story/…" placeholderTextColor={colors.clay} style={[styles.input, { flex: 1 }]} autoCapitalize="none" />
                   <Pressable testID="btn-wattpad" onPress={fetchWattpad} disabled={!wattpadUrl.trim()} style={[styles.goBtn, !wattpadUrl.trim() && { opacity: 0.5 }]}>
-                    {wLoading ? <ActivityIndicator size="small" color={colors.creme} /> : <Feather name="arrow-right" size={18} color={colors.creme} />}
+                    {wLoading ? <ManentLoader size={20} /> : <Feather name="arrow-right" size={18} color={colors.creme} />}
                   </Pressable>
                 </View>
                 {wError && <Text style={styles.emptySub}>{t('Impossible de lire cette page Wattpad. Vérifie le lien.')}</Text>}

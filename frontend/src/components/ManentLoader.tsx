@@ -3,6 +3,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, Easing, StyleSheet, View } from 'react-native';
 import Svg, { Path, Circle } from 'react-native-svg';
+import { useScheme } from '@/src/themeCtx';
 
 const M_PATH =
   'M 10 95 C 18 90 26 60 34 26 C 36 18 40 16 41 22 C 42 26 40 40 37 58 L 33 82 C 32 92 35 95 39 88 C 47 72 55 44 61 28 C 63 22 67 19 69 24 C 71 28 69 42 66 60 L 62 84 C 61 93 65 96 72 88';
@@ -13,13 +14,15 @@ const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 type Props = {
   size?: number;
-  variant?: 'clair' | 'sombre';
+  variant?: 'auto' | 'clair' | 'sombre';
   fullscreen?: boolean;
 };
 
-export default function ManentLoader({ size = 96, variant = 'clair', fullscreen = false }: Props) {
-  const ink = variant === 'sombre' ? '#F5EDE4' : '#3A2119';
-  const bg = variant === 'sombre' ? '#3A2119' : '#D2E2EC';
+export default function ManentLoader({ size = 96, variant = 'auto', fullscreen = false }: Props) {
+  const scheme = useScheme();
+  const dark = variant === 'auto' ? scheme === 'dark' : variant === 'sombre';
+  const ink = dark ? '#F5EDE4' : '#3A2119';
+  const bg = dark ? '#3A2119' : '#D2E2EC';
   const progress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
