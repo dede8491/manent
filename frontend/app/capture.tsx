@@ -24,6 +24,7 @@ export default function CaptureModal() {
   const [page, setPage] = useState('');
   const [note, setNote] = useState('');
   const [isPublic, setIsPublic] = useState(false);
+  const [isSensitive, setIsSensitive] = useState(false);
   const [saving, setSaving] = useState(false);
   const [selectedThemes, setSelectedThemes] = useState<string[]>([]);
   const [books, setBooks] = useState<{ book_id: string; title: string; type: string }[]>([]);
@@ -93,6 +94,7 @@ export default function CaptureModal() {
           note: note || undefined,
           themes: selectedThemes,
           is_public: isPublic,
+          is_sensitive: isPublic ? isSensitive : false,
         }),
       });
       router.replace({ pathname: '/quote/[id]', params: { id: q.quote_id } });
@@ -208,6 +210,12 @@ export default function CaptureModal() {
           <Feather name={isPublic ? 'check-square' : 'square'} size={20} color={colors.chambray} />
           <Text style={styles.visText}>{t('Rendre cette citation publique')}</Text>
         </Pressable>
+        {isPublic && (
+          <Pressable testID="toggle-sensitive" onPress={() => setIsSensitive(v => !v)} style={styles.visRow}>
+            <Feather name={isSensitive ? 'check-square' : 'square'} size={20} color={colors.chambray} />
+            <Text style={styles.visText}>{t('Contenu sensible (réservé aux 18 ans et plus)')}</Text>
+          </Pressable>
+        )}
 
         <View style={{ height: spacing.lg }} />
         <PrimaryButton testID="btn-save-quote" title={t('Enregistrer la citation')} onPress={save} loading={saving} disabled={!text.trim()} />

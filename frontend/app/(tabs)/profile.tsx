@@ -42,6 +42,7 @@ export default function Profile() {
   };
   const [premium, setPremium] = useState<{ is_premium: boolean; plan?: string | null; captures_used: number; captures_limit: number } | null>(null);
   const [stats, setStats] = useState({ books: 0, quotes: 0, boards: 0 });
+  const [clubSummary, setClubSummary] = useState<{ joined: number; reading: number; finished: number } | null>(null);
   const [reading, setReading] = useState<any>(null);
   const [badges, setBadges] = useState<{ id: string; title: string; desc: string; icon: string; earned: boolean }[]>([]);
   const [goalModal, setGoalModal] = useState(false);
@@ -50,6 +51,7 @@ export default function Profile() {
   useFocusEffect(React.useCallback(() => {
     (async () => {
       try { setPremium(await api('/premium/status')); } catch {}
+      try { setClubSummary(await api('/club/me/summary')); } catch {}
       try { setReading(await api('/stats/reading')); } catch {}
       try { const b = await api<{ badges: any[] }>('/badges'); setBadges(b.badges); } catch {}
       try {
@@ -82,6 +84,20 @@ export default function Profile() {
         <View style={styles.stat}><Text style={styles.statNum}>{stats.boards}</Text><Text style={styles.statLbl} numberOfLines={1} adjustsFontSizeToFit>{t('tableaux')}</Text></View>
         <View style={styles.stat}><Text style={styles.statNum}>{user?.themes?.length || 0}</Text><Text style={styles.statLbl} numberOfLines={1} adjustsFontSizeToFit>{t('thèmes')}</Text></View>
       </View>
+
+      {clubSummary && clubSummary.joined > 0 && (
+        <Pressable testID="profile-club-card" onPress={() => router.push('/(tabs)/community')} style={styles.clubCard}>
+          <View style={styles.clubIcon}><Feather name="users" size={16} color={colors.creme} /></View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.readingTitle}>{t('Club de lecture')}</Text>
+            <Text style={styles.readingSub}>
+              {t(clubSummary.joined > 1 ? '{n} lectures rejointes' : '{n} lecture rejointe', { n: clubSummary.joined })}
+              {clubSummary.finished > 0 ? ` · ${t(clubSummary.finished > 1 ? '{n} terminées' : '{n} terminée', { n: clubSummary.finished })}` : ''}
+            </Text>
+          </View>
+          <Feather name="chevron-right" size={18} color={colors.clay} />
+        </Pressable>
+      )}
 
       {reading && (
         <View style={styles.readingCard} testID="reading-stats">
@@ -228,6 +244,8 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   statNum: { fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso },
   statLbl: { fontFamily: fonts.bodyMedium, fontSize: 8.5, color: colors.clay, letterSpacing: 0.4, textTransform: 'uppercase', marginTop: 2, textAlign: 'center' },
   readingCard: { marginHorizontal: spacing.xl, marginTop: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },
+  clubCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginHorizontal: spacing.xl, marginTop: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },
+  clubIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },
   streakBox: { width: 84, alignItems: 'center', paddingVertical: spacing.sm, backgroundColor: colors.bisque, borderRadius: radius.md },
   streakNum: { fontFamily: fonts.displayMedium, fontSize: 30, color: colors.espresso, lineHeight: 34 },
   streakLbl: { fontFamily: fonts.bodyMedium, fontSize: 8.5, color: colors.clay, letterSpacing: 1, textTransform: 'uppercase', textAlign: 'center' },

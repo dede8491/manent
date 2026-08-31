@@ -28,6 +28,7 @@ SUPABASE_BUCKET = os.environ.get('SUPABASE_BUCKET', 'manent-photos')
 
 from routes.book_search import router as book_search_router
 from routes.push import router as push_router, send_push
+from routes.club import router as club_router
 
 client = AsyncIOMotorClient(MONGO_URL)
 db = client[DB_NAME]
@@ -77,6 +78,37 @@ class RegisterBody(BaseModel):
     email: EmailStr
     password: str = Field(min_length=6)
     pseudo: str = Field(min_length=2, max_length=30)
+    birthdate: Optional[str] = None  # ISO YYYY-MM-DD
+
+
+def _valid_birthdate(bd: Optional[str]) -> Optional[str]:
+    """Valide et normalise une date de naissance ISO. Renvoie None si invalide."""
+    if not bd:
+        return None
+    try:
+        d = datetime.strptime(bd.strip(), "%Y-%m-%d")
+    except ValueError:
+        return None
+    if d.year < 1900 or d > datetime.now():
+        return None
+    return d.strftime("%Y-%m-%d")
+
+
+def _is_adult(user: dict) -> bool:
+    """>= 18 ans. Sans date de naissance → considéré mineur par prudence."""
+    bd = user.get("birthdate")
+    if not bd:
+        return False
+    try:
+        d = datetime.strptime(bd, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return False
+    return (now_utc() - d).days >= 18 * 365.25
+
+
+def sensitive_filter(user: dict) -> dict:
+    """Filtre Mongo excluant les contenus sensibles pour les mineurs."""
+    return {} if _is_adult(user) else {"is_sensitive": {"$ne": True}}
 
 
 class LoginBody(BaseModel):
@@ -117,6 +149,7 @@ async def register(body: RegisterBody):
         "pseudo": body.pseudo,
         "handle": handle,
         "password_hash": pw_hash,
+        "birthdate": _valid_birthdate(body.birthdate),
         "picture": None,
         "reading_mode": None,  # 'plaisir' | 'etudes' | 'both'
         "themes": [],
@@ -247,7 +280,7 @@ async def _attach_public_meta(quotes: list):
 
 @api.get("/themes/{theme}/page")
 async def theme_page(theme: str, user=Depends(get_current_user)):
-    q = {"is_public": True, "themes": theme}
+    q = {"is_public": True, "themes": theme, **sensitive_filter(user)}
     total = await db.quotes.count_documents(q)
     readers = len(await db.quotes.distinct("user_id", q))
     books = len([b for b in await db.quotes.distinct("book_id", q) if b])
@@ -346,7 +379,7 @@ async def public_profile(handle: str, user=Depends(get_current_user)):
     if not profile_public and u["user_id"] != user["user_id"]:
         return {"user": {"pseudo": u["pseudo"], "handle": u["handle"], "picture": u.get("picture")},
                 "is_me": False, "private": True}
-    q = {"user_id": u["user_id"], "is_public": True}
+    q = {"user_id": u["user_id"], "is_public": True, **sensitive_filter(user)}
     total = await db.quotes.count_documents(q)
     books = len([b for b in await db.quotes.distinct("book_id", q) if b])
     boards = await db.boards.count_documents({"user_id": u["user_id"], "visibility": "public"})
@@ -647,6 +680,7 @@ class QuoteCreate(BaseModel):
     note: Optional[str] = None
     themes: List[str] = []
     is_public: bool = False
+    is_sensitive: bool = False
 
 
 class QuotePatch(BaseModel):
@@ -656,6 +690,29 @@ class QuotePatch(BaseModel):
     note: Optional[str] = None
     themes: Optional[List[str]] = None
     is_public: Optional[bool] = None
+    is_sensitive: Optional[bool] = None
+
+
+async def _ai_sensitivity_check(quote_id: str, text: str):
+    """Filet de sécurité IA : marque is_sensitive=True si le passage est inadapté aux mineurs. Non bloquant."""
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"sens_{quote_id}",
+            system_message=(
+                "Tu classes des extraits littéraires pour la protection des mineurs. "
+                "Réponds uniquement OUI si l'extrait contient du contenu sexuellement explicite, "
+                "une violence graphique détaillée, ou une valorisation de drogues/automutilation/suicide. "
+                "Sinon réponds NON. Les thèmes sombres traités avec pudeur restent NON."
+            ),
+        ).with_model("anthropic", "claude-sonnet-4-6")
+        r = await chat.send_message(UserMessage(text=text[:1500]))
+        if (r or "").strip().upper().startswith("OUI"):
+            await db.quotes.update_one({"quote_id": quote_id}, {"$set": {"is_sensitive": True}})
+            logger.info("quote %s flagged sensitive by AI", quote_id)
+    except Exception as e:
+        logger.warning("sensitivity check failed (non-blocking): %s", e)
 
 
 @api.post("/quotes")
@@ -669,6 +726,9 @@ async def create_quote(body: QuoteCreate, user=Depends(get_current_user)):
     }
     await db.quotes.insert_one(doc.copy())
     await log_reading_event(user["user_id"], 0)
+    # Filet de sécurité IA sur les citations publiques non marquées sensibles
+    if body.is_public and not body.is_sensitive:
+        asyncio.create_task(_ai_sensitivity_check(quote_id, body.text))
     # Notifier les abonnés quand une citation devient publique
     if body.is_public:
         try:
@@ -728,6 +788,8 @@ async def get_quote(quote_id: str, user=Depends(get_current_user)):
     is_owner = q["user_id"] == user["user_id"]
     if not is_owner and not q.get("is_public"):
         raise HTTPException(status_code=404, detail="not_found")
+    if not is_owner and q.get("is_sensitive") and not _is_adult(user):
+        raise HTTPException(status_code=404, detail="not_found")
     if q.get("book_id"):
         q["book"] = await db.books.find_one({"book_id": q["book_id"]}, {"_id": 0})
     owner = await db.users.find_one({"user_id": q["user_id"]}, {"_id": 0, "pseudo": 1, "handle": 1, "picture": 1})
@@ -741,6 +803,11 @@ async def patch_quote(quote_id: str, body: QuotePatch, user=Depends(get_current_
     upd = {k: v for k, v in body.dict().items() if v is not None}
     if upd:
         await db.quotes.update_one({"quote_id": quote_id, "user_id": user["user_id"]}, {"$set": upd})
+        # Filet IA quand la citation devient/reste publique et non marquée sensible
+        if upd.get("is_public") and not upd.get("is_sensitive"):
+            q = await db.quotes.find_one({"quote_id": quote_id, "user_id": user["user_id"]}, {"_id": 0, "text": 1, "is_sensitive": 1})
+            if q and not q.get("is_sensitive"):
+                asyncio.create_task(_ai_sensitivity_check(quote_id, q.get("text") or ""))
     return await get_quote(quote_id, user)
 
 
@@ -755,16 +822,22 @@ class SettingsBody(BaseModel):
     language: Optional[Literal['fr', 'en']] = None
     default_public: Optional[bool] = None
     profile_public: Optional[bool] = None
+    birthdate: Optional[str] = None
 
 
 @api.patch("/me/settings")
 async def update_settings(body: SettingsBody, user=Depends(get_current_user)):
     upd = {k: v for k, v in body.dict().items() if v is not None}
+    if "birthdate" in upd:
+        bd = _valid_birthdate(upd["birthdate"])
+        if not bd:
+            raise HTTPException(status_code=400, detail="invalid_birthdate")
+        upd["birthdate"] = bd
     if upd:
         await db.users.update_one({"user_id": user["user_id"]}, {"$set": upd})
-    u = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "language": 1, "default_public": 1, "profile_public": 1})
+    u = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "language": 1, "default_public": 1, "profile_public": 1, "birthdate": 1})
     return {"language": (u or {}).get("language", "fr"), "default_public": (u or {}).get("default_public", False),
-            "profile_public": (u or {}).get("profile_public", True)}
+            "profile_public": (u or {}).get("profile_public", True), "birthdate": (u or {}).get("birthdate")}
 
 
 @api.get("/me/export")
@@ -855,6 +928,22 @@ async def search_all(
         if rx:
             bq["$or"] = [{"title": rx}, {"author": rx}, {"recap": rx}]
         out["books"] = await db.books.find(bq, {"_id": 0}).sort("created_at", -1).to_list(100)
+
+    # Lecteurs : recherche par pseudo ou handle
+    if scope in ("all", "readers") and rx and not theme and not book_id:
+        users = await db.users.find(
+            {"user_id": {"$ne": uid}, "$or": [{"pseudo": rx}, {"handle": rx}]},
+            {"_id": 0, "user_id": 1, "pseudo": 1, "handle": 1, "picture": 1},
+        ).limit(15).to_list(15)
+        followed = {f["followed_id"] for f in await db.follows.find(
+            {"follower_id": uid}, {"_id": 0, "followed_id": 1}).to_list(1000)}
+        out["readers"] = [
+            {"pseudo": x["pseudo"], "handle": x["handle"], "picture": x.get("picture"),
+             "is_following": x["user_id"] in followed}
+            for x in users if x.get("handle")
+        ]
+    else:
+        out["readers"] = []
 
     return out
 
@@ -1620,7 +1709,7 @@ async def discover_isbn(isbn: str, user=Depends(get_current_user)):
 # ============ Home feed (public quotes) ============
 @api.get("/feed")
 async def feed(theme: Optional[str] = None, user=Depends(get_current_user)):
-    q: dict = {"is_public": True}
+    q: dict = {"is_public": True, **sensitive_filter(user)}
     if theme:
         q["themes"] = theme
     followed = [f["followed_id"] for f in await db.follows.find(
@@ -1810,6 +1899,7 @@ async def shutdown_db_client():
 
 app.include_router(book_search_router)
 app.include_router(push_router)
+app.include_router(club_router)
 app.include_router(api)
 app.add_middleware(
     CORSMiddleware,

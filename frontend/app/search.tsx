@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, ActivityIndicator, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -23,7 +23,7 @@ export default function SearchScreen() {
   const [bookId, setBookId] = useState<string | null>(null);
   const [themes, setThemes] = useState<string[]>([]);
   const [myBooks, setMyBooks] = useState<{ book_id: string; title: string }[]>([]);
-  const [results, setResults] = useState<{ quotes: Quote[]; books: any[] }>({ quotes: [], books: [] });
+  const [results, setResults] = useState<{ quotes: Quote[]; books: any[]; readers: any[] }>({ quotes: [], books: [], readers: [] });
   const [catalog, setCatalog] = useState<any[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -51,8 +51,8 @@ export default function SearchScreen() {
       if (themeV) params.set('theme', themeV);
       if (bookV) params.set('book_id', bookV);
       params.set('scope', scopeV);
-      const r = await api<{ quotes: Quote[]; books: any[] }>(`/search?${params.toString()}`);
-      setResults(r);
+      const r = await api<{ quotes: Quote[]; books: any[]; readers: any[] }>(`/search?${params.toString()}`);
+      setResults({ quotes: r.quotes || [], books: r.books || [], readers: r.readers || [] });
     } catch {}
     setLoading(false);
   }, []);
@@ -88,7 +88,8 @@ export default function SearchScreen() {
   const filtersActive = theme || bookId;
   const showBooks = scope !== 'quotes' && !filtersActive;
   const showQuotes = scope !== 'books';
-  const total = (showQuotes ? results.quotes.length : 0) + (showBooks ? results.books.length : 0);
+  const showReaders = scope === 'all' && !filtersActive;
+  const total = (showQuotes ? results.quotes.length : 0) + (showBooks ? results.books.length : 0) + (showReaders ? results.readers.length : 0);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.glacier }} testID="screen-search">
@@ -103,7 +104,7 @@ export default function SearchScreen() {
               testID="search-input"
               value={q} onChangeText={setQ}
               autoFocus
-              placeholder={t('Une phrase, un livre, un auteur…')}
+              placeholder={t('Une phrase, un livre, un lecteur…')}
               placeholderTextColor={colors.clay}
               style={styles.searchInput}
               returnKeyType="search"
@@ -160,6 +161,23 @@ export default function SearchScreen() {
             </View>
           ) : (
             <>
+              {showReaders && results.readers.length > 0 && (
+                <>
+                  <Text style={styles.sectionLabel}>{t('Lecteurs ({n})', { n: results.readers.length })}</Text>
+                  {results.readers.map((r: any) => (
+                    <Pressable key={r.handle} testID={`search-reader-${r.handle}`} onPress={() => router.push({ pathname: '/reader/[handle]', params: { handle: r.handle } })} style={styles.bookRow}>
+                      <View style={styles.readerAvatar}>
+                        {r.picture ? <Image source={{ uri: r.picture }} style={{ width: 40, height: 40, borderRadius: 20 }} /> : <Text style={styles.bookInitial}>{(r.pseudo?.[0] || 'M').toUpperCase()}</Text>}
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.bookTitle} numberOfLines={1}>{r.pseudo}</Text>
+                        <Text style={styles.bookAuthor} numberOfLines={1}>@{r.handle}{r.is_following ? `  ·  ${t('Suivi')}` : ''}</Text>
+                      </View>
+                      <Feather name="chevron-right" size={18} color={colors.clay} />
+                    </Pressable>
+                  ))}
+                </>
+              )}
               {showBooks && results.books.length > 0 && (
                 <>
                   <Text style={styles.sectionLabel}>{t('Dans ta bibliothèque ({n})', { n: results.books.length })}</Text>
@@ -235,6 +253,7 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   sectionLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase', marginTop: spacing.xl, marginBottom: spacing.sm },
   bookRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, marginBottom: 8 },
   bookCover: { width: 40, height: 56, borderRadius: radius.sm, backgroundColor: colors.bisque, alignItems: 'center', justifyContent: 'center' },
+  readerAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.bisque, alignItems: 'center', justifyContent: 'center' },
   bookInitial: { fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso },
   bookTitle: { fontFamily: fonts.bodyMedium, fontSize: 15, color: colors.espresso },
   bookAuthor: { fontFamily: fonts.body, fontSize: 13, color: colors.clay, marginTop: 2 },

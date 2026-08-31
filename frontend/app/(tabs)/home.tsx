@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, Pressable, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, Pressable, useWindowDimensions, Modal, TextInput } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -7,8 +8,11 @@ import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
 import { QuoteCard, Quote } from '@/src/components/QuoteCard';
 import { api } from '@/src/api';
+import { useAuth } from '@/src/auth';
 import { Wordmark } from '@/src/components/Wordmark';
 import { useT } from '@/src/i18n';
+
+const BIRTH_PROMPT_KEY = 'manent_birth_prompted';
 
 export default function Home() {
   const t = useT();
@@ -17,11 +21,57 @@ export default function Home() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { width } = useWindowDimensions();
+  const { user, refresh } = useAuth();
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [themes, setThemes] = useState<string[]>([]);
   const [daily, setDaily] = useState<Quote | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [birthModal, setBirthModal] = useState(false);
+  const [birth, setBirth] = useState('');
+  const [birthSaving, setBirthSaving] = useState(false);
+
+  // Comptes existants sans date de naissance : demandée une seule fois
+  useEffect(() => {
+    (async () => {
+      if (!user || (user as any).birthdate) return;
+      const prompted = await AsyncStorage.getItem(BIRTH_PROMPT_KEY).catch(() => null);
+      if (!prompted) setBirthModal(true);
+    })();
+  }, [user]);
+
+  const onBirthChange = (v: string) => {
+    const digits = v.replace(/\D/g, '').slice(0, 8);
+    let out = digits;
+    if (digits.length > 4) out = `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+    else if (digits.length > 2) out = `${digits.slice(0, 2)}/${digits.slice(2)}`;
+    setBirth(out);
+  };
+
+  const birthIso = (() => {
+    const m = birth.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (!m) return null;
+    const [, d, mo, y] = m;
+    const dt = new Date(`${y}-${mo}-${d}T00:00:00Z`);
+    if (isNaN(dt.getTime()) || dt.getUTCDate() !== parseInt(d, 10) || dt > new Date() || parseInt(y, 10) < 1900) return null;
+    return `${y}-${mo}-${d}`;
+  })();
+
+  const saveBirth = async () => {
+    if (!birthIso) return;
+    setBirthSaving(true);
+    try {
+      await api('/me/settings', { method: 'PATCH', body: JSON.stringify({ birthdate: birthIso }) });
+      await AsyncStorage.setItem(BIRTH_PROMPT_KEY, '1').catch(() => {});
+      await refresh();
+      setBirthModal(false);
+    } finally { setBirthSaving(false); }
+  };
+
+  const skipBirth = async () => {
+    await AsyncStorage.setItem(BIRTH_PROMPT_KEY, '1').catch(() => {});
+    setBirthModal(false);
+  };
 
   const load = useCallback(async () => {
     try {
@@ -62,7 +112,7 @@ export default function Home() {
         <View style={[styles.searchRow, { flexDirection: 'row', gap: 8, alignItems: 'center' }]}>
           <Pressable testID="home-search" onPress={() => router.push('/search')} style={[styles.search, { flex: 1 }]}>
             <Feather name="search" size={16} color={colors.clay} />
-            <Text style={styles.searchPlaceholder}>{t('Cherche une citation, un livre…')}</Text>
+            <Text style={styles.searchPlaceholder}>{t('Cherche une citation, un livre, un lecteur…')}</Text>
           </Pressable>
           <Pressable testID="home-scan" onPress={() => router.push('/discover/scan')} style={styles.scanBtn}>
             <Feather name="maximize" size={17} color={colors.espresso} />
@@ -118,6 +168,29 @@ export default function Home() {
           </View>
         )}
       </ScrollView>
+
+      <Modal visible={birthModal} transparent animationType="fade" onRequestClose={skipBirth}>
+        <View style={styles.birthOverlay}>
+          <View style={styles.birthModal} testID="birthdate-modal">
+            <Text style={styles.birthTitle}>{t('Ta date de naissance')}</Text>
+            <Text style={styles.birthSub}>{t('Elle sert uniquement à filtrer les contenus sensibles selon ton âge. Sans elle, ils resteront masqués.')}</Text>
+            <TextInput
+              testID="birthdate-input"
+              value={birth} onChangeText={onBirthChange}
+              placeholder={t('JJ/MM/AAAA')}
+              placeholderTextColor={colors.clay}
+              keyboardType="number-pad" maxLength={10}
+              style={styles.birthInput}
+            />
+            <Pressable testID="birthdate-save" onPress={saveBirth} disabled={!birthIso || birthSaving} style={[styles.birthBtn, (!birthIso || birthSaving) && { opacity: 0.5 }]}>
+              <Text style={styles.birthBtnText}>{t('Enregistrer')}</Text>
+            </Pressable>
+            <Pressable testID="birthdate-skip" onPress={skipBirth} style={{ alignSelf: 'center', padding: spacing.sm }}>
+              <Text style={styles.birthSkip}>{t('Plus tard')}</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -139,4 +212,12 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   emptySub: { fontFamily: fonts.body, fontSize: 14, color: colors.clay, textAlign: 'center', marginTop: spacing.sm },
   followTag: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 },
   followTagText: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.chambray, letterSpacing: 1, textTransform: 'uppercase' },
+  birthOverlay: { flex: 1, backgroundColor: 'rgba(58,33,25,0.4)', justifyContent: 'center', padding: spacing.xl },
+  birthModal: { backgroundColor: colors.glacier, borderRadius: 20, padding: spacing.xl },
+  birthTitle: { fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso },
+  birthSub: { fontFamily: fonts.body, fontSize: 13, color: colors.clay, lineHeight: 19, marginTop: spacing.xs },
+  birthInput: { height: 56, borderWidth: 1, borderColor: colors.borderSoft, borderRadius: radius.md, fontFamily: fonts.displayMedium, fontSize: 22, color: colors.espresso, backgroundColor: colors.creme, marginTop: spacing.md, textAlign: 'center' },
+  birthBtn: { height: 50, borderRadius: radius.md, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center', marginTop: spacing.md },
+  birthBtnText: { fontFamily: fonts.bodyMedium, fontSize: 15, color: colors.creme },
+  birthSkip: { fontFamily: fonts.body, fontSize: 13, color: colors.clay, textDecorationLine: 'underline' },
 });

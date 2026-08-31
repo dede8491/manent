@@ -21,7 +21,7 @@ type AuthCtx = {
   loading: boolean;
   rcIdentityError: string | null;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, pseudo: string) => Promise<void>;
+  signUp: (email: string, password: string, pseudo: string, birthdate?: string) => Promise<void>;
   signOut: () => Promise<void>;
   refresh: () => Promise<void>;
   updateUser: (u: Partial<User>) => Promise<void>;
@@ -88,9 +88,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(r.user);
   };
 
-  const signUp = async (email: string, password: string, pseudo: string) => {
+  const signUp = async (email: string, password: string, pseudo: string, birthdate?: string) => {
     const r = await api<{ session_token: string; user: User }>('/auth/register', {
-      method: 'POST', body: JSON.stringify({ email, password, pseudo }),
+      method: 'POST', body: JSON.stringify({ email, password, pseudo, birthdate }),
     });
     await saveToken(r.session_token); setCachedToken(r.session_token);
     setUser(r.user);

@@ -180,3 +180,18 @@
 - **Doublon supprimé** : le toggle « Mode sombre » existait sur Profil ET Paramètres → retiré du Profil (reste dans Paramètres > Apparence) ; imports/styles morts nettoyés.
 - **Audit doublons** : 434 clés i18n vérifiées (0 doublon), pattern de débordement chevron vérifié sur tous les écrans (community, book, carnet, quote, search : OK car texte dans conteneur flex:1).
 - **Espace admin** : inexistant — non requis pour le MVP, proposé comme évolution (modération des contenus signalés, stats).
+
+## Itération 23 — Club de lecture global (Phase 1) + recherche lecteurs + modération âge (juin 2026)
+### Club de lecture (onglet Communauté > « Club de lecture », remplace « Tes clubs »)
+- Backend `routes/club.py` (+ `deps.py` partagé) : collections club_books, club_readers, club_posts, club_comments, club_reviews, reports.
+- Endpoints : GET /api/club/home, POST/GET/DELETE /api/club/books[/{id}], join/leave, PATCH progress (pct/page/finished), GET/POST posts, POST like (toggle+push), GET/POST comments (push au posteur), POST /api/club/report, GET/POST reviews (multi-critères histoire/écriture/personnages/émotion, note moyenne), GET /api/club/me/summary.
+- Frontend : src/components/ClubHome.tsx (rendu dans community.tsx), app/club/add.tsx (recherche multi-sources /books/search identique à l'accueil → « Ajouter au Club », indépendant de Mes lectures), app/club/book/[id].tsx (onglets À propos/Lecteurs/Discussions/Avis, rejoindre/quitter, progression, spoiler masqué+révéler, like/commentaires/signalement, avis multi-critères + moyennes).
+- Cercles privés = anciens clubs (code d'invitation), listés dans ClubHome (« Tes cercles privés »).
+- Profil : carte « Club de lecture — X lectures rejointes · Y terminées » (/club/me/summary).
+- Admin : is_admin=true sur akereydaisy@gmail.com (peut retirer n'importe quel livre du Club ; l'ajouteur peut retirer le sien).
+### Recherche de lecteurs par pseudo
+- /api/search renvoie désormais `readers` (pseudo/handle regex, is_following) ; section « Lecteurs » dans app/search.tsx.
+### Modération par âge
+- birthdate à l'inscription (JJ/MM/AAAA obligatoire côté frontend, ISO en base) + modal une-fois pour comptes existants (home.tsx, clé AsyncStorage manent_birth_prompted, PATCH /me/settings).
+- Citations : is_sensitive (case « Contenu sensible 18+ » dans capture si publique) + filet IA Claude (asyncio.create_task, _ai_sensitivity_check) à la création/publication.
+- Filtrage : sans birthdate ou <18 ans → citations sensibles exclues du feed, pages thèmes, profils publics, et get_quote → 404.
