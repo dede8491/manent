@@ -254,3 +254,8 @@
 - Textes « Chargement… » supprimés (home masonry → ManentLoader 56, book/[id] flashcards → '…').
 - Splash HTML web (app/+html.tsx) : bloc #manent-splash exact du kit (keyframes mD/mP, prefers-color-scheme) affiché avant React, retiré au mount dans app/_layout.tsx (web only).
 - Interdiction maintenue : plus aucun spinner circulaire ni mot « Chargement » dans l'app.
+
+## Itération 29 — Rappels d'événements + suggestions de livres par thème (juin 2026)
+- **Rappels événements** : routes/club.py — event_reminder_loop (toutes les 2 h, démarré au startup) → _send_event_reminders : push aux participants dans la fenêtre 12-36 h avant l'événement (« C'est demain : … à 18h30 — lieu »), flag reminder_sent (posé uniquement si envoi réussi ; idempotency_key event-reminder-{id}). En dev EMERGENT_PUSH_KEY=placeholder → échec silencieux, fonctionne après déploiement/build.
+- **Suggestions par thème** : GET /api/themes/{theme}/page renvoie discover_books (Google Books « {thème} roman » → repli Open Library, couvertures uniquement, dédoublonné, cache 7 j db.theme_suggestions). UI theme/[name].tsx : section « À découvrir sur ce thème » (theme-discover-*) → /discover/book. Vérifié : « africain » → 8 livres avec couvertures (Maalouf, Fanon…).
+- **Recherche** : le catalogue internet priorise désormais les résultats avec couverture (8 max).

@@ -18,7 +18,7 @@ export default function ThemePage() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const { name } = useLocalSearchParams<{ name: string }>();
-  const [data, setData] = useState<{ stats: { quotes: number; readers: number; books: number }; quotes: Quote[]; suggested_books?: any[] } | null>(null);
+  const [data, setData] = useState<{ stats: { quotes: number; readers: number; books: number }; quotes: Quote[]; suggested_books?: any[]; discover_books?: any[] } | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -93,6 +93,27 @@ export default function ThemePage() {
                   <Text style={styles.suggestTitle} numberOfLines={2}>{b.title}</Text>
                   {!!b.author && <Text style={styles.suggestAuthor} numberOfLines={1}>{b.author}</Text>}
                   <Text style={styles.suggestCta}>{b.is_mine ? t('Dans ta bibliothèque') : t('Ajouter')}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
+        {data && (data.discover_books?.length || 0) > 0 && (
+          <View style={{ marginTop: spacing.lg }} testID="theme-discover">
+            <Text style={styles.suggestLabel}>{t('À découvrir sur ce thème')}</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm, paddingHorizontal: spacing.xl }}>
+              {data.discover_books!.map((b: any, i: number) => (
+                <Pressable
+                  key={i}
+                  testID={`theme-discover-${i}`}
+                  onPress={() => router.push({ pathname: '/discover/book', params: { title: b.title, author: b.author || '', cover: b.cover || '', year: b.year || '' } })}
+                  style={styles.suggestCard}
+                >
+                  <Image source={{ uri: b.cover }} style={styles.suggestCover} resizeMode="cover" />
+                  <Text style={styles.suggestTitle} numberOfLines={2}>{b.title}</Text>
+                  {!!b.author && <Text style={styles.suggestAuthor} numberOfLines={1}>{b.author}</Text>}
+                  <Text style={styles.suggestCta}>{t('Découvrir')}</Text>
                 </Pressable>
               ))}
             </ScrollView>

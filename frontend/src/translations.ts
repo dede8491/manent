@@ -662,4 +662,5 @@ export const EN: Record<string, string> = {
   '(contenu déjà supprimé)': '(content already deleted)',
   'Ignorer': 'Ignore',
   'Supprimer le contenu': 'Delete content',
+  'À découvrir sur ce thème': 'To discover on this theme',
 };

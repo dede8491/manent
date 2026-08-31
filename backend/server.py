@@ -26,9 +26,9 @@ SUPABASE_URL = os.environ.get('SUPABASE_URL', '')
 SUPABASE_KEY = os.environ.get('SUPABASE_KEY', '')
 SUPABASE_BUCKET = os.environ.get('SUPABASE_BUCKET', 'manent-photos')
 
-from routes.book_search import router as book_search_router
+from routes.book_search import router as book_search_router, _search_google, _search_openlibrary
 from routes.push import router as push_router, send_push
-from routes.club import router as club_router
+from routes.club import router as club_router, event_reminder_loop
 
 client = AsyncIOMotorClient(MONGO_URL)
 db = client[DB_NAME]
@@ -308,7 +308,33 @@ async def theme_page(theme: str, user=Depends(get_current_user)):
                 "is_mine": b["user_id"] == user["user_id"],
             })
         suggestions = suggestions[:10]
-    return {"theme": theme, "stats": {"quotes": total, "readers": readers, "books": books}, "quotes": quotes, "suggested_books": suggestions}
+    # Propositions externes (multi-sources, avec couverture uniquement), cache 7 jours par thème
+    discover = []
+    cache = await db.theme_suggestions.find_one({"theme": theme.lower()}, {"_id": 0})
+    if cache and (now_utc() - cache["at"].replace(tzinfo=timezone.utc)).total_seconds() < 7 * 86400:
+        discover = cache.get("items") or []
+    else:
+        try:
+            async with httpx.AsyncClient(timeout=12) as http:
+                results = await _search_google(http, f"{theme} roman")
+                if len([r for r in results if r.get("cover")]) < 4:
+                    results += await _search_openlibrary(http, theme)
+            seen2 = {s["title"].strip().lower() for s in suggestions}
+            for r in results:
+                ttl = (r.get("title") or "").strip()
+                if not ttl or not r.get("cover") or ttl.lower() in seen2:
+                    continue
+                seen2.add(ttl.lower())
+                discover.append({"title": ttl, "author": r.get("author"), "cover": r["cover"], "year": r.get("year")})
+                if len(discover) >= 8:
+                    break
+            if discover:
+                await db.theme_suggestions.update_one({"theme": theme.lower()}, {"$set": {"at": now_utc(), "items": discover}}, upsert=True)
+        except Exception as e:
+            logger.warning("theme discover failed: %s", e)
+        if not discover and cache:
+            discover = cache.get("items") or []
+    return {"theme": theme, "stats": {"quotes": total, "readers": readers, "books": books}, "quotes": quotes, "suggested_books": suggestions, "discover_books": discover}
 
 
 @api.get("/readers/suggestions")
@@ -2189,6 +2215,7 @@ async def on_startup():
     asyncio.get_event_loop().create_task(_watch_wattpad())
     asyncio.get_event_loop().create_task(_migrate_covers())
     asyncio.get_event_loop().create_task(_seed_featured())
+    asyncio.get_event_loop().create_task(event_reminder_loop())
     logger.info("Manent backend ready")
 
 

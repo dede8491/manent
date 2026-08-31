@@ -77,7 +77,9 @@ export default function SearchScreen() {
     catalogTimer.current = setTimeout(async () => {
       try {
         const r = await api<{ results: any[] }>(`/books/search?q=${encodeURIComponent(qv)}`);
-        setCatalog((r.results || []).slice(0, 6));
+        // Priorité aux livres avec couverture
+        const all = r.results || [];
+        setCatalog([...all.filter((x: any) => x.cover), ...all.filter((x: any) => !x.cover)].slice(0, 8));
       } catch {
         setCatalog([]);
       }

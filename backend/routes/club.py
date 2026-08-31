@@ -1,4 +1,5 @@
 """Club de lecture global — livres proposés, lectures collectives, discussions, avis."""
+import asyncio
 import logging
 import re
 from datetime import datetime, timedelta, timezone
@@ -449,6 +450,42 @@ async def close_poll_now(poll_id: str, user=Depends(get_current_user)):
     await _close_poll(p)
     p = await db.club_polls.find_one({"poll_id": poll_id}, {"_id": 0})
     return _poll_view(p, user["user_id"])
+
+
+# ---------- Rappels : notification aux participants la veille d'un événement ----------
+async def _send_event_reminders():
+    """Envoie un push aux participants ~24 h avant l'événement (fenêtre 12-36 h)."""
+    now = now_utc()
+    events = await db.club_events.find(
+        {"reminder_sent": {"$ne": True}, "participants.0": {"$exists": True}}, {"_id": 0}
+    ).to_list(100)
+    for e in events:
+        d = e.get("date")
+        if not d:
+            continue
+        if d.tzinfo is None:
+            d = d.replace(tzinfo=timezone.utc)
+        if not (now + timedelta(hours=12) <= d <= now + timedelta(hours=36)):
+            continue
+        hm = f"{d.hour}h{str(d.minute).zfill(2)}"
+        msg = f"C'est demain : « {e['title']} » à {hm}" + (f" — {e['location']}" if e.get("location") else "")
+        try:
+            await send_push(e["participants"], {"title": "Club de lecture", "message": msg},
+                            idempotency_key=f"event-reminder-{e['event_id']}")
+            await db.club_events.update_one({"event_id": e["event_id"]}, {"$set": {"reminder_sent": True}})
+            logger.info("event reminder sent for %s (%s participants)", e["event_id"], len(e["participants"]))
+        except Exception as ex:
+            logger.warning("event reminder failed: %s", ex)
+
+
+async def event_reminder_loop():
+    """Boucle de fond : vérifie toutes les 2 h."""
+    while True:
+        try:
+            await _send_event_reminders()
+        except Exception as ex:
+            logger.warning("event reminder loop error: %s", ex)
+        await asyncio.sleep(2 * 3600)
 
 
 # ---------- Événements ----------
