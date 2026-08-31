@@ -6,15 +6,20 @@ import { Feather } from '@expo/vector-icons';
 import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
 import { QuoteCard, Quote } from '@/src/components/QuoteCard';
+import { BookCover } from '@/src/components/BookCover';
+import { Ionicons } from '@expo/vector-icons';
 import { api } from '@/src/api';
 import { useT } from '@/src/i18n';
 
 type Profile = {
   user: { pseudo: string; handle: string; picture?: string };
   is_me: boolean;
-  is_following: boolean;
-  stats: { public_quotes: number; books: number; boards: number; followers: number };
-  quotes: Quote[];
+  private?: boolean;
+  is_following?: boolean;
+  stats?: { public_quotes: number; books: number; boards: number; followers: number };
+  quotes?: Quote[];
+  library?: { book_id: string; title: string; author?: string; cover?: string; status?: string }[];
+  fiches?: { title: string; author?: string; cover?: string; rating: number; summary: string }[];
 };
 
 export default function ReaderProfile() {
@@ -134,12 +139,20 @@ export default function ReaderProfile() {
             {feedback ? <Text style={styles.feedback} testID="reader-feedback">{feedback}</Text> : null}
           </View>
 
+          {profile.private ? (
+          <View style={styles.privateBox} testID="reader-private">
+            <Feather name="lock" size={22} color={colors.chambray} />
+            <Text style={styles.privateTitle}>{t('Ce profil est privé.')}</Text>
+            <Text style={styles.emptySub}>{t('Ce lecteur garde sa bibliothèque pour lui.')}</Text>
+          </View>
+          ) : (
+          <>
           <View style={styles.statsRow}>
             {[
-              { n: profile.stats.followers, l: t(profile.stats.followers > 1 ? 'abonnés' : 'abonné') },
-              { n: profile.stats.public_quotes, l: t(profile.stats.public_quotes > 1 ? 'citations' : 'citation') },
-              { n: profile.stats.books, l: t(profile.stats.books > 1 ? 'livres' : 'livre') },
-              { n: profile.stats.boards, l: t(profile.stats.boards > 1 ? 'tableaux' : 'tableau') },
+              { n: profile.stats!.followers, l: t(profile.stats!.followers > 1 ? 'abonnés' : 'abonné') },
+              { n: profile.stats!.public_quotes, l: t(profile.stats!.public_quotes > 1 ? 'citations' : 'citation') },
+              { n: profile.stats!.books, l: t(profile.stats!.books > 1 ? 'livres' : 'livre') },
+              { n: profile.stats!.boards, l: t(profile.stats!.boards > 1 ? 'tableaux' : 'tableau') },
             ].map(s => (
               <View key={s.l} style={styles.statCard}>
                 <Text style={styles.statNum}>{s.n}</Text>
@@ -148,9 +161,47 @@ export default function ReaderProfile() {
             ))}
           </View>
 
+          {(profile.library || []).length > 0 && (
+            <View style={{ marginTop: spacing.xl }}>
+              <Text style={[styles.sectionLabel, { paddingHorizontal: spacing.xl }]}>{t('Sa bibliothèque')}</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.xl, gap: spacing.sm }}>
+                {profile.library!.map(b => (
+                  <View key={b.book_id} style={{ width: 76, alignItems: 'center' }}>
+                    <BookCover uri={b.cover} title={b.title} width={72} height={100} initialSize={26} />
+                    <Text style={styles.libTitle} numberOfLines={2}>{b.title}</Text>
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
+          {(profile.fiches || []).length > 0 && (
+            <View style={{ paddingHorizontal: spacing.xl, marginTop: spacing.xl }}>
+              <Text style={styles.sectionLabel}>{t('Ses fiches de lecture')}</Text>
+              <View style={{ gap: spacing.sm }}>
+                {profile.fiches!.map((f, i) => (
+                  <View key={i} style={styles.ficheCard}>
+                    <BookCover uri={f.cover} title={f.title} width={40} height={56} initialSize={18} />
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <Text style={styles.libFicheTitle} numberOfLines={1}>{f.title}</Text>
+                      {f.rating > 0 && (
+                        <View style={{ flexDirection: 'row', gap: 1 }}>
+                          {[1, 2, 3, 4, 5].map(n => (
+                            <Ionicons key={n} name={n <= f.rating ? 'star' : 'star-outline'} size={11} color={n <= f.rating ? colors.chambray : colors.bisque} />
+                          ))}
+                        </View>
+                      )}
+                      {!!f.summary && <Text style={styles.ficheSummary} numberOfLines={3}>{f.summary}</Text>}
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
           <View style={{ paddingHorizontal: spacing.xl, marginTop: spacing.xl }}>
             <Text style={styles.sectionLabel}>{t('Citations publiques')}</Text>
-            {profile.quotes.length === 0 ? (
+            {profile.quotes!.length === 0 ? (
               <Text style={styles.emptySub}>{t('Rien de public pour l’instant.')}</Text>
             ) : (
               <View style={{ flexDirection: 'row', gap: spacing.md }}>
@@ -163,6 +214,8 @@ export default function ReaderProfile() {
               </View>
             )}
           </View>
+          </>
+          )}
         </ScrollView>
       )}
     </View>
@@ -188,5 +241,11 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   statLbl: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase', marginTop: 2 },
   sectionLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: spacing.sm },
   emptyTitle: { fontFamily: fonts.displayMedium, fontSize: 22, color: colors.espresso, textAlign: 'center' },
+  privateBox: { margin: spacing.xl, backgroundColor: colors.creme, borderRadius: 20, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.xl, alignItems: 'center', gap: spacing.sm },
+  privateTitle: { fontFamily: fonts.displayMedium, fontSize: 22, color: colors.espresso },
+  libTitle: { fontFamily: fonts.body, fontSize: 10.5, color: colors.clay, textAlign: 'center', marginTop: 4 },
+  ficheCard: { flexDirection: 'row', gap: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },
+  libFicheTitle: { fontFamily: fonts.displayMedium, fontSize: 16, color: colors.espresso },
+  ficheSummary: { fontFamily: fonts.body, fontSize: 12, color: colors.clay, lineHeight: 17 },
   emptySub: { fontFamily: fonts.body, fontSize: 14, color: colors.clay },
 });

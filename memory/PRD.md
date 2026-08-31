@@ -173,3 +173,10 @@
 - **Textes** : labels stats du profil ne débordent plus (fontSize 8.5, letterSpacing 0.4, padding réduit, numberOfLines) ; pluriels corrigés « 0 page lue · 1 jour actif ce mois-ci » (clés i18n page lue/pages lues/jour actif/jours actifs/ce mois-ci).
 - **Couvertures** : composant partagé src/components/BookCover.tsx (Image + repli initiale onError) appliqué : bibliothèque (BookCard), fiche livre (détail), fiche de lecture, carnet, découverte ISBN. add.tsx avait déjà son Cover.
 - **Photo de profil** : avatar cliquable (avatar-edit, badge caméra) → ImagePicker → POST /api/upload (FormData, File sur web) → PATCH /api/users/me {picture} (champ picture ajouté à UserPatch). Affichée sur profil, profil public lecteur, suggestions communauté. Validé par curl (upload→data URL→picture set).
+
+## Itération 22 — Profil public/privé vérifié + nettoyage UI (juin 2026)
+- **Profil public/privé (finalisé)** : toggle « Profil public » vérifié dans Paramètres (section Confidentialité) ; profil privé affiche cadenas + « Ce profil est privé. » sur /reader/[handle] (gating backend + frontend validés visuellement).
+- **Alignement Paramètres corrigé** : les libellés longs (ex. « Politique de confidentialité (RGPD) ») poussaient le chevron hors de la carte → rowLabel en flex:1 + numberOfLines={2}, spacer supprimé.
+- **Doublon supprimé** : le toggle « Mode sombre » existait sur Profil ET Paramètres → retiré du Profil (reste dans Paramètres > Apparence) ; imports/styles morts nettoyés.
+- **Audit doublons** : 434 clés i18n vérifiées (0 doublon), pattern de débordement chevron vérifié sur tous les écrans (community, book, carnet, quote, search : OK car texte dans conteneur flex:1).
+- **Espace admin** : inexistant — non requis pour le MVP, proposé comme évolution (modération des contenus signalés, stats).

@@ -78,6 +78,7 @@ export default function Settings() {
   const toggleScheme = useToggleScheme();
   const { lang, setLang, t } = useI18n();
   const [defaultPublic, setDefaultPublic] = useState(false);
+  const [profilePublic, setProfilePublic] = useState(true);
   const [doc, setDoc] = useState<null | 'privacy' | 'terms'>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -86,9 +87,10 @@ export default function Settings() {
   useEffect(() => {
     (async () => {
       try {
-        const s = await api<{ language: 'fr' | 'en'; default_public: boolean }>('/me/settings', { method: 'PATCH', body: JSON.stringify({}) });
+        const s = await api<{ language: 'fr' | 'en'; default_public: boolean; profile_public: boolean }>('/me/settings', { method: 'PATCH', body: JSON.stringify({}) });
         if (s.language === 'en' || s.language === 'fr') setLang(s.language);
         setDefaultPublic(s.default_public);
+        setProfilePublic(s.profile_public !== false);
       } catch {}
     })();
   }, []);
@@ -136,8 +138,7 @@ export default function Settings() {
   const Row = ({ icon, label, right, onPress, testID, danger }: any) => (
     <Pressable testID={testID} onPress={onPress} disabled={!onPress} style={styles.row}>
       <Feather name={icon} size={18} color={danger ? '#B3552F' : colors.espresso} />
-      <Text style={[styles.rowLabel, danger && { color: '#B3552F' }]}>{label}</Text>
-      <View style={{ flex: 1 }} />
+      <Text style={[styles.rowLabel, danger && { color: '#B3552F' }]} numberOfLines={2}>{label}</Text>
       {right}
     </Pressable>
   );
@@ -182,6 +183,18 @@ export default function Settings() {
         />
 
         <Text style={styles.section}>{t('Confidentialité')}</Text>
+        <Row
+          testID="settings-profile-public"
+          icon="globe"
+          label={t('Profil public')}
+          onPress={() => { const v = !profilePublic; setProfilePublic(v); saveSettings({ profile_public: v }); }}
+          right={
+            <View style={[styles.switch, profilePublic && { backgroundColor: colors.chambray }]}>
+              <View style={[styles.knob, profilePublic && { alignSelf: 'flex-end' }]} />
+            </View>
+          }
+        />
+        <Text style={styles.note}>{t('Public : les lecteurs voient ta bibliothèque, tes fiches et tes citations publiques. Privé : seuls ton pseudo et ta photo restent visibles.')}</Text>
         <Row
           testID="settings-default-public"
           icon="eye"
@@ -248,7 +261,7 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   langTextActive: { color: colors.creme },
   langSoon: { fontFamily: fonts.body, fontSize: 10, color: colors.clay, fontStyle: 'italic' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 52, backgroundColor: colors.creme, borderRadius: radius.md, paddingHorizontal: spacing.md, borderWidth: 1, borderColor: colors.borderSoft },
-  rowLabel: { fontFamily: fonts.body, fontSize: 14.5, color: colors.espresso },
+  rowLabel: { flex: 1, fontFamily: fonts.body, fontSize: 14.5, color: colors.espresso },
   switch: { width: 44, height: 26, borderRadius: 13, backgroundColor: colors.borderSoft, padding: 3, justifyContent: 'center' },
   knob: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#F5EDE4', alignSelf: 'flex-start' },
   feedback: { fontFamily: fonts.body, fontSize: 12, color: colors.clay, textAlign: 'center' },

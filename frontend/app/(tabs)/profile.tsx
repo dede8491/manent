@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { fonts, radius, spacing } from '@/src/theme';
-import { useColors, useStyles, useScheme, useToggleScheme } from '@/src/themeCtx';
+import { useColors, useStyles } from '@/src/themeCtx';
 import { useAuth } from '@/src/auth';
 import { api, getCachedToken } from '@/src/api';
 import * as ImagePicker from 'expo-image-picker';
@@ -40,8 +40,6 @@ export default function Profile() {
       if (j.url) await updateUser({ picture: j.url });
     } catch {}
   };
-  const scheme = useScheme();
-  const toggle = useToggleScheme();
   const [premium, setPremium] = useState<{ is_premium: boolean; plan?: string | null; captures_used: number; captures_limit: number } | null>(null);
   const [stats, setStats] = useState({ books: 0, quotes: 0, boards: 0 });
   const [reading, setReading] = useState<any>(null);
@@ -173,13 +171,6 @@ export default function Profile() {
       </View>
 
       <View style={{ paddingHorizontal: spacing.xl, gap: spacing.sm, marginTop: spacing.lg }}>
-        <Pressable testID="row-darkmode" onPress={toggle} style={styles.row}>
-          <Feather name={scheme === 'dark' ? 'sun' : 'moon'} size={18} color={colors.espresso} />
-          <Text style={[styles.rowLabel, { flex: 1 }]}>{t('Mode sombre')}</Text>
-          <View style={[styles.switch, scheme === 'dark' && { backgroundColor: colors.chambray }]}>
-            <View style={[styles.knob, scheme === 'dark' && { alignSelf: 'flex-end' }]} />
-          </View>
-        </Pressable>
         <Pressable testID="row-carnet" onPress={() => router.push('/carnet')} style={styles.row}><Feather name="book-open" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Carnet de lecture')}</Text><View style={styles.premiumTag}><Text style={styles.premiumTagText}>PREMIUM</Text></View></Pressable>
         <Pressable testID="row-settings" onPress={() => router.push('/settings')} style={styles.row}><Feather name="settings" size={18} color={colors.espresso} /><Text style={styles.rowLabel}>{t('Paramètres')}</Text></Pressable>
         <Pressable testID="row-signout" onPress={signOut} style={styles.row}><Feather name="log-out" size={18} color={colors.espresso} /><Text style={styles.rowLabel}>{t('Se déconnecter')}</Text></Pressable>
@@ -275,6 +266,4 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   premiumTag: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.bisque },
   premiumTagText: { fontFamily: fonts.bodyMedium, fontSize: 9, color: colors.espresso, letterSpacing: 1.5 },
   rowLabel: { fontFamily: fonts.body, fontSize: 15, color: colors.espresso },
-  switch: { width: 44, height: 26, borderRadius: 13, backgroundColor: colors.borderSoft, padding: 3, justifyContent: 'center' },
-  knob: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#F5EDE4', alignSelf: 'flex-start' },
 });

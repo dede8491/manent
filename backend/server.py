@@ -107,11 +107,15 @@ async def register(body: RegisterBody):
         raise HTTPException(status_code=400, detail="email_taken")
     user_id = new_id("user")
     pw_hash = bcrypt.hashpw(body.password.encode(), bcrypt.gensalt()).decode()
+    base_handle = body.pseudo.lower().replace(" ", "_") or "lecteur"
+    handle = base_handle
+    while await db.users.find_one({"handle": handle}, {"_id": 1}):
+        handle = f"{base_handle}{uuid.uuid4().hex[:4]}"
     user = {
         "user_id": user_id,
         "email": body.email.lower(),
         "pseudo": body.pseudo,
-        "handle": body.pseudo.lower().replace(" ", "_"),
+        "handle": handle,
         "password_hash": pw_hash,
         "picture": None,
         "reading_mode": None,  # 'plaisir' | 'etudes' | 'both'
@@ -282,11 +286,11 @@ async def reader_suggestions(user=Depends(get_current_user)):
     my_themes = set(user.get("themes") or [])
     candidates = await db.users.find(
         {"user_id": {"$ne": user["user_id"]}},
-        {"_id": 0, "user_id": 1, "pseudo": 1, "handle": 1, "picture": 1, "themes": 1},
+        {"_id": 0, "user_id": 1, "pseudo": 1, "handle": 1, "picture": 1, "themes": 1, "profile_public": 1},
     ).to_list(300)
     out = []
     for c in candidates:
-        if c["user_id"] in followed or not c.get("handle"):
+        if c["user_id"] in followed or not c.get("handle") or c.get("profile_public") is False:
             continue
         shared = sorted(my_themes & set(c.get("themes") or []))
         pub = await db.quotes.count_documents({"user_id": c["user_id"], "is_public": True})
@@ -334,10 +338,14 @@ async def toggle_follow(handle: str, user=Depends(get_current_user)):
 async def public_profile(handle: str, user=Depends(get_current_user)):
     u = await db.users.find_one(
         {"handle": handle},
-        {"_id": 0, "user_id": 1, "pseudo": 1, "handle": 1, "picture": 1, "created_at": 1},
+        {"_id": 0, "user_id": 1, "pseudo": 1, "handle": 1, "picture": 1, "created_at": 1, "profile_public": 1},
     )
     if not u:
         raise HTTPException(status_code=404, detail="not_found")
+    profile_public = u.pop("profile_public", True)
+    if not profile_public and u["user_id"] != user["user_id"]:
+        return {"user": {"pseudo": u["pseudo"], "handle": u["handle"], "picture": u.get("picture")},
+                "is_me": False, "private": True}
     q = {"user_id": u["user_id"], "is_public": True}
     total = await db.quotes.count_documents(q)
     books = len([b for b in await db.quotes.distinct("book_id", q) if b])
@@ -347,12 +355,27 @@ async def public_profile(handle: str, user=Depends(get_current_user)):
     uid = u.pop("user_id")
     followers = await db.follows.count_documents({"followed_id": uid})
     is_following = bool(await db.follows.find_one({"follower_id": user["user_id"], "followed_id": uid}))
+    # Bibliothèque visible publiquement (titres/couvertures/statut)
+    library = await db.books.find(
+        {"user_id": uid},
+        {"_id": 0, "book_id": 1, "title": 1, "author": 1, "cover": 1, "status": 1, "rating": 1, "fiche.summary": 1, "isbn": 1},
+    ).sort("created_at", -1).limit(30).to_list(30)
+    fiches = []
+    for b in library:
+        f = b.pop("fiche", None) or {}
+        if b.get("rating") or f.get("summary"):
+            fiches.append({"title": b["title"], "author": b.get("author"), "cover": b.get("cover"),
+                           "rating": b.get("rating") or 0,
+                           "summary": (f.get("summary") or "")[:220]})
     return {
         "user": u,
         "is_me": uid == user["user_id"],
+        "private": False,
         "is_following": is_following,
         "stats": {"public_quotes": total, "books": books, "boards": boards, "followers": followers},
         "quotes": quotes,
+        "library": library,
+        "fiches": fiches[:10],
     }
 
 
@@ -731,6 +754,7 @@ async def delete_quote(quote_id: str, user=Depends(get_current_user)):
 class SettingsBody(BaseModel):
     language: Optional[Literal['fr', 'en']] = None
     default_public: Optional[bool] = None
+    profile_public: Optional[bool] = None
 
 
 @api.patch("/me/settings")
@@ -738,8 +762,9 @@ async def update_settings(body: SettingsBody, user=Depends(get_current_user)):
     upd = {k: v for k, v in body.dict().items() if v is not None}
     if upd:
         await db.users.update_one({"user_id": user["user_id"]}, {"$set": upd})
-    u = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "language": 1, "default_public": 1})
-    return {"language": (u or {}).get("language", "fr"), "default_public": (u or {}).get("default_public", False)}
+    u = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "language": 1, "default_public": 1, "profile_public": 1})
+    return {"language": (u or {}).get("language", "fr"), "default_public": (u or {}).get("default_public", False),
+            "profile_public": (u or {}).get("profile_public", True)}
 
 
 @api.get("/me/export")
