@@ -23,6 +23,7 @@ export default function CaptureModal() {
   const [transcribing, setTranscribing] = useState(false);
   const [text, setText] = useState('');
   const [page, setPage] = useState('');
+  const [progressPrompt, setProgressPrompt] = useState<{ quoteId: string; page: number; key: string; unit: string } | null>(null);
   const [note, setNote] = useState('');
   const [visibility, setVisibility] = useState<'private' | 'followers' | 'public'>('private');
   const [isSensitive, setIsSensitive] = useState(false);
@@ -99,8 +100,31 @@ export default function CaptureModal() {
           is_sensitive: visibility !== 'private' ? isSensitive : false,
         }),
       });
+      // Progression proposée : « Tu en es à la page 142 ? »
+      const pageNum = page ? parseInt(page, 10) : 0;
+      if (bookId && pageNum > 0) {
+        try {
+          const b = await api<any>(`/books/${bookId}`);
+          const key = b.type === 'wattpad' ? 'progress_chapter' : 'progress_page';
+          const total = b.type === 'wattpad' ? b.chapters : b.pages;
+          if ((b[key] || 0) < pageNum && (!total || pageNum <= total) && b.status !== 'termine') {
+            setProgressPrompt({ quoteId: q.quote_id, page: pageNum, key, unit: b.type === 'wattpad' ? 'chapitre' : 'page' });
+            return;
+          }
+        } catch {}
+      }
       router.replace({ pathname: '/quote/[id]', params: { id: q.quote_id } });
     } finally { setSaving(false); }
+  };
+
+  const confirmProgress = async (yes: boolean) => {
+    const p = progressPrompt;
+    if (!p) return;
+    setProgressPrompt(null);
+    if (yes && bookId) {
+      try { await api(`/books/${bookId}`, { method: 'PATCH', body: JSON.stringify({ [p.key]: p.page }) }); } catch {}
+    }
+    router.replace({ pathname: '/quote/[id]', params: { id: p.quoteId } });
   };
 
   return (
@@ -296,11 +320,34 @@ export default function CaptureModal() {
           </View>
         </View>
       </Modal>
+      <Modal visible={!!progressPrompt} transparent animationType="fade" onRequestClose={() => confirmProgress(false)}>
+        <View style={styles.promptOverlay}>
+          <View style={styles.promptBox} testID="progress-prompt">
+            <Text style={styles.promptTitle}>
+              {progressPrompt?.unit === 'chapitre' ? t('Tu en es au chapitre {n} ?', { n: progressPrompt?.page ?? 0 }) : t('Tu en es à la page {n} ?', { n: progressPrompt?.page ?? 0 })}
+            </Text>
+            <Text style={styles.promptSub}>{t('On met à jour ta progression de lecture — tes cercles la verront aussi.')}</Text>
+            <Pressable testID="progress-prompt-yes" onPress={() => confirmProgress(true)} style={styles.promptYes}>
+              <Text style={styles.promptYesText}>{t('Oui, mettre à jour')}</Text>
+            </Pressable>
+            <Pressable testID="progress-prompt-no" onPress={() => confirmProgress(false)} style={{ alignSelf: 'center', padding: spacing.sm }}>
+              <Text style={styles.promptNo}>{t('Non, pas encore')}</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
+  promptOverlay: { flex: 1, backgroundColor: 'rgba(58,33,25,0.45)', alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
+  promptBox: { width: '100%', maxWidth: 360, backgroundColor: colors.creme, borderRadius: radius.lg, padding: spacing.xl, borderWidth: 1, borderColor: colors.borderSoft },
+  promptTitle: { fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso, textAlign: 'center' },
+  promptSub: { fontFamily: fonts.body, fontSize: 13, color: colors.clay, textAlign: 'center', marginTop: spacing.sm, lineHeight: 19 },
+  promptYes: { marginTop: spacing.lg, height: 48, borderRadius: radius.pill, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },
+  promptYesText: { fontFamily: fonts.bodyMedium, fontSize: 14.5, color: colors.creme },
+  promptNo: { fontFamily: fonts.body, fontSize: 13, color: colors.clay, textDecorationLine: 'underline' },
   pickerBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48, paddingHorizontal: spacing.md, borderRadius: radius.md, backgroundColor: colors.creme, borderWidth: 1, borderColor: colors.borderSoft },
   pickerText: { flex: 1, fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.espresso },
   pickerOverlay: { flex: 1, backgroundColor: 'rgba(58,33,25,0.55)', justifyContent: 'flex-end' },

@@ -329,11 +329,11 @@ async def theme_page(theme: str, user=Depends(get_current_user)):
             # Multi-requêtes en parallèle (Google + Open Library) pour un vrai catalogue par thème
             async with httpx.AsyncClient(timeout=12) as http:
                 batches = await asyncio.gather(
-                    _search_google(http, f"{theme} roman", 20),
-                    _search_google(http, f"{theme} essai", 12),
-                    _search_google(http, theme, 12),
-                    _search_openlibrary(http, f"subject:{theme} language:fre", 20),
-                    _search_openlibrary(http, f"{theme} language:fre", 15),
+                    _search_google(http, f"{theme} roman", 30),
+                    _search_google(http, f"{theme} essai", 20),
+                    _search_google(http, theme, 20),
+                    _search_openlibrary(http, f"subject:{theme} language:fre", 40),
+                    _search_openlibrary(http, f"{theme} language:fre", 30),
                     return_exceptions=True,
                 )
             results = []
@@ -349,7 +349,7 @@ async def theme_page(theme: str, user=Depends(get_current_user)):
                     continue
                 seen2.add(ttl.lower())
                 discover.append({"title": ttl, "author": r.get("author"), "cover": r["cover"], "year": r.get("year"), "summary": r.get("summary")})
-                if len(discover) >= 24:
+                if len(discover) >= 60:
                     break
             if discover:
                 await db.theme_suggestions.update_one({"theme": theme.lower()}, {"$set": {"at": now_utc(), "items": discover}}, upsert=True)
@@ -711,6 +711,12 @@ async def patch_book(book_id: str, body: BookPatch, user=Depends(get_current_use
         upd.setdefault(prog_key, 0)
     if upd:
         await db.books.update_one({"book_id": book_id, "user_id": user["user_id"]}, {"$set": upd})
+        # Cercles : progression partagée + notifications sobres sur la lecture commune
+        if "progress_page" in upd or "progress_chapter" in upd or upd.get("status") == "termine":
+            try:
+                await _notify_clubs_progress(user, book, upd)
+            except Exception as e:
+                logger.warning("club progress notify failed (non-blocking): %s", e)
     return await get_book(book_id, user)
 
 
@@ -1355,12 +1361,14 @@ async def delete_board(board_id: str, user=Depends(get_current_user)):
 
 # ============ Clubs de lecture ============
 class ClubCreate(BaseModel):
-    name: str
-    description: Optional[str] = ""
+    name: str = Field(..., max_length=80)
+    description: Optional[str] = Field("", max_length=500)
+    visibility: Optional[Literal['private', 'public']] = 'private'
 
 
 class ClubPatch(BaseModel):
     name: Optional[str] = None
+    visibility: Optional[Literal['private', 'public']] = None
     description: Optional[str] = None
     book: Optional[dict] = None  # {book_id?, title, author?}
     weekly_passage: Optional[dict] = None  # {text, page?, book_title?}
@@ -1373,6 +1381,7 @@ class ClubJoin(BaseModel):
 
 class ClubMessageBody(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
+    page: Optional[int] = Field(None, ge=1, le=20000)
 
 
 class ChallengeProgress(BaseModel):
@@ -1401,6 +1410,9 @@ async def _club_or_404(club_id: str, user_id: str, member_required: bool = True)
 
 @api.post("/clubs")
 async def create_club(body: ClubCreate, user=Depends(get_current_user)):
+    status = await premium_status_for(user["user_id"])
+    if not status["is_premium"]:
+        raise HTTPException(status_code=402, detail="premium_required")
     club_id = new_id("cl")
     code = _club_code()
     while await db.clubs.find_one({"code": code}):
@@ -1409,6 +1421,7 @@ async def create_club(body: ClubCreate, user=Depends(get_current_user)):
         "club_id": club_id,
         "name": body.name.strip(),
         "description": (body.description or "").strip(),
+        "visibility": body.visibility or "private",
         "code": code,
         "owner_id": user["user_id"],
         "members": [user["user_id"]],
@@ -1427,8 +1440,165 @@ async def list_clubs(user=Depends(get_current_user)):
         c["members_count"] = len(c.get("members", []))
         c["messages_count"] = await db.club_messages.count_documents({"club_id": c["club_id"]})
         c["is_owner"] = c["owner_id"] == user["user_id"]
+        c.setdefault("visibility", "private")
         c.pop("members", None)
     return {"clubs": clubs}
+
+
+@api.get("/clubs/discover")
+async def discover_clubs(user=Depends(get_current_user)):
+    """Cercles publics que je peux rejoindre librement."""
+    clubs = await db.clubs.find(
+        {"visibility": "public", "members": {"$ne": user["user_id"]}},
+        {"_id": 0, "code": 0},
+    ).sort("created_at", -1).to_list(50)
+    for c in clubs:
+        c["members_count"] = len(c.get("members", []))
+        c.pop("members", None)
+    return {"clubs": clubs}
+
+
+@api.post("/clubs/{club_id}/join")
+async def join_public_club(club_id: str, user=Depends(get_current_user)):
+    """Rejoindre un cercle public directement (les cercles fermés exigent le code)."""
+    club = await db.clubs.find_one({"club_id": club_id}, {"_id": 0, "visibility": 1, "members": 1})
+    if not club:
+        raise HTTPException(status_code=404, detail="not_found")
+    if club.get("visibility") != "public" and user["user_id"] not in club.get("members", []):
+        raise HTTPException(status_code=403, detail="private_club")
+    await db.clubs.update_one({"club_id": club_id}, {"$addToSet": {"members": user["user_id"]}})
+    return {"club_id": club_id}
+
+
+# ---- Progression partagée sur la lecture commune ----
+def _norm_title(s: str) -> str:
+    s = unicodedata.normalize("NFD", (s or "").lower())
+    return re.sub(r"\W+", "", "".join(c for c in s if unicodedata.category(c) != "Mn"))
+
+
+def _progress_entry(b: dict) -> dict:
+    wp = b.get("type") == "wattpad"
+    prog = (b.get("progress_chapter") if wp else b.get("progress_page")) or 0
+    total = b.get("chapters") if wp else b.get("pages")
+    pct = 100 if b.get("status") == "termine" else (min(100, round(prog / total * 100)) if total and prog else 0)
+    return {"page": prog, "total": total, "pct": pct, "status": b.get("status"), "unit": "chapitre" if wp else "page"}
+
+
+async def _club_member_progress(club: dict) -> list:
+    """Progression de chaque membre sur la lecture commune (correspondance ISBN ou titre normalisé)."""
+    book = club.get("book") or {}
+    if not book.get("title"):
+        return []
+    tnorm = _norm_title(book["title"])
+    members = club.get("members", [])
+    hidden = set(club.get("hidden_progress", []))
+    users = await db.users.find({"user_id": {"$in": members}}, {"_id": 0, "user_id": 1, "pseudo": 1, "picture": 1}).to_list(200)
+    all_books = await db.books.find(
+        {"user_id": {"$in": members}},
+        {"_id": 0, "user_id": 1, "title": 1, "isbn": 1, "pages": 1, "chapters": 1, "progress_page": 1, "progress_chapter": 1, "status": 1, "type": 1},
+    ).to_list(2000)
+    by_user: dict = {}
+    for b in all_books:
+        match = (book.get("isbn") and b.get("isbn") == book.get("isbn")) or _norm_title(b.get("title")) == tnorm
+        if match and b["user_id"] not in by_user:
+            by_user[b["user_id"]] = b
+    out = []
+    for u in users:
+        entry = {"user_id": u["user_id"], "pseudo": u.get("pseudo"), "picture": u.get("picture"),
+                 "hidden": u["user_id"] in hidden, "page": None, "total": None, "pct": 0, "status": None, "unit": "page"}
+        b = by_user.get(u["user_id"])
+        if b and not entry["hidden"]:
+            entry.update(_progress_entry(b))
+        out.append(entry)
+    out.sort(key=lambda x: (-(x["pct"] or 0), (x["pseudo"] or "").lower()))
+    return out
+
+
+async def _my_club_progress(club: dict, user_id: str) -> Optional[dict]:
+    """Ma progression sur la lecture commune du cercle (None si je n'ai pas le livre)."""
+    book = club.get("book") or {}
+    if not book.get("title"):
+        return None
+    tnorm = _norm_title(book["title"])
+    mine = await db.books.find({"user_id": user_id}, {"_id": 0, "title": 1, "isbn": 1, "pages": 1, "chapters": 1, "progress_page": 1, "progress_chapter": 1, "status": 1, "type": 1}).to_list(500)
+    for b in mine:
+        if (book.get("isbn") and b.get("isbn") == book.get("isbn")) or _norm_title(b.get("title")) == tnorm:
+            return _progress_entry(b)
+    return None
+
+
+@api.get("/clubs/{club_id}/progress")
+async def club_progress(club_id: str, user=Depends(get_current_user)):
+    club = await _club_or_404(club_id, user["user_id"])
+    rows = await _club_member_progress(club)
+    total_m = len(rows)
+    readers = [r for r in rows if not r["hidden"] and ((r["page"] or 0) > 0 or r["status"] == "termine")]
+    summary = None
+    if readers and total_m > 1:
+        unit = readers[0]["unit"]
+        finished = len([r for r in readers if r["status"] == "termine"])
+        if finished == total_m:
+            summary = "Tout le monde a terminé — place à la discussion !"
+        elif finished >= 3:
+            summary = f"{finished} membres ont terminé — prêts pour la discussion ?"
+        else:
+            pages = sorted([r["page"] or 0 for r in readers])
+            med = pages[len(pages) // 2]
+            if med > 0:
+                passed = len([r for r in readers if (r["page"] or 0) >= med])
+                summary = f"{passed} membre{'s' if passed > 1 else ''} sur {total_m} {'ont' if passed > 1 else 'a'} dépassé la {unit} {med}"
+    return {"members": rows, "summary": summary, "my_hidden": user["user_id"] in (club.get("hidden_progress") or [])}
+
+
+class ProgressVisibility(BaseModel):
+    visible: bool
+
+
+@api.post("/clubs/{club_id}/progress/visibility")
+async def set_progress_visibility(club_id: str, body: ProgressVisibility, user=Depends(get_current_user)):
+    await _club_or_404(club_id, user["user_id"])
+    op = "$pull" if body.visible else "$addToSet"
+    await db.clubs.update_one({"club_id": club_id}, {op: {"hidden_progress": user["user_id"]}})
+    return {"visible": body.visible}
+
+
+async def _notify_clubs_progress(user: dict, book: dict, upd: dict):
+    """Notifications sobres aux cercles quand je progresse sur la lecture commune (paliers 25/50/75 % et fin)."""
+    prog_key = "progress_chapter" if book.get("type") == "wattpad" else "progress_page"
+    new_prog = upd.get(prog_key)
+    finished = upd.get("status") == "termine" and book.get("status") != "termine"
+    if new_prog is None and not finished:
+        return
+    tnorm = _norm_title(book.get("title"))
+    clubs = await db.clubs.find({"members": user["user_id"], "book": {"$ne": None}},
+                                {"_id": 0, "club_id": 1, "name": 1, "members": 1, "book": 1, "hidden_progress": 1}).to_list(50)
+    for club in clubs:
+        cb = club.get("book") or {}
+        isbn_match = cb.get("isbn") and cb.get("isbn") == book.get("isbn")
+        if not isbn_match and _norm_title(cb.get("title")) != tnorm:
+            continue
+        if user["user_id"] in (club.get("hidden_progress") or []):
+            continue
+        others = [m for m in club.get("members", []) if m != user["user_id"]]
+        if not others:
+            continue
+        unit = "chapitre" if book.get("type") == "wattpad" else "page"
+        total = book.get("chapters") if unit == "chapitre" else book.get("pages")
+        if finished:
+            rows = await _club_member_progress(club)
+            fin = len([r for r in rows if r["status"] == "termine" and not r["hidden"]])
+            msg = (f"{fin} membres ont terminé — prêt·e pour la discussion ?" if fin >= 3
+                   else f"{user['pseudo']} a terminé la lecture commune")
+            await send_push(others, {"title": club.get("name", "Ton cercle"), "message": msg, "action_url": f"/club/{club['club_id']}"})
+        elif new_prog is not None and total:
+            old_pct = (book.get(prog_key) or 0) / total * 100
+            new_pct = new_prog / total * 100
+            if any(o < th <= new_pct for th in (25, 50, 75) for o in [old_pct]):
+                await send_push(others, {
+                    "title": club.get("name", "Ton cercle"),
+                    "message": f"{user['pseudo']} vient de dépasser la {unit} {new_prog}",
+                    "action_url": f"/club/{club['club_id']}",
+                })
 
 
 @api.post("/clubs/join")
@@ -1642,12 +1812,22 @@ async def club_messages(club_id: str, user=Depends(get_current_user)):
         if r.modified_count == 1:
             await _post_recap(club)
     msgs = await db.club_messages.find({"club_id": club_id}, {"_id": 0}).sort("created_at", 1).to_list(200)
+    # Anti-spoiler : un message rattaché à une page reste flouté si je n'ai pas atteint ce point
+    my_prog = await _my_club_progress(club, user["user_id"])
     uids = list({m["user_id"] for m in msgs if not m.get("is_system")})
     umap = {}
     if uids:
         ul = await db.users.find({"user_id": {"$in": uids}}, {"_id": 0, "user_id": 1, "pseudo": 1, "handle": 1}).to_list(200)
         umap = {u["user_id"]: u for u in ul}
     for m in msgs:
+        p = m.get("page")
+        if p and not m.get("is_system") and m.get("user_id") != user["user_id"]:
+            if my_prog is None:
+                m["beyond"] = True
+            else:
+                m["beyond"] = my_prog["status"] != "termine" and p > (my_prog["page"] or 0)
+        else:
+            m["beyond"] = False
         if m.get("is_system"):
             m["author"] = {"pseudo": "Manent", "handle": "manent"}
             m["is_me"] = False
@@ -1665,6 +1845,7 @@ async def post_club_message(club_id: str, body: ClubMessageBody, user=Depends(ge
         "club_id": club_id,
         "user_id": user["user_id"],
         "text": body.text.strip(),
+        "page": body.page,
         "created_at": now_utc(),
     }
     await db.club_messages.insert_one(doc.copy())

@@ -37,6 +37,7 @@ export default function Community() {
   const [clubModal, setClubModal] = useState(false);
   const [clubName, setClubName] = useState('');
   const [clubDesc, setClubDesc] = useState('');
+  const [clubVisibility, setClubVisibility] = useState<'private' | 'public'>('private');
   const [joinModal, setJoinModal] = useState(false);
   const [joinCode, setJoinCode] = useState('');
   const [joinError, setJoinError] = useState('');
@@ -76,8 +77,8 @@ export default function Community() {
     if (!clubName.trim()) return;
     setCreating(true);
     try {
-      const c = await api<any>('/clubs', { method: 'POST', body: JSON.stringify({ name: clubName.trim(), description: clubDesc }) });
-      setClubModal(false); setClubName(''); setClubDesc('');
+      const c = await api<any>('/clubs', { method: 'POST', body: JSON.stringify({ name: clubName.trim(), description: clubDesc, visibility: clubVisibility }) });
+      setClubModal(false); setClubName(''); setClubDesc(''); setClubVisibility('private');
       await load();
       router.push({ pathname: '/club/[id]', params: { id: c.club_id } });
     } finally { setCreating(false); }
@@ -218,7 +219,21 @@ export default function Community() {
             <Text style={styles.modalTitle}>{t('Nouveau cercle')}</Text>
             <TextInput testID="new-club-name" value={clubName} onChangeText={setClubName} placeholder={t('Nom (ex: Les soirées Voltaire)')} placeholderTextColor={colors.clay} style={styles.input} />
             <TextInput testID="new-club-desc" value={clubDesc} onChangeText={setClubDesc} placeholder={t('Description (optionnel)')} placeholderTextColor={colors.clay} style={[styles.input, { height: 80 }]} multiline />
-            <Text style={styles.modalHint}>{t('Un code d’invitation sera généré pour tes proches.')}</Text>
+            <View style={{ gap: spacing.sm }}>
+              {(['private', 'public'] as const).map(v => (
+                <Pressable key={v} testID={`club-visibility-${v}`} onPress={() => setClubVisibility(v)} style={[styles.visCard, clubVisibility === v && styles.visCardActive]}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Feather name={v === 'private' ? 'lock' : 'globe'} size={14} color={clubVisibility === v ? colors.creme : colors.chambray} />
+                    <Text style={[styles.visLabel, clubVisibility === v && { color: colors.creme }]}>
+                      {v === 'private' ? t('Cercle fermé') : t('Cercle public')}
+                    </Text>
+                  </View>
+                  <Text style={[styles.visDesc, clubVisibility === v && { color: colors.creme, opacity: 0.9 }]}>
+                    {v === 'private' ? t('Sur invitation uniquement — un code sera généré pour tes proches.') : t('Visible par toute la communauté, chacun peut le rejoindre librement.')}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
             <View style={{ height: spacing.md }} />
             <PrimaryButton testID="btn-create-club" title={t('Créer le cercle')} onPress={createClub} loading={creating} disabled={!clubName.trim()} />
             <GhostButton title={t('Annuler')} onPress={() => setClubModal(false)} />

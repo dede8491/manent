@@ -8,6 +8,7 @@ import { api } from '@/src/api';
 import { BookCover } from '@/src/components/BookCover';
 import ManentLoader from '@/src/components/ManentLoader';
 import { timeAgo, dateFr } from '@/src/timeago';
+import { InfoTooltip } from '@/src/components/InfoTooltip';
 import { useT, useLang } from '@/src/i18n';
 
 type ClubBook = {
@@ -48,6 +49,7 @@ export function ClubHome({ clubs, onOpenCircle, onCreateCircle, onJoinCircle }: 
   const [creatingPoll, setCreatingPoll] = useState(false);
   const [sort, setSort] = useState<'tous' | 'populaires' | 'nouveaux' | 'notes'>('tous');
   const [loaded, setLoaded] = useState(false);
+  const [pubClubs, setPubClubs] = useState<any[]>([]);
 
   useFocusEffect(React.useCallback(() => {
     (async () => {
@@ -70,6 +72,10 @@ export function ClubHome({ clubs, onOpenCircle, onCreateCircle, onJoinCircle }: 
       } catch {}
       try {
         setGami(await api<any>('/club/gamification'));
+      } catch {}
+      try {
+        const pc = await api<{ clubs: any[] }>('/clubs/discover');
+        setPubClubs(pc.clubs);
       } catch {}
       setLoaded(true);
     })();
@@ -100,6 +106,14 @@ export function ClubHome({ clubs, onOpenCircle, onCreateCircle, onJoinCircle }: 
       setEvents(prev => [...prev, e].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
       setEventModal(false); setEvTitle(''); setEvDate(''); setEvLoc('');
     } finally { setCreatingEvent(false); }
+  };
+
+  const joinPublic = async (cid: string) => {
+    try {
+      await api(`/clubs/${cid}/join`, { method: 'POST' });
+      setPubClubs(prev => prev.filter(c => c.club_id !== cid));
+      onOpenCircle(cid);
+    } catch {}
   };
 
   const vote = async (pollId: string, option: number) => {
@@ -318,17 +332,38 @@ export function ClubHome({ clubs, onOpenCircle, onCreateCircle, onJoinCircle }: 
       )}
 
       <View style={{ marginTop: spacing.xl }}>
-        <Text style={styles.sectionLabel}>{t('Tes cercles privés')}</Text>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={[styles.sectionLabel, { paddingHorizontal: 0, marginBottom: 0 }]}>{t('Tes cercles')}</Text>
+          <InfoTooltip
+            testID="info-circles"
+            title={t('Cercles de lecture')}
+            text={t("Un cercle est ton mini club de lecture, avec ses lectures communes, ses messages et ses défis. Fermé (cadenas), il ne s'ouvre qu'avec son code d'invitation — parfait entre amis ou en famille. Public (globe), il apparaît dans « Cercles publics à rejoindre » et toute la communauté peut y entrer librement. Avec ton abonnement, tu peux en créer autant que tu veux.")}
+          />
+        </View>
         <View style={{ paddingHorizontal: spacing.xl, gap: spacing.sm }}>
           {clubs.map((item: any) => (
             <Pressable key={item.club_id} testID={`club-${item.club_id}`} onPress={() => onOpenCircle(item.club_id)} style={styles.circleCard}>
+              <View style={styles.circleAvatar}>
+                <Feather name={item.visibility === 'public' ? 'globe' : 'lock'} size={15} color={colors.chambray} />
+              </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.circleName}>{item.name}</Text>
-                <Text style={styles.circleMeta}>{item.members_count} {t(item.members_count > 1 ? 'MEMBRES' : 'MEMBRE')} · {item.messages_count} {t(item.messages_count > 1 ? 'MESSAGES' : 'MESSAGE')}{item.is_owner ? ` · ${t('TON CERCLE')}` : ''}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <Text style={styles.circleName} numberOfLines={1}>{item.name}</Text>
+                  {item.is_owner && <Text style={styles.ownerBadge}>{t('TON CERCLE')}</Text>}
+                </View>
+                <Text style={styles.circleMeta}>
+                  {item.visibility === 'public' ? t('PUBLIC') : t('FERMÉ')} · {item.members_count} {t(item.members_count > 1 ? 'MEMBRES' : 'MEMBRE')} · {item.messages_count} {t(item.messages_count > 1 ? 'MESSAGES' : 'MESSAGE')}
+                </Text>
               </View>
               <Feather name="chevron-right" size={18} color={colors.clay} />
             </Pressable>
           ))}
+          {clubs.length === 0 && (
+            <View style={styles.circleEmpty}>
+              <Text style={styles.emptyTitle}>{t('Ton premier cercle t’attend.')}</Text>
+              <Text style={styles.emptySub}>{t('Crée-le fermé pour tes proches, ou public pour toute la communauté.')}</Text>
+            </View>
+          )}
           <View style={{ flexDirection: 'row', gap: spacing.sm }}>
             <Pressable testID="btn-new-club" onPress={onCreateCircle} style={[styles.circleAction, { flex: 1 }]}>
               <Feather name="plus" size={16} color={colors.chambray} />
@@ -336,10 +371,29 @@ export function ClubHome({ clubs, onOpenCircle, onCreateCircle, onJoinCircle }: 
             </Pressable>
             <Pressable testID="btn-join-club" onPress={onJoinCircle} style={[styles.circleAction, { flex: 1 }]}>
               <Feather name="key" size={15} color={colors.chambray} />
-              <Text style={styles.circleActionText}>{t('Rejoindre')}</Text>
+              <Text style={styles.circleActionText}>{t('J’ai un code')}</Text>
             </Pressable>
           </View>
         </View>
+
+        {pubClubs.length > 0 && (
+          <View style={{ marginTop: spacing.lg }}>
+            <Text style={styles.sectionLabel}>{t('Cercles publics à rejoindre')}</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm, paddingHorizontal: spacing.xl }}>
+              {pubClubs.map((c: any) => (
+                <View key={c.club_id} style={styles.pubCard} testID={`pub-club-${c.club_id}`}>
+                  <View style={styles.circleAvatar}><Feather name="globe" size={15} color={colors.chambray} /></View>
+                  <Text style={styles.pubName} numberOfLines={1}>{c.name}</Text>
+                  {!!c.description && <Text style={styles.pubDesc} numberOfLines={2}>{c.description}</Text>}
+                  <Text style={styles.circleMeta}>{c.members_count} {t(c.members_count > 1 ? 'MEMBRES' : 'MEMBRE')}</Text>
+                  <Pressable testID={`join-pub-${c.club_id}`} onPress={() => joinPublic(c.club_id)} style={styles.pubJoinBtn}>
+                    <Text style={styles.pubJoinText}>{t('Rejoindre')}</Text>
+                  </Pressable>
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        )}
       </View>
 
       <Modal visible={eventModal} transparent animationType="slide" onRequestClose={() => setEventModal(false)}>
@@ -429,6 +483,15 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   postMeta: { fontFamily: fonts.bodyMedium, fontSize: 10.5, color: colors.clay, letterSpacing: 0.8, textTransform: 'uppercase' },
   postText: { fontFamily: fonts.display, fontSize: 15, color: colors.espresso, marginTop: 4, lineHeight: 21 },
   circleCard: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },
+  circleAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.glacier, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center' },
+  ownerBadge: { fontFamily: fonts.bodyMedium, fontSize: 8, color: colors.creme, backgroundColor: colors.clay, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 3, letterSpacing: 1 },
+  sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: spacing.xl, marginBottom: spacing.sm },
+  circleEmpty: { alignItems: 'center', paddingVertical: spacing.lg, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.borderSoft, paddingHorizontal: spacing.md },
+  pubCard: { width: 190, backgroundColor: colors.bisque, borderRadius: radius.md, padding: spacing.md, gap: 4 },
+  pubName: { fontFamily: fonts.displayMedium, fontSize: 17, color: colors.espresso, marginTop: 4 },
+  pubDesc: { fontFamily: fonts.body, fontSize: 12, color: colors.clay, lineHeight: 17 },
+  pubJoinBtn: { marginTop: 8, height: 34, borderRadius: radius.pill, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
+  pubJoinText: { fontFamily: fonts.bodyMedium, fontSize: 12.5, color: colors.creme },
   circleName: { fontFamily: fonts.displayMedium, fontSize: 17, color: colors.espresso },
   circleMeta: { fontFamily: fonts.bodyMedium, fontSize: 9.5, color: colors.clay, letterSpacing: 1, marginTop: 3 },
   circleAction: { height: 44, borderRadius: radius.md, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.chambray, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.creme },

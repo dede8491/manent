@@ -293,3 +293,19 @@ Audit (read-only) : CONDITIONAL PASS, 3 failles moyennes — toutes corrigées e
 - Thème « argent » renommé « finance » : THEMES (server.py), défauts capture.tsx, migration DB users.themes/quotes.themes (0 doc concerné — base propre).
 - Suggestions par thème démultipliées : /themes/{theme}/page lance 5 recherches en parallèle (Google ×3 : « {thème} roman », « {thème} essai », « {thème} » + Open Library ×2 : « subject:{thème} language:fre », « {thème} language:fre »), tri éditions françaises d'abord, jusqu'à **24 livres** (au lieu de 8), summary transmis à la fiche découverte. _search_google/_search_openlibrary acceptent désormais max_results/limit. Cache 7 j purgé.
 - Vérifié : finance → 24 livres (Rich Dad Poor Dad, Psychology of Money, Intelligent Investor…), amour → 24 livres. Google 429 toléré grâce à Open Library filtré langue française.
+
+## Itération 35 — Cercles publics/fermés + Progression partagée + Voir plus (juin-sept 2026)
+**Cercles publics/privés** (demande : chaque abonné crée son club, public ou fermé) :
+- ClubCreate/ClubPatch : champ `visibility` ('private' défaut | 'public') ; POST /clubs exige premium (402 sinon).
+- GET /clubs/discover (publics non rejoints, code exclu) ; POST /clubs/{id}/join (publics only, 403 si fermé). Routes déclarées AVANT /clubs/{club_id}.
+- UI : modal création avec cartes Fermé (cadenas) / Public (globe) ; ClubHome → section « Tes cercles » modernisée (avatar lock/globe, badge TON CERCLE, meta FERMÉ/PUBLIC) + InfoTooltip « i » (testID info-circles) expliquant cercle fermé vs public + rangée « Cercles publics à rejoindre » avec bouton Rejoindre ; « J'ai un code ».
+**Progression partagée sur la lecture commune** :
+- Helpers `_norm_title`, `_club_member_progress` (correspondance ISBN ou titre normalisé sans accents/casse), `_my_club_progress`.
+- GET /clubs/{id}/progress → members [{pseudo, picture, page, total, pct, status, unit, hidden}] triés par pct + summary (« X membres sur Y ont dépassé la page médiane » / « N membres ont terminé — prêts pour la discussion ? ») + my_hidden.
+- POST /clubs/{id}/progress/visibility {visible} → hidden_progress[] dans club (masquer sa progression, visible par défaut).
+- Anti-spoiler : ClubMessageBody.page (1-20000) ; GET messages calcule `beyond` (page msg > ma progression, true aussi si je n'ai pas le livre, jamais pour mes propres messages). UI club/[id].tsx : « Au-delà de ta lecture — page N » + « Révéler quand même » (testIDs spoiler-*/reveal-*), champ « p. » dans le composer, tag P. N sous les messages.
+- Notifications sobres : hook `_notify_clubs_progress` dans PATCH /books/{id} — paliers 25/50/75 % (« Flore vient de dépasser la page 142 ») et fin (« N membres ont terminé » si ≥3, sinon « X a terminé la lecture commune ») ; ignoré si progression masquée.
+- Capture → progression proposée : après enregistrement d'une citation avec page > progression actuelle, modale « Tu en es à la page N ? » (testID progress-prompt, boutons yes/no) → PATCH progress. capture.tsx.
+- Section UI « Où en est le club » (club/[id].tsx, testID club-progress-section) : résumé Cormorant, avatars initiales, barres Chambray sur fond Bisque, p. X / Y · Z %, toggle œil « Masquer ma progression ».
+**Voir plus de livres** : pool par thème porté à 60 (requêtes élargies Google 30/20/20 + OL subject/language:fre 40/30) ; theme/[name].tsx → grille 3 colonnes, 12 affichés, bouton « Voir plus de livres » (+12, testID theme-see-more).
+Testé e2e via curl (création publique, discover, join, correspondance titre insensible casse, masquage, beyond, reveal) + screenshots. Comptes/cercle de test supprimés.

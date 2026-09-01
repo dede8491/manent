@@ -19,6 +19,8 @@ export default function ThemePage() {
   const { width } = useWindowDimensions();
   const { name } = useLocalSearchParams<{ name: string }>();
   const [data, setData] = useState<{ stats: { quotes: number; readers: number; books: number }; quotes: Quote[]; suggested_books?: any[]; discover_books?: any[] } | null>(null);
+  const [shownCount, setShownCount] = useState(12);
+  const gridCardW = (width - spacing.xl * 2 - spacing.sm * 2) / 3;
 
   useEffect(() => {
     (async () => {
@@ -102,21 +104,26 @@ export default function ThemePage() {
         {data && (data.discover_books?.length || 0) > 0 && (
           <View style={{ marginTop: spacing.lg }} testID="theme-discover">
             <Text style={styles.suggestLabel}>{t('À découvrir sur ce thème')}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm, paddingHorizontal: spacing.xl }}>
-              {data.discover_books!.map((b: any, i: number) => (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, paddingHorizontal: spacing.xl }}>
+              {data.discover_books!.slice(0, shownCount).map((b: any, i: number) => (
                 <Pressable
                   key={i}
                   testID={`theme-discover-${i}`}
                   onPress={() => router.push({ pathname: '/discover/book', params: { title: b.title, author: b.author || '', cover: b.cover || '', year: b.year || '', summary: b.summary || '' } })}
-                  style={styles.suggestCard}
+                  style={[styles.suggestCard, { width: gridCardW }]}
                 >
-                  <Image source={{ uri: b.cover }} style={styles.suggestCover} resizeMode="cover" />
+                  <Image source={{ uri: b.cover }} style={[styles.suggestCover, { height: gridCardW * 1.4 }]} resizeMode="cover" />
                   <Text style={styles.suggestTitle} numberOfLines={2}>{b.title}</Text>
                   {!!b.author && <Text style={styles.suggestAuthor} numberOfLines={1}>{b.author}</Text>}
-                  <Text style={styles.suggestCta}>{t('Découvrir')}</Text>
                 </Pressable>
               ))}
-            </ScrollView>
+            </View>
+            {shownCount < (data.discover_books?.length || 0) && (
+              <Pressable testID="theme-see-more" onPress={() => setShownCount(c => c + 12)} style={styles.moreBtn}>
+                <Feather name="plus" size={15} color={colors.chambray} />
+                <Text style={styles.moreBtnText}>{t('Voir plus de livres')}</Text>
+              </Pressable>
+            )}
           </View>
         )}
 
@@ -166,6 +173,8 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   suggestTitle: { fontFamily: fonts.displayMedium, fontSize: 14, color: colors.espresso, lineHeight: 17 },
   suggestAuthor: { fontFamily: fonts.body, fontSize: 11, color: colors.clay, marginTop: 1 },
   suggestCta: { fontFamily: fonts.bodyMedium, fontSize: 9.5, color: colors.chambray, letterSpacing: 1, textTransform: 'uppercase', marginTop: spacing.xs },
+  moreBtn: { marginTop: spacing.md, marginHorizontal: spacing.xl, height: 46, borderRadius: radius.pill, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.chambray, backgroundColor: colors.creme, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  moreBtnText: { fontFamily: fonts.bodyMedium, fontSize: 13.5, color: colors.chambray },
   emptyTitle: { fontFamily: fonts.displayMedium, fontSize: 22, color: colors.espresso, textAlign: 'center' },
   emptySub: { fontFamily: fonts.body, fontSize: 14, color: colors.clay, textAlign: 'center', marginTop: spacing.sm },
 });

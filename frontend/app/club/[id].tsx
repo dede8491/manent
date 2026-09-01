@@ -33,6 +33,9 @@ export default function ClubDetail() {
   const [recoModal, setRecoModal] = useState(false);
   const [recoBook, setRecoBook] = useState<any | null>(null);
   const [recoNote, setRecoNote] = useState('');
+  const [progress, setProgress] = useState<any>(null);
+  const [msgPage, setMsgPage] = useState('');
+  const [revealed, setRevealed] = useState<Set<string>>(new Set());
   const scrollRef = useRef<ScrollView>(null);
 
   const load = useCallback(async () => {
@@ -41,17 +44,30 @@ export default function ClubDetail() {
       setClub(c);
       const m = await api<{ messages: any[] }>(`/clubs/${id}/messages`);
       setMessages(m.messages);
+      if (c.book) {
+        try { setProgress(await api<any>(`/clubs/${id}/progress`)); } catch {}
+      } else setProgress(null);
     } catch {}
   }, [id]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  const toggleMyProgressVisibility = async () => {
+    if (!progress) return;
+    const visible = !!progress.my_hidden;
+    try {
+      await api(`/clubs/${id}/progress/visibility`, { method: 'POST', body: JSON.stringify({ visible }) });
+      setProgress(await api<any>(`/clubs/${id}/progress`));
+    } catch {}
+  };
 
   const send = async () => {
     if (!msg.trim()) return;
     setSending(true);
     try {
-      const m = await api<any>(`/clubs/${id}/messages`, { method: 'POST', body: JSON.stringify({ text: msg.trim() }) });
+      const pageNum = msgPage ? parseInt(msgPage, 10) : undefined;
+      const m = await api<any>(`/clubs/${id}/messages`, { method: 'POST', body: JSON.stringify({ text: msg.trim(), page: pageNum || undefined }) });
       setMessages(prev => [...prev, m]);
-      setMsg('');
+      setMsg(''); setMsgPage('');
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
     } finally { setSending(false); }
   };
@@ -189,6 +205,37 @@ export default function ClubDetail() {
           <Text style={styles.emptyText}>{t('Le livre du club n’est pas encore choisi.')}</Text>
         )}
 
+        {club.book && progress && progress.members?.length > 0 && (
+          <View testID="club-progress-section">
+            <Text style={styles.sectionLabel}>{t('Où en est le club')}</Text>
+            {!!progress.summary && <Text style={styles.progressSummary} testID="club-progress-summary">{t(progress.summary)}</Text>}
+            <View style={{ gap: spacing.sm }}>
+              {progress.members.map((m: any) => (
+                <View key={m.user_id} style={styles.memberRow} testID={`member-progress-${m.user_id}`}>
+                  <View style={styles.memberAvatar}>
+                    <Text style={styles.memberInitial}>{(m.pseudo?.[0] || 'M').toUpperCase()}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <Text style={styles.memberName} numberOfLines={1}>{m.pseudo}</Text>
+                      <Text style={styles.memberPct}>
+                        {m.hidden ? t('Masquée') : m.page == null ? t('Pas encore commencé') : m.status === 'termine' ? t('Terminé') : `${m.unit === 'chapitre' ? t('chap.') : 'p.'} ${m.page}${m.total ? ` / ${m.total}` : ''} · ${m.pct}%`}
+                      </Text>
+                    </View>
+                    <View style={styles.memberBar}>
+                      <View style={[styles.memberFill, { width: `${m.hidden || m.page == null ? 0 : m.pct}%` }]} />
+                    </View>
+                  </View>
+                </View>
+              ))}
+            </View>
+            <Pressable testID="toggle-my-progress" onPress={toggleMyProgressVisibility} style={styles.hideProgressBtn} hitSlop={6}>
+              <Feather name={progress.my_hidden ? 'eye' : 'eye-off'} size={13} color={colors.clay} />
+              <Text style={styles.hideProgressText}>{progress.my_hidden ? t('Afficher ma progression') : t('Masquer ma progression')}</Text>
+            </Pressable>
+          </View>
+        )}
+
         <Text style={styles.sectionLabel}>{t('Passage de la semaine')}</Text>
         {club.weekly_passage ? (
           <View style={styles.passageCard} testID="club-passage">
@@ -295,7 +342,22 @@ export default function ClubDetail() {
             ) : (
               <View key={m.message_id} style={[styles.msg, m.is_me && styles.msgMine]}>
                 {!m.is_me && <Text style={styles.msgAuthor}>{m.author?.pseudo}</Text>}
-                <Text style={[styles.msgText, m.is_me && { color: colors.espresso }]}>{m.text}</Text>
+                {m.beyond && !revealed.has(m.message_id) ? (
+                  <View testID={`spoiler-${m.message_id}`}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Feather name="eye-off" size={12} color={colors.clay} />
+                      <Text style={styles.spoilerLabel}>{t('Au-delà de ta lecture — page {n}', { n: m.page })}</Text>
+                    </View>
+                    <Pressable testID={`reveal-${m.message_id}`} onPress={() => setRevealed(prev => new Set(prev).add(m.message_id))} hitSlop={6}>
+                      <Text style={styles.revealLink}>{t('Révéler quand même')}</Text>
+                    </Pressable>
+                  </View>
+                ) : (
+                  <>
+                    <Text style={[styles.msgText, m.is_me && { color: colors.espresso }]}>{m.text}</Text>
+                    {!!m.page && <Text style={styles.msgPageTag}>{t('p. {n}', { n: m.page })}</Text>}
+                  </>
+                )}
               </View>
             ))}
           </View>
@@ -307,6 +369,16 @@ export default function ClubDetail() {
       </ScrollView>
 
       <View style={[styles.inputBar, { paddingBottom: insets.bottom + spacing.sm }]}>
+        {!!club.book && (
+          <TextInput
+            testID="club-msg-page"
+            value={msgPage} onChangeText={v => setMsgPage(v.replace(/\D/g, '').slice(0, 5))}
+            placeholder={t('p.')}
+            keyboardType="number-pad"
+            placeholderTextColor={colors.clay}
+            style={styles.pageInput}
+          />
+        )}
         <TextInput
           testID="club-msg-input"
           value={msg} onChangeText={setMsg}
@@ -407,6 +479,20 @@ export default function ClubDetail() {
 }
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
+  progressSummary: { fontFamily: fonts.display, fontSize: 16, color: colors.espresso, marginBottom: spacing.md, lineHeight: 22 },
+  memberRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  memberAvatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.bisque, alignItems: 'center', justifyContent: 'center' },
+  memberInitial: { fontFamily: fonts.displayMedium, fontSize: 15, color: colors.espresso },
+  memberName: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.espresso, flexShrink: 1 },
+  memberPct: { fontFamily: fonts.bodyMedium, fontSize: 10.5, color: colors.clay, letterSpacing: 0.5 },
+  memberBar: { height: 5, backgroundColor: colors.bisque, borderRadius: 3, overflow: 'hidden', marginTop: 5 },
+  memberFill: { height: 5, backgroundColor: colors.chambray, borderRadius: 3 },
+  hideProgressBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-end', marginTop: spacing.sm, paddingVertical: 4 },
+  hideProgressText: { fontFamily: fonts.bodyMedium, fontSize: 11.5, color: colors.clay },
+  spoilerLabel: { fontFamily: fonts.bodyMedium, fontSize: 12, color: colors.clay, fontStyle: 'italic' },
+  revealLink: { fontFamily: fonts.bodyMedium, fontSize: 12, color: colors.chambray, marginTop: 6, textDecorationLine: 'underline' },
+  msgPageTag: { fontFamily: fonts.bodyMedium, fontSize: 9.5, color: colors.clay, letterSpacing: 0.8, marginTop: 4, textTransform: 'uppercase' },
+  pageInput: { width: 58, height: 46, borderWidth: 1, borderColor: colors.borderSoft, borderRadius: radius.pill, textAlign: 'center', fontFamily: fonts.body, fontSize: 13, color: colors.espresso, backgroundColor: colors.creme },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSoft, backgroundColor: colors.glacier },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontFamily: fonts.displayMedium, fontSize: 19, color: colors.espresso, flex: 1, textAlign: 'center', marginHorizontal: spacing.sm },
