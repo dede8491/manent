@@ -263,7 +263,7 @@ async def patch_me(body: UserPatch, user=Depends(get_current_user)):
 
 
 THEMES = [
-    "résilience", "argent", "amour", "entrepreneuriat", "foi",
+    "résilience", "finance", "amour", "entrepreneuriat", "foi",
     "leadership", "deuil", "confiance", "famille", "spiritualité",
     "santé", "voyage",
 ]
@@ -326,18 +326,30 @@ async def theme_page(theme: str, user=Depends(get_current_user)):
         discover = cache.get("items") or []
     else:
         try:
+            # Multi-requêtes en parallèle (Google + Open Library) pour un vrai catalogue par thème
             async with httpx.AsyncClient(timeout=12) as http:
-                results = await _search_google(http, f"{theme} roman")
-                if len([r for r in results if r.get("cover")]) < 4:
-                    results += await _search_openlibrary(http, theme)
+                batches = await asyncio.gather(
+                    _search_google(http, f"{theme} roman", 20),
+                    _search_google(http, f"{theme} essai", 12),
+                    _search_google(http, theme, 12),
+                    _search_openlibrary(http, f"subject:{theme} language:fre", 20),
+                    _search_openlibrary(http, f"{theme} language:fre", 15),
+                    return_exceptions=True,
+                )
+            results = []
+            for b in batches:
+                if isinstance(b, list):
+                    results += b
+            # Priorité aux éditions françaises, puis à celles avec couverture
+            results.sort(key=lambda r: (not r.get("_fr"), not r.get("cover")))
             seen2 = {s["title"].strip().lower() for s in suggestions}
             for r in results:
                 ttl = (r.get("title") or "").strip()
                 if not ttl or not r.get("cover") or ttl.lower() in seen2:
                     continue
                 seen2.add(ttl.lower())
-                discover.append({"title": ttl, "author": r.get("author"), "cover": r["cover"], "year": r.get("year")})
-                if len(discover) >= 8:
+                discover.append({"title": ttl, "author": r.get("author"), "cover": r["cover"], "year": r.get("year"), "summary": r.get("summary")})
+                if len(discover) >= 24:
                     break
             if discover:
                 await db.theme_suggestions.update_one({"theme": theme.lower()}, {"$set": {"at": now_utc(), "items": discover}}, upsert=True)

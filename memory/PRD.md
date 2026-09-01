@@ -288,3 +288,8 @@ Audit (read-only) : CONDITIONAL PASS, 3 failles moyennes — toutes corrigées e
 - Durcissement : router /books/search protégé par auth (401 sans token — le frontend passe toujours par api() avec Bearer), max_length Pydantic (QuoteCreate.text 6000, BookPatch.summary 3000, recap 4000), nettoyage markdown des résumés Open Library (astérisques, liens, sections sources).
 - Non traité (accepté) : CORS wildcard (auth Bearer sans cookies, préview cassable sinon) — P3.
 - Comptes de test créés puis supprimés ; base : admin + démo uniquement.
+
+## Itération 34 — Thème « finance » + catalogue de livres par thème (juin 2026)
+- Thème « argent » renommé « finance » : THEMES (server.py), défauts capture.tsx, migration DB users.themes/quotes.themes (0 doc concerné — base propre).
+- Suggestions par thème démultipliées : /themes/{theme}/page lance 5 recherches en parallèle (Google ×3 : « {thème} roman », « {thème} essai », « {thème} » + Open Library ×2 : « subject:{thème} language:fre », « {thème} language:fre »), tri éditions françaises d'abord, jusqu'à **24 livres** (au lieu de 8), summary transmis à la fiche découverte. _search_google/_search_openlibrary acceptent désormais max_results/limit. Cache 7 j purgé.
+- Vérifié : finance → 24 livres (Rich Dad Poor Dad, Psychology of Money, Intelligent Investor…), amour → 24 livres. Google 429 toléré grâce à Open Library filtré langue française.

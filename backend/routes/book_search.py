@@ -118,12 +118,12 @@ def _norm_key(title: Optional[str], author: Optional[str]) -> str:
     return re.sub(r'[^a-z0-9|]', '', s)
 
 
-async def _search_google(http: httpx.AsyncClient, q: str) -> list:
+async def _search_google(http: httpx.AsyncClient, q: str, max_results: int = 8) -> list:
     out = []
     try:
         r = await http.get(
             "https://www.googleapis.com/books/v1/volumes",
-            params={"q": q, "maxResults": 8, "langRestrict": "fr"},
+            params={"q": q, "maxResults": max_results, "langRestrict": "fr"},
         )
         data = r.json() if r.status_code == 200 else {}
         for it in (data.get("items") or []):
@@ -143,12 +143,12 @@ async def _search_google(http: httpx.AsyncClient, q: str) -> list:
     return out
 
 
-async def _search_openlibrary(http: httpx.AsyncClient, q: str) -> list:
+async def _search_openlibrary(http: httpx.AsyncClient, q: str, limit: int = 10) -> list:
     out = []
     try:
         r = await http.get(
             "https://openlibrary.org/search.json",
-            params={"q": q, "limit": 10,
+            params={"q": q, "limit": limit,
                     "fields": "title,author_name,first_publish_year,isbn,number_of_pages_median,cover_i,language"},
         )
         docs = (r.json() or {}).get("docs", []) if r.status_code == 200 else []

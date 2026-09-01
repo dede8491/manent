@@ -32,7 +32,7 @@ export default function CaptureModal() {
   const [bookId, setBookId] = useState<string | null>(null);
   const [bookModal, setBookModal] = useState(false);
   const [bookQuery, setBookQuery] = useState('');
-  const [themes, setThemes] = useState<string[]>(['résilience','amour','argent','foi','leadership','famille','confiance','deuil','spiritualité','santé','voyage','entrepreneuriat']);
+  const [themes, setThemes] = useState<string[]>(['résilience','amour','finance','foi','leadership','famille','confiance','deuil','spiritualité','santé','voyage','entrepreneuriat']);
   const [customTheme, setCustomTheme] = useState('');
   const [showCustom, setShowCustom] = useState(false);
   const [premium, setPremium] = useState<{ is_premium: boolean; captures_used: number; captures_limit: number } | null>(null);

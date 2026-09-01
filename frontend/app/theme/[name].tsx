@@ -107,7 +107,7 @@ export default function ThemePage() {
                 <Pressable
                   key={i}
                   testID={`theme-discover-${i}`}
-                  onPress={() => router.push({ pathname: '/discover/book', params: { title: b.title, author: b.author || '', cover: b.cover || '', year: b.year || '' } })}
+                  onPress={() => router.push({ pathname: '/discover/book', params: { title: b.title, author: b.author || '', cover: b.cover || '', year: b.year || '', summary: b.summary || '' } })}
                   style={styles.suggestCard}
                 >
                   <Image source={{ uri: b.cover }} style={styles.suggestCover} resizeMode="cover" />
