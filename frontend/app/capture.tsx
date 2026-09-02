@@ -137,8 +137,8 @@ export default function CaptureModal() {
         <View style={{ width: 40, alignItems: 'center' }}>
           <InfoTooltip
             testID="info-capture"
-            title={t('Capturer un passage')}
-            text={t("Photographie une page ou choisis une image : l'IA transcrit le texte pour toi. Relie la citation à un livre de ta bibliothèque, choisis sa visibilité (privée, abonnés ou publique) et garde-la pour toujours.")}
+            title={t('Comment ça marche')}
+            text={t("Photographie une page ou choisis une image : l'IA transcrit le texte pour toi. Tu peux aussi l'écrire ou le coller. Relie la citation à un livre et à sa page, choisis sa visibilité (privée, abonnés ou publique) et garde-la pour toujours. Depuis la citation, tu retrouveras le livre et pourras marquer cette page comme lue.")}
           />
         </View>
       </View>

@@ -104,13 +104,13 @@ export default function Community() {
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
           <Text style={styles.h1}>{tab === 'boards' ? t('Tes tableaux') : t('Club de lecture')}</Text>
-          <InfoTooltip
-            testID="info-community"
-            title={tab === 'boards' ? t('Tes tableaux') : t('Le Club de lecture')}
-            text={tab === 'boards'
-              ? t("Tes tableaux fonctionnent comme des moodboards : épingle tes citations par thème (Résilience, Amour, Nuit…). Un tableau peut rester privé, devenir public sur ton profil, ou collaboratif pour épingler à plusieurs.")
-              : t("Le Club réunit la communauté autour d'un Livre du mois élu par sondage. Rejoins une lecture, discute chapitre par chapitre, participe aux événements et gagne des points au challenge de l'année.")}
-          />
+          {tab === 'boards' && (
+            <InfoTooltip
+              testID="info-community"
+              title={t('Comment ça marche')}
+              text={t("Tes tableaux fonctionnent comme des moodboards : épingle tes citations par thème (Résilience, Amour, Nuit…). Un tableau peut rester privé, devenir public sur ton profil, ou collaboratif pour épingler à plusieurs.")}
+            />
+          )}
         </View>
         <Text style={styles.sub}>{tab === 'boards' ? t('Épingle les passages qui te ressemblent.') : t('Découvrez, lisez et discutez ensemble.')}</Text>
         <View style={styles.segmentRow}>

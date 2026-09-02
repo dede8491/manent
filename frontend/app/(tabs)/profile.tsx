@@ -77,8 +77,8 @@ export default function Profile() {
       <View style={{ alignItems: 'flex-end', paddingHorizontal: spacing.xl }}>
         <InfoTooltip
           testID="info-profile"
-          title={t('Ton profil')}
-          text={t("Ton espace personnel : tes statistiques de lecture, ta série de jours d'affilée, tes tableaux et tes thèmes. Tape sur ton avatar pour changer ta photo, et sur Paramètres pour régler la langue, le thème et la confidentialité.")}
+          title={t('Comment ça marche')}
+          text={t("Tes statistiques, ta série de jours, ton objectif de l'année et tes badges. « Recommandations » rassemble les livres que des lectrices t'ont envoyés ; « Partager ma bibliothèque » crée un lien ou une image pour tes réseaux. Tape sur ton avatar pour changer ta photo, et sur Paramètres pour la langue, le mode sombre et la confidentialité.")}
         />
       </View>
       <View style={styles.header}>

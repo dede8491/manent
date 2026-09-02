@@ -96,8 +96,8 @@ export default function Library() {
             <Text style={styles.h1}>{t('Bibliothèque')}</Text>
             <InfoTooltip
               testID="info-library"
-              title={t('Ta bibliothèque')}
-              text={t("Range tes lectures en trois étapes : À lire, En cours, Terminés. Ta progression se met à jour à mesure que tu avances dans les pages. L'onglet Citations rassemble tous les passages que tu as capturés, pour les retoucher ou changer leur visibilité en un geste.")}
+              title={t('Comment ça marche')}
+              text={t("Le « + » ajoute une lecture par titre, ISBN ou Wattpad. Tes livres se rangent en trois étapes : Liste de lecture, En cours, Terminés. La liste de lecture s'ordonne dans « Lecture suivante », le prochain livre en tête. Sur l'onglet Citations, le « + » sert à écrire un passage ; sélectionnes-en plusieurs pour changer leur visibilité d'un geste.")}
             />
           </View>
           <Pressable testID="btn-library-add" onPress={() => (seg === 'citations' ? router.push('/capture') : setAddSheet(true))} style={styles.addBtn}>

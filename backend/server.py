@@ -774,6 +774,7 @@ async def patch_book(book_id: str, body: BookPatch, user=Depends(get_current_use
         upd["is_rereading"] = True
         upd.setdefault(prog_key, 0)
     if upd:
+        upd["updated_at"] = now_utc()
         await db.books.update_one({"book_id": book_id, "user_id": user["user_id"]}, {"$set": upd})
         # Clubs : progression partagée + notifications sobres sur la lecture commune
         if "progress_page" in upd or "progress_chapter" in upd or upd.get("status") == "termine":
@@ -2557,15 +2558,24 @@ async def home_discover(user=Depends(get_current_user)):
     )
     # Livres primés
     awarded = await db.featured_books.find({"cover": {"$ne": None}}, {"_id": 0}).to_list(20)
-    # Les plus lus (agrégés sur toutes les bibliothèques + citations)
-    pipeline = [
+    # Les plus lus cette semaine : livres ajoutés, avancés ou terminés au cours des 7 derniers
+    # jours, comptés en lectrices distinctes. Repli sur l'ensemble des bibliothèques si la
+    # semaine est trop calme (moins de 4 titres), avec popular_scope = "all".
+    week_ago = now_utc() - timedelta(days=7)
+    group_stage = [
         {"$group": {"_id": {"$toLower": "$title"}, "title": {"$first": "$title"}, "author": {"$first": "$author"},
-                    "cover": {"$max": "$cover"}, "readers": {"$addToSet": "$user_id"}}},
-        {"$project": {"_id": 0, "title": 1, "author": 1, "cover": 1, "readers_count": {"$size": "$readers"}}},
+                    "cover": {"$max": "$cover"}, "catalog_id": {"$max": "$catalog_id"}, "readers": {"$addToSet": "$user_id"}}},
+        {"$project": {"_id": 0, "title": 1, "author": 1, "cover": 1, "catalog_id": 1, "readers_count": {"$size": "$readers"}}},
         {"$sort": {"readers_count": -1}},
         {"$limit": 8},
     ]
-    popular = await db.books.aggregate(pipeline).to_list(8)
+    week_match = {"$match": {"type": {"$ne": "etude"}, "$or": [
+        {"created_at": {"$gte": week_ago}}, {"finished_at": {"$gte": week_ago}}, {"updated_at": {"$gte": week_ago}}]}}
+    popular = await db.books.aggregate([week_match] + group_stage).to_list(8)
+    popular_scope = "week"
+    if len(popular) < 4:
+        popular = await db.books.aggregate([{"$match": {"type": {"$ne": "etude"}}}] + group_stage).to_list(8)
+        popular_scope = "all"
     # Couvertures manquantes : jamais résolues pendant la requête (repli affiché, enrichissement en fond)
     # Collections thématiques : thèmes les plus épinglés + couvertures associées
     collections = []
@@ -2592,6 +2602,7 @@ async def home_discover(user=Depends(get_current_user)):
         "resume": resume,
         "awarded": awarded,
         "popular": popular,
+        "popular_scope": popular_scope,
         "new_books": await _cached_new_books(),
         "collections": collections,
         "boards": boards,

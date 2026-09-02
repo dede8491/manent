@@ -109,7 +109,7 @@ export default function DiscoverBook() {
           <PrimaryButton testID="discover-add" title={t('Ajouter à ma bibliothèque')} onPress={add} loading={adding} style={{ alignSelf: 'stretch' }} />
         </View>
       </ScrollView>
-      <ShareBookSheet visible={shareSheet} onClose={() => setShareSheet(false)} book={{ catalog_id: catalog_id || meta?.catalog_id, title: title || '', author: author || '' }} />
+      <ShareBookSheet visible={shareSheet} onClose={() => setShareSheet(false)} book={{ catalog_id: catalog_id || meta?.catalog_id, title: title || '', author: author || '', cover: cover || meta?.cover }} />
     </View>
   );
 }

@@ -315,7 +315,7 @@ export default function BookDetail() {
               <InfoTooltip
                 testID="info-book"
                 title={t('Comment ça marche')}
-                text={t("Fais vivre ta lecture : mets à jour ta page pour suivre ta progression, note le livre une fois terminé, et retrouve toutes les citations que tu y as capturées. Les flashcards et la fiche de lecture t'aident à retenir l'essentiel.")}
+                text={t("Mets à jour ta page, ou photographie-la, pour suivre ta progression. Une fois terminé, note le livre : tes étoiles nourrissent « Pour toi ». Le résumé est la quatrième de couverture ; ton récapitulatif, ce qu'il te laisse. L'icône de partage recommande le livre à une lectrice ou à ton club. Tes citations du livre sont en bas.")}
               />
               <Pressable onPress={() => setShareSheet(true)} testID="book-share" style={styles.iconBtn}>
                 <Feather name="share" size={19} color={colors.espresso} />
@@ -364,8 +364,15 @@ export default function BookDetail() {
           <View style={styles.finishedBox} testID="finished-banner">
             <Feather name="award" size={16} color={colors.chambray} />
             <View style={{ flex: 1 }}>
-              <Text style={styles.finishedText}>{t('Bravo ! Note ta lecture avec les étoiles ci-dessus, et garde-en une trace dans ta fiche.')}</Text>
-              <Pressable testID="btn-next-reading" onPress={() => router.push('/queue')} hitSlop={6} style={{ marginTop: 6 }}>
+              <Text style={styles.finishedText}>{t('Bravo. Note ta lecture en un geste : tes étoiles nourrissent « Pour toi ».')}</Text>
+              <View style={{ flexDirection: 'row', gap: 6, marginTop: 8 }}>
+                {[1,2,3,4,5].map(i => (
+                  <Pressable key={i} testID={`finished-star-${i}`} onPress={async () => { setRating(i); await saveField({ rating: i }); }} hitSlop={4}>
+                    <Feather name="star" size={22} color={colors.chambray} style={{ opacity: i <= rating ? 1 : 0.3 }} />
+                  </Pressable>
+                ))}
+              </View>
+              <Pressable testID="btn-next-reading" onPress={() => router.push('/queue')} hitSlop={6} style={{ marginTop: 8 }}>
                 <Text style={styles.nextReading}>{t('Passer à la lecture suivante')}  ›</Text>
               </Pressable>
             </View>
@@ -597,7 +604,7 @@ export default function BookDetail() {
             </Pressable>
       </BottomSheet>
 
-      <ShareBookSheet visible={shareSheet} onClose={() => setShareSheet(false)} book={{ catalog_id: book.catalog_id, title: book.title, author: book.author }} />
+      <ShareBookSheet visible={shareSheet} onClose={() => setShareSheet(false)} book={{ catalog_id: book.catalog_id, title: book.title, author: book.author, cover: book.cover }} />
 
       <BottomSheet visible={sumModal} onClose={() => setSumModal(false)} title={t('Résumé du livre')} testID="sheet-summary">
             <TextInput

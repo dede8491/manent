@@ -154,6 +154,74 @@ root_router.add_api_route("/@{handle}", _profile_page, response_class=HTMLRespon
 root_router.add_api_route("/@{handle}/bibliotheque", _library_page, response_class=HTMLResponse)
 
 
+# ---------------------------------------------------------------- Pages légales publiques (exigées par les stores)
+PRIVACY_FR = """Manent respecte le RGPD (Règlement général sur la protection des données).
+
+Ce que nous collectons : ton e-mail, ton pseudo, tes livres, citations, tableaux, clubs, recommandations et statistiques de lecture. Rien d'autre.
+
+Ce que nous en faisons : uniquement faire fonctionner l'app, y compris les propositions « Pour toi », calculées à partir de ta bibliothèque et de tes sujets, jamais partagées. Tes citations restent privées par défaut ; toi seul décides de les rendre publiques.
+
+Ce que nous ne faisons jamais : vendre tes données, les partager avec des annonceurs, ou analyser tes lectures à des fins publicitaires.
+
+Tes droits (articles 15 à 21 du RGPD) : accès, rectification, portabilité (bouton « Télécharger mes données » dans Paramètres) et effacement (bouton « Supprimer mon compte » — suppression immédiate et définitive).
+
+Hébergement : tes données sont stockées de manière sécurisée ; les photos de pages transitent uniquement pour la transcription et ne sont pas conservées par le modèle d'IA.
+
+Contact : bonjour@manentlc.app"""
+
+TERMS_FR = """Conditions d'utilisation — l'essentiel, sans jargon.
+
+1. Manent t'aide à garder ce que tes lectures te laissent. Ton contenu t'appartient, tu nous accordes seulement le droit technique de l'afficher dans l'app.
+
+2. Les citations que tu rends publiques restent de courts extraits relevant du droit de courte citation. Tu t'engages à créditer l'œuvre et à ne pas publier de passages entiers.
+
+3. Respect entre lecteurs : pas de contenu haineux, illégal ou hors sujet dans les clubs, les recommandations et les profils publics. Nous pouvons retirer un contenu signalé.
+
+4. Le Premium est un abonnement facultatif, résiliable à tout moment.
+
+5. Les liens librairies sont affiliés : une commission nous est reversée, sans surcoût pour toi.
+
+6. Nous pouvons faire évoluer l'app ; les changements importants te seront annoncés.
+
+Contact : bonjour@manentlc.app"""
+
+
+def _legal_html(title: str, body: str) -> str:
+    paras = "".join(f"<p>{html.escape(p.strip())}</p>" for p in body.split("\n\n") if p.strip())
+    return f"""<!doctype html><html lang="fr"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>{html.escape(title)} — Manent</title>
+<meta name="robots" content="index,follow"/>
+<style>
+body{{margin:0;font-family:Georgia,'Times New Roman',serif;background:#D2E2EC;color:#3A2119}}
+.wrap{{max-width:680px;margin:0 auto;padding:40px 24px 64px}}
+.mark{{font-style:italic;font-weight:500;font-size:28px}}
+.base{{font-family:Helvetica,Arial,sans-serif;font-size:10px;letter-spacing:2.5px;text-transform:uppercase;color:#957662;margin-bottom:28px}}
+h1{{font-style:italic;font-weight:500;font-size:30px;margin:0 0 20px}}
+p{{font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.65;background:#F5EDE4;border-radius:12px;padding:14px 18px;margin:0 0 12px}}
+a{{color:#79A3C3}}
+footer{{font-family:Helvetica,Arial,sans-serif;font-size:12px;color:#957662;margin-top:28px}}
+</style></head><body><div class="wrap">
+<div class="mark">Manent</div><div class="base">verba volant, scripta manent</div>
+<h1>{html.escape(title)}</h1>{paras}
+<footer>Manent · <a href="{html.escape(PUBLIC_BASE_URL or '/')}">manentlc.app</a></footer>
+</div></body></html>"""
+
+
+async def _privacy_page():
+    return HTMLResponse(_legal_html("Politique de confidentialité", PRIVACY_FR))
+
+
+async def _terms_page():
+    return HTMLResponse(_legal_html("Conditions d'utilisation", TERMS_FR))
+
+
+router.add_api_route("/confidentialite", _privacy_page, response_class=HTMLResponse)
+router.add_api_route("/conditions", _terms_page, response_class=HTMLResponse)
+root_router.add_api_route("/confidentialite", _privacy_page, response_class=HTMLResponse)
+root_router.add_api_route("/conditions", _terms_page, response_class=HTMLResponse)
+
+
 # ---------------------------------------------------------------- .well-known dynamiques
 def _aasa() -> dict:
     team, bundle = _env("APPLE_TEAM_ID") or "TEAMID", _env("IOS_BUNDLE_ID") or "com.manent.app"
