@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { api } from '@/src/api';
 
 // Sélection de filtres : { dimension: [clés] } — OU dans une dimension, ET entre dimensions.
+// country/region/continent = origine de l'AUTEUR ; story_* = lieu de l'HISTOIRE.
 export type Sel = Record<string, string[]>;
-export const DIMS = ['continent', 'region', 'country', 'type', 'genre', 'domain', 'theme', 'emotion', 'mood', 'audience', 'lang'] as const;
+export const DIMS = ['continent', 'region', 'country', 'story_continent', 'story_region', 'story_country', 'type', 'genre', 'domain', 'theme', 'emotion', 'mood', 'audience', 'lang'] as const;
 
 export type Taxonomy = {
   geo: { key: string; label: string; emoji?: string; regions: { key: string; label: string; countries: { key: string; label: string }[] }[] }[];
@@ -15,15 +16,17 @@ export type Taxonomy = {
   emotions: { key: string; label: string; emoji: string }[];
   moods: { key: string; label: string; emoji: string }[];
   audiences: { key: string; label: string }[];
+  levels?: { key: string; label: string }[];
   languages: { key: string; label: string }[];
   labels: Record<string, Record<string, string>>;
+  thresholds?: { strong: number; proposed: number };
 };
 
 let cache: Taxonomy | null = null;
 let pending: Promise<Taxonomy> | null = null;
 
-export function loadTaxonomy(): Promise<Taxonomy> {
-  if (cache) return Promise.resolve(cache);
+export function loadTaxonomy(force = false): Promise<Taxonomy> {
+  if (cache && !force) return Promise.resolve(cache);
   if (!pending) pending = api<Taxonomy>('/catalog/taxonomy').then(t => { cache = t; return t; }).finally(() => { pending = null; });
   return pending;
 }
@@ -56,31 +59,40 @@ export function countSel(sel: Sel): number {
   return Object.values(sel).reduce((n, a) => n + (a?.length || 0), 0);
 }
 
-export function toggleSel(sel: Sel, dim: string, key: string): Sel {
-  const cur = sel[dim] || [];
-  const next = cur.includes(key) ? cur.filter(k => k !== key) : [...cur, key];
-  const out = { ...sel, [dim]: next };
-  if (!next.length) delete out[dim];
-  // géographie progressive : retirer un continent retire ses régions/pays, etc.
-  if (dim === 'continent' && cur.includes(key) && cache) {
+// Géographie progressive : retirer un continent retire ses régions/pays (pour l'auteur comme pour l'histoire).
+function pruneGeo(out: Sel, prefix: '' | 'story_', dim: string, key: string) {
+  if (!cache) return;
+  const rDim = `${prefix}region`, cDim = `${prefix}country`;
+  if (dim === `${prefix}continent`) {
     const c = cache.geo.find(x => x.key === key);
     const regs = new Set((c?.regions || []).map(r => r.key));
     const ctys = new Set((c?.regions || []).flatMap(r => r.countries.map(x => x.key)));
-    if (out.region) { out.region = out.region.filter(r => !regs.has(r)); if (!out.region.length) delete out.region; }
-    if (out.country) { out.country = out.country.filter(r => !ctys.has(r)); if (!out.country.length) delete out.country; }
+    if (out[rDim]) { out[rDim] = out[rDim].filter(r => !regs.has(r)); if (!out[rDim].length) delete out[rDim]; }
+    if (out[cDim]) { out[cDim] = out[cDim].filter(r => !ctys.has(r)); if (!out[cDim].length) delete out[cDim]; }
   }
-  if (dim === 'region' && cur.includes(key) && cache) {
+  if (dim === rDim) {
     const r = cache.geo.flatMap(c => c.regions).find(x => x.key === key);
     const ctys = new Set((r?.countries || []).map(x => x.key));
-    if (out.country) { out.country = out.country.filter(x => !ctys.has(x)); if (!out.country.length) delete out.country; }
+    if (out[cDim]) { out[cDim] = out[cDim].filter(x => !ctys.has(x)); if (!out[cDim].length) delete out[cDim]; }
   }
-  if (dim === 'type' && cur.includes(key) && cache) {
-    const fam = cache.types.find(f => f.key === key);
-    if (fam) {
-      const subs = new Set(fam.subtypes.map(s => s.key));
-      out.type = (out.type || []).filter(k => !subs.has(k));
-      if (!out.type.length) delete out.type;
-      if (key === 'fiction' && out.genre) delete out.genre;
+}
+
+export function toggleSel(sel: Sel, dim: string, key: string): Sel {
+  const cur = sel[dim] || [];
+  const removing = cur.includes(key);
+  const next = removing ? cur.filter(k => k !== key) : [...cur, key];
+  const out = { ...sel, [dim]: next };
+  if (!next.length) delete out[dim];
+  if (removing) {
+    pruneGeo(out, dim.startsWith('story_') ? 'story_' : '', dim, key);
+    if (dim === 'type' && cache) {
+      const fam = cache.types.find(f => f.key === key);
+      if (fam) {
+        const subs = new Set(fam.subtypes.map(s => s.key));
+        out.type = (out.type || []).filter(k => !subs.has(k));
+        if (!out.type.length) delete out.type;
+        if (key === 'fiction' && out.genre) delete out.genre;
+      }
     }
   }
   return out;
@@ -89,6 +101,12 @@ export function toggleSel(sel: Sel, dim: string, key: string): Sel {
 export function labelOf(tax: Taxonomy | null, dim: string, key: string): string {
   return tax?.labels?.[dim]?.[key] || key;
 }
+
+export const DIM_LABELS: Record<string, string> = {
+  type: 'Type', genre: 'Genre', continent: 'Continent (auteur)', region: 'Région (auteur)', country: 'Pays (auteur)',
+  story_continent: 'Continent (histoire)', story_region: 'Région (histoire)', story_country: 'Pays (histoire)',
+  domain: 'Domaine', theme: 'Thème', emotion: 'Émotion', mood: 'Ambiance', audience: 'Public', lang: 'Langue',
+};
 
 export const SORTS: { key: string; label: string }[] = [
   { key: 'pertinence', label: 'Pertinence' }, { key: 'populaires', label: 'Les plus lus' },

@@ -26,6 +26,7 @@ export default function FiltersScreen() {
   const [open, setOpen] = useState<Record<string, boolean>>({ geo: true, type: true, theme: true });
   const [themeQuery, setThemeQuery] = useState('');
   const [allThemes, setAllThemes] = useState(false);
+  const [geoMode, setGeoMode] = useState<'author' | 'story'>('author');
   const timer = useRef<any>(null);
 
   useEffect(() => {
@@ -66,9 +67,11 @@ export default function FiltersScreen() {
   };
 
 
-  const selContinents = tax ? tax.geo.filter(c => has('continent', c.key)) : [];
+  const gp = geoMode === 'story' ? 'story_' : '';
+  const selContinents = tax ? tax.geo.filter(c => has(`${gp}continent`, c.key)) : [];
   const regions = selContinents.flatMap(c => c.regions);
-  const selRegions = regions.filter(r => has('region', r.key));
+  const selRegions = regions.filter(r => has(`${gp}region`, r.key));
+  const geoCount = ['continent', 'region', 'country', 'story_continent', 'story_region', 'story_country'].reduce((n, d) => n + (sel[d]?.length || 0), 0);
   const countries = selRegions.flatMap(r => r.countries).sort((a, b) => a.label.localeCompare(b.label));
   const selFamilies = tax ? tax.types.filter(f => has('type', f.key)) : [];
   const themeHits = useMemo(() => {
@@ -96,20 +99,28 @@ export default function FiltersScreen() {
         <ScrollView contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: 140 }} keyboardShouldPersistTaps="handled">
           <Text style={styles.intro}>{t('Combine autant de filtres que tu veux : un livre peut être africain, un roman, sur le deuil et réconfortant à la fois.')}</Text>
 
-          <Section k="geo" open={!!open.geo} onFlip={flip} title={t('Origine')} emoji="🌍" hint={(sel.continent?.length || 0) + (sel.region?.length || 0) + (sel.country?.length || 0)}>
+          <Section k="geo" open={!!open.geo} onFlip={flip} title={t('Origine')} emoji="🌍" hint={geoCount}>
+            <View style={styles.segment}>
+              {(['author', 'story'] as const).map(m => (
+                <Pressable key={m} testID={`filters-geo-${m}`} onPress={() => setGeoMode(m)} style={[styles.segBtn, geoMode === m && styles.segBtnOn]}>
+                  <Text style={[styles.segText, geoMode === m && styles.segTextOn]}>{m === 'author' ? t('Origine de l’auteur') : t('Lieu de l’histoire')}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <Text style={styles.hint}>{geoMode === 'author' ? t('D’où vient l’auteur ou l’autrice.') : t('Où se déroule le livre — un auteur français peut situer son roman au Sénégal.')}</Text>
             <View style={styles.wrap}>
-              {tax.geo.map(c => <Chip key={c.key} dim="continent" k={c.key} label={c.label} emoji={c.emoji} />)}
+              {tax.geo.map(c => <Chip key={c.key} dim={`${gp}continent`} k={c.key} label={c.label} emoji={c.emoji} />)}
             </View>
             {regions.length > 0 && (
               <>
                 <Text style={styles.subLabel}>{t('Régions')}</Text>
-                <View style={styles.wrap}>{regions.map(r => <Chip key={r.key} dim="region" k={r.key} label={r.label} />)}</View>
+                <View style={styles.wrap}>{regions.map(r => <Chip key={r.key} dim={`${gp}region`} k={r.key} label={r.label} />)}</View>
               </>
             )}
             {countries.length > 0 && (
               <>
                 <Text style={styles.subLabel}>{t('Pays')}</Text>
-                <View style={styles.wrap}>{countries.map(c => <Chip key={c.key} dim="country" k={c.key} label={c.label} />)}</View>
+                <View style={styles.wrap}>{countries.map(c => <Chip key={c.key} dim={`${gp}country`} k={c.key} label={c.label} />)}</View>
               </>
             )}
             {regions.length === 0 && <Text style={styles.hint}>{t('Choisis un continent pour affiner par région, puis par pays.')}</Text>}
@@ -181,6 +192,12 @@ export default function FiltersScreen() {
 
           <Section k="audience" open={!!open.audience} onFlip={flip} title={t('Public')} emoji="👥" hint={sel.audience?.length}>
             <View style={styles.wrap}>{tax.audiences.map(a => <Chip key={a.key} dim="audience" k={a.key} label={a.label} />)}</View>
+            {(tax.levels || []).length > 0 && (
+              <>
+                <Text style={styles.subLabel}>{t('Niveau (livres pédagogiques)')}</Text>
+                <View style={styles.wrap}>{(tax.levels || []).map(a => <Chip key={a.key} dim="audience" k={a.key} label={a.label} />)}</View>
+              </>
+            )}
           </Section>
 
           <Section k="lang" open={!!open.lang} onFlip={flip} title={t('Langue')} emoji="🗣️" hint={sel.lang?.length}>
@@ -241,6 +258,11 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   subLabel: { fontFamily: fonts.bodyMedium, fontSize: 10.5, color: colors.clay, letterSpacing: 1.2, textTransform: 'uppercase', marginTop: spacing.md, marginBottom: 6 },
   hint: { fontFamily: fonts.body, fontSize: 12, color: colors.clay, marginBottom: 6, lineHeight: 16 },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  segment: { flexDirection: 'row', backgroundColor: colors.bisque, borderRadius: radius.pill, padding: 3, marginBottom: spacing.sm },
+  segBtn: { flex: 1, height: 32, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  segBtnOn: { backgroundColor: colors.creme },
+  segText: { fontFamily: fonts.body, fontSize: 12.5, color: colors.clay },
+  segTextOn: { fontFamily: fonts.bodyMedium, color: colors.espresso },
   chip: { height: 34, paddingHorizontal: 13, maxWidth: 230, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, backgroundColor: colors.creme, alignItems: 'center', justifyContent: 'center' },
   chipOn: { backgroundColor: colors.chambray, borderColor: colors.chambray },
   chipText: { fontFamily: fonts.body, fontSize: 13, color: colors.espresso },

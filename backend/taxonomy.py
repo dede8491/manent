@@ -313,20 +313,33 @@ LEGACY_GENRES: dict[str, list[str]] = {
 
 # ---------------------------------------------------------------- Accès uniforme
 DIMENSIONS = ("type", "genre", "domain", "theme", "emotion", "mood", "audience")
+# Dimensions géographiques : origine de l'AUTEUR (country/region/continent) et contexte de l'HISTOIRE (story_*)
+GEO_DIMS = ("continent", "region", "country")
+STORY_DIMS = ("story_continent", "story_region", "story_country")
+LEVEL_LABEL = {k: l for k, l in LEVELS}
+# Regroupements (pour l'admin et les pages de filtres) : clé → groupe
+THEME_GROUP: dict[str, str] = {k: g["key"] for g in THEMES for k, _ in g["items"]}
+DOMAIN_GROUP: dict[str, str] = {k: g["key"] for g in DOMAINS for k, _ in g["items"]}
+
+
+GENRE_LABEL: dict[str, str] = dict(GENRES)
 
 
 def label_for(dim: str, key: str) -> str:
     return {
         "type": lambda k: SUBTYPE_LABEL.get(k) or FAMILY_LABEL.get(k, k),
-        "genre": lambda k: dict(GENRES).get(k, k),
+        "genre": lambda k: GENRE_LABEL.get(k, k),
         "domain": lambda k: DOMAIN_LABEL.get(k, k),
         "theme": lambda k: THEME_LABEL.get(k, k),
         "emotion": lambda k: EMOTION_LABEL.get(k, k),
         "mood": lambda k: MOOD_LABEL.get(k, k),
-        "audience": lambda k: AUDIENCE_LABEL.get(k, k),
+        "audience": lambda k: AUDIENCE_LABEL.get(k) or LEVEL_LABEL.get(k, k),
         "continent": lambda k: CONTINENT_LABEL.get(k, k),
         "region": lambda k: REGION_LABEL.get(k, k),
         "country": lambda k: COUNTRY_FR.get(k, k),
+        "story_continent": lambda k: CONTINENT_LABEL.get(k, k),
+        "story_region": lambda k: REGION_LABEL.get(k, k),
+        "story_country": lambda k: COUNTRY_FR.get(k, k),
         "lang": lambda k: LANGUAGE_LABEL.get(k, k),
     }.get(dim, lambda k: k)(key)
 
@@ -334,17 +347,97 @@ def label_for(dim: str, key: str) -> str:
 def valid_keys(dim: str) -> set[str]:
     return {
         "type": set(SUBTYPE_LABEL) | set(FAMILY_LABEL),
-        "genre": {k for k, _ in GENRES},
+        "genre": set(GENRE_LABEL),
         "domain": set(DOMAIN_LABEL),
         "theme": set(THEME_LABEL),
         "emotion": set(EMOTION_LABEL),
         "mood": set(MOOD_LABEL),
-        "audience": set(AUDIENCE_LABEL) | {k for k, _ in LEVELS},
+        "audience": set(AUDIENCE_LABEL) | set(LEVEL_LABEL),
         "continent": set(CONTINENT_LABEL),
         "region": set(REGION_LABEL),
         "country": set(COUNTRY_FR),
+        "story_continent": set(CONTINENT_LABEL),
+        "story_region": set(REGION_LABEL),
+        "story_country": set(COUNTRY_FR),
         "lang": set(LANGUAGE_LABEL),
     }.get(dim, set())
+
+
+# ---------------------------------------------------------------- Extension à chaud (taxonomie administrable)
+# Les entrées ajoutées depuis l'administration sont stockées en base (`taxonomy_ext`) et ré-appliquées
+# au démarrage via register(). Aucune modification de code n'est nécessaire pour un nouveau thème,
+# pays, émotion… : filtres, IA, recherche et admin lisent ces structures.
+EXTENDABLE = ("continent", "region", "country", "type", "genre", "domain", "theme", "emotion", "mood", "audience", "lang")
+
+
+def register(dim: str, key: str, label: str, group: str | None = None, emoji: str | None = None, parent: str | None = None) -> bool:
+    """Ajoute une entrée au référentiel en mémoire. Retourne False si la dimension/parent est invalide."""
+    key = (key or slug(label)).strip()
+    label = (label or "").strip()
+    if not key or not label or dim not in EXTENDABLE:
+        return False
+    if dim == "continent":
+        if key not in CONTINENT_LABEL:
+            GEO.append({"key": key, "label": label, "emoji": emoji or "🌐", "regions": []})
+            CONTINENT_LABEL[key] = label
+    elif dim == "region":
+        cont = next((c for c in GEO if c["key"] == parent), None)
+        if not cont:
+            return False
+        if key not in REGION_LABEL:
+            cont["regions"].append({"key": key, "label": label, "countries": ""})
+            REGION_LABEL[key] = label
+            REGION_TO_CONTINENT[key] = cont["key"]
+    elif dim == "country":
+        key = key.upper()
+        if parent not in REGION_LABEL:
+            return False
+        COUNTRY_FR[key] = label
+        COUNTRY_TO_REGION[key] = parent
+        for c in GEO:
+            for r in c["regions"]:
+                if r["key"] == parent and key not in r["countries"].split():
+                    r["countries"] = (r["countries"] + " " + key).strip()
+    elif dim == "type":
+        fam = next((f for f in TYPES if f["key"] == parent), None)
+        if not fam:
+            return False
+        if key not in SUBTYPE_LABEL:
+            fam["subtypes"].append((key, label))
+            SUBTYPE_LABEL[key] = label
+            SUBTYPE_TO_FAMILY[key] = fam["key"]
+    elif dim == "genre":
+        if key not in GENRE_LABEL:
+            GENRES.append((key, label))
+            GENRE_LABEL[key] = label
+    elif dim in ("domain", "theme"):
+        groups = DOMAINS if dim == "domain" else THEMES
+        labels = DOMAIN_LABEL if dim == "domain" else THEME_LABEL
+        grp = next((g for g in groups if g["key"] == (group or "autres")), None)
+        if not grp:
+            grp = {"key": group or "autres", "label": (group or "Autres").capitalize(), "emoji": emoji or "🏷️", "items": []}
+            groups.append(grp)
+        if key not in labels:
+            grp["items"].append((key, label))
+            labels[key] = label
+            if dim == "theme":
+                THEME_GROUP[key] = grp["key"]; THEME_EMOJI[key] = grp.get("emoji", "")
+            else:
+                DOMAIN_GROUP[key] = grp["key"]
+    elif dim == "emotion":
+        if key not in EMOTION_LABEL:
+            EMOTIONS.append((key, label, emoji or "💫")); EMOTION_LABEL[key] = label; EMOTION_EMOJI[key] = emoji or "💫"
+    elif dim == "mood":
+        if key not in MOOD_LABEL:
+            MOODS.append((key, label, emoji or "🌙")); MOOD_LABEL[key] = label; MOOD_EMOJI[key] = emoji or "🌙"
+    elif dim == "audience":
+        if key not in AUDIENCE_LABEL:
+            AUDIENCES.append((key, label)); AUDIENCE_LABEL[key] = label
+    elif dim == "lang":
+        if key not in LANGUAGE_LABEL:
+            LANGUAGES.append((key, label)); LANGUAGE_LABEL[key] = label
+    _reg(dim, key, label)
+    return True
 
 
 # Index texte : libellé normalisé → (dimension, clé), pour la recherche « deuil », « Gabon », « polar »…

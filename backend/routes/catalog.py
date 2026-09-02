@@ -235,6 +235,10 @@ async def upsert_catalog_book(data: dict, source: str = "app", subjects: Optiona
             push["subjects"] = {"$each": mapped}
         push["sources"] = source
         upd["updated_at"] = now
+        # trace par source (book_external_sources) : date de synchro, identifiant externe s'il existe
+        upd[f"external.{source}.last_synced_at"] = now
+        if data.get("external_id"):
+            upd[f"external.{source}.external_id"] = str(data["external_id"])[:80]
         ops = {"$set": upd, "$addToSet": push}
         await db.catalog_books.update_one({"catalog_id": existing["catalog_id"]}, ops)
         cid = existing["catalog_id"]
@@ -251,6 +255,7 @@ async def upsert_catalog_book(data: dict, source: str = "app", subjects: Optiona
             "subjects": mapped, "areas": [], "countries": [], "continents": [], "author_ids": [], "sources": [source],
             "raw_subjects": raw, "kind": kind, "genre": genre,
             "norm_key": nk, "popularity": 0,
+            "external": {source: {"last_synced_at": now, **({"external_id": str(data["external_id"])[:80]} if data.get("external_id") else {})}},
             "created_at": now, "updated_at": now,
         }
         await db.catalog_books.insert_one(doc)
@@ -550,11 +555,10 @@ async def init(database):
         await db.catalog_tasks.create_index([("catalog_id", 1), ("kind", 1)])
     except Exception as e:
         logger.warning("catalog indexes: %s", e)
-    classification.db = db
     try:
-        await classification.ensure_indexes()
+        await classification.init(db)
     except Exception as e:
-        logger.warning("classification indexes: %s", e)
+        logger.warning("classification init: %s", e)
     if not _worker_started:
         _worker_started = True
         asyncio.create_task(_worker_loop())
@@ -961,12 +965,10 @@ async def _ol_origin(http, name: str) -> Optional[str]:
 
 
 async def _ai_origin(name: str) -> Optional[str]:
+    """Origine par l'IA, via l'abstraction AIProvider (déduction faible : confiance « low »)."""
+    from ai_provider import provider
     try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-        chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"orig_{abs(hash(name)) % 10**8}",
-            system_message="Tu donnes le pays d'origine d'un auteur. Réponds UNIQUEMENT par un code ISO 3166-1 alpha-2 (ex. SN, MQ pour Martinique, GP Guadeloupe, GF Guyane) ou INCONNU. N'invente jamais.").with_model("anthropic", "claude-sonnet-4-6")
-        r = (await chat.send_message(UserMessage(text=f"Pays d'origine de l'auteur : {name}"))).strip().upper()
-        return r if re.fullmatch(r"[A-Z]{2}", r) else None
+        return await provider.analyze_author(name)
     except Exception:
         return None
 
@@ -984,7 +986,7 @@ async def _recompute_books_for_author(author_id: str):
             "countries": countries, "areas": areas, "continents": continents, "updated_at": now_utc()}})
         # l'origine a changé : la classification (pays → région → continent) se recalcule sans IA
         try:
-            await classification.classify_book(b["catalog_id"], use_ai=False)
+            await classification.classify_book(b["catalog_id"], use_ai=False, reason="author_origin_changed")
         except Exception as e:
             logger.warning("reclassify after origin failed: %s", e)
 
