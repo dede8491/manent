@@ -18,18 +18,41 @@ export default function ThemePage() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const { name } = useLocalSearchParams<{ name: string }>();
-  const [data, setData] = useState<{ stats: { quotes: number; readers: number; books: number }; quotes: Quote[]; suggested_books?: any[]; discover_books?: any[] } | null>(null);
-  const [shownCount, setShownCount] = useState(12);
+  const [data, setData] = useState<{ stats: { quotes: number; readers: number; books: number }; quotes: Quote[]; suggested_books?: any[]; discover_books?: any[]; discover_total?: number } | null>(null);
+  const [books, setBooks] = useState<any[]>([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [areaFilter, setAreaFilter] = useState<string | null>(null);
+  const [areas, setAreas] = useState<any[]>([]);
+  const [loadingMore, setLoadingMore] = useState(false);
   const gridCardW = (width - spacing.xl * 2 - spacing.sm * 2) / 3;
 
   useEffect(() => {
     (async () => {
       try {
-        const r = await api<any>(`/themes/${encodeURIComponent(name)}/page`);
+        const r = await api<any>(`/themes/${encodeURIComponent(name)}/page?page=1&size=12${areaFilter ? `&area=${encodeURIComponent(areaFilter)}` : ''}`);
         setData(r);
+        setBooks(r.discover_books || []);
+        setTotal(r.discover_total || 0);
+        setPage(1);
       } catch {}
     })();
-  }, [name]);
+  }, [name, areaFilter]);
+
+  useEffect(() => {
+    api<{ areas: any[] }>('/catalog/areas').then(r => setAreas(r.areas || [])).catch(() => {});
+  }, []);
+
+  const loadMore = async () => {
+    if (loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const p = page + 1;
+      const r = await api<any>(`/themes/${encodeURIComponent(name)}/page?page=${p}&size=12${areaFilter ? `&area=${encodeURIComponent(areaFilter)}` : ''}`);
+      setBooks(prev => [...prev, ...(r.discover_books || [])]);
+      setPage(p);
+    } finally { setLoadingMore(false); }
+  };
 
   const colWidth = (width - spacing.xl * 2 - spacing.md) / 2;
   const col1: Quote[] = [], col2: Quote[] = [];
@@ -44,7 +67,7 @@ export default function ThemePage() {
         <Pressable onPress={() => router.back()} testID="theme-back" style={styles.iconBtn}>
           <Feather name="chevron-left" size={22} color={colors.espresso} />
         </Pressable>
-        <Text style={styles.headerLabel}>{t('Thème')}</Text>
+        <Text style={styles.headerLabel}>{t('Sujet')}</Text>
         <View style={{ width: 40 }} />
       </View>
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xxl }}>
@@ -74,7 +97,7 @@ export default function ThemePage() {
 
         {data && (data.suggested_books?.length || 0) > 0 && (
           <View style={{ marginTop: spacing.lg }} testID="theme-books">
-            <Text style={styles.suggestLabel}>{t('Des livres pour ce thème')}</Text>
+            <Text style={styles.suggestLabel}>{t('Des livres pour ce sujet')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm, paddingHorizontal: spacing.xl }}>
               {data.suggested_books!.map((b: any) => (
                 <Pressable
@@ -101,13 +124,25 @@ export default function ThemePage() {
           </View>
         )}
 
-        {data && (data.discover_books?.length || 0) > 0 && (
+        {(books.length > 0 || areas.length > 0) && (
           <View style={{ marginTop: spacing.lg }} testID="theme-discover">
-            <Text style={styles.suggestLabel}>{t('À découvrir sur ce thème')}</Text>
+            <Text style={styles.suggestLabel}>{t('À découvrir sur ce sujet')}</Text>
+            {areas.length > 0 && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: spacing.xl, marginBottom: spacing.md }}>
+                <Pressable testID="area-filter-all" onPress={() => setAreaFilter(null)} style={[styles.areaChip, !areaFilter && styles.areaChipActive]}>
+                  <Text style={[styles.areaChipText, !areaFilter && styles.areaChipTextActive]}>{t('Toutes les littératures')}</Text>
+                </Pressable>
+                {areas.map((a: any) => (
+                  <Pressable key={a.key} testID={`area-filter-${a.key}`} onPress={() => setAreaFilter(areaFilter === a.key ? null : a.key)} style={[styles.areaChip, areaFilter === a.key && styles.areaChipActive]}>
+                    <Text style={[styles.areaChipText, areaFilter === a.key && styles.areaChipTextActive]}>{a.label.replace('Littérature ', '')}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            )}
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, paddingHorizontal: spacing.xl }}>
-              {data.discover_books!.slice(0, shownCount).map((b: any, i: number) => (
+              {books.map((b: any, i: number) => (
                 <Pressable
-                  key={i}
+                  key={b.catalog_id || i}
                   testID={`theme-discover-${i}`}
                   onPress={() => router.push({ pathname: '/discover/book', params: { title: b.title, author: b.author || '', cover: b.cover || '', year: b.year || '', summary: b.summary || '' } })}
                   style={[styles.suggestCard, { width: gridCardW }]}
@@ -115,13 +150,14 @@ export default function ThemePage() {
                   <Image source={{ uri: b.cover }} style={[styles.suggestCover, { height: gridCardW * 1.4 }]} resizeMode="cover" />
                   <Text style={styles.suggestTitle} numberOfLines={2}>{b.title}</Text>
                   {!!b.author && <Text style={styles.suggestAuthor} numberOfLines={1}>{b.author}</Text>}
+                  {!!b.summary && <Text style={styles.suggestSummary} numberOfLines={2}>{b.summary}</Text>}
                 </Pressable>
               ))}
             </View>
-            {shownCount < (data.discover_books?.length || 0) && (
-              <Pressable testID="theme-see-more" onPress={() => setShownCount(c => c + 12)} style={styles.moreBtn}>
+            {books.length < total && (
+              <Pressable testID="theme-see-more" onPress={loadMore} style={styles.moreBtn}>
                 <Feather name="plus" size={15} color={colors.chambray} />
-                <Text style={styles.moreBtnText}>{t('Voir plus de livres')}</Text>
+                <Text style={styles.moreBtnText}>{loadingMore ? '…' : t('Voir plus de livres')}</Text>
               </Pressable>
             )}
           </View>
@@ -132,7 +168,7 @@ export default function ThemePage() {
             {data.quotes.length === 0 ? (
               <View style={{ paddingVertical: spacing.xxxl, alignItems: 'center' }}>
                 <Text style={styles.emptyTitle}>{t('Personne n’a encore écrit ici.')}</Text>
-                <Text style={styles.emptySub}>{t('Capture une citation sur ce thème et rends-la publique.')}</Text>
+                <Text style={styles.emptySub}>{t('Capture une citation sur ce sujet et rends-la publique.')}</Text>
               </View>
             ) : (
               <View style={{ flexDirection: 'row', gap: spacing.md }}>
@@ -175,6 +211,11 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   suggestCta: { fontFamily: fonts.bodyMedium, fontSize: 9.5, color: colors.chambray, letterSpacing: 1, textTransform: 'uppercase', marginTop: spacing.xs },
   moreBtn: { marginTop: spacing.md, marginHorizontal: spacing.xl, height: 46, borderRadius: radius.pill, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.chambray, backgroundColor: colors.creme, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   moreBtnText: { fontFamily: fonts.bodyMedium, fontSize: 13.5, color: colors.chambray },
+  suggestSummary: { fontFamily: fonts.body, fontSize: 10.5, color: colors.clay, lineHeight: 14, marginTop: 3 },
+  areaChip: { paddingHorizontal: spacing.md, height: 32, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, backgroundColor: colors.creme, alignItems: 'center', justifyContent: 'center' },
+  areaChipActive: { backgroundColor: colors.chambray, borderColor: colors.chambray },
+  areaChipText: { fontFamily: fonts.bodyMedium, fontSize: 12, color: colors.espresso },
+  areaChipTextActive: { color: colors.creme },
   emptyTitle: { fontFamily: fonts.displayMedium, fontSize: 22, color: colors.espresso, textAlign: 'center' },
   emptySub: { fontFamily: fonts.body, fontSize: 14, color: colors.clay, textAlign: 'center', marginTop: spacing.sm },
 });

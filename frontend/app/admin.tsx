@@ -7,6 +7,7 @@ import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
 import { api } from '@/src/api';
 import ManentLoader from '@/src/components/ManentLoader';
+import { AreaAdmin } from '@/src/components/AreaAdmin';
 import { timeAgo } from '@/src/timeago';
 import { useT, useLang } from '@/src/i18n';
 
@@ -85,6 +86,7 @@ export default function AdminDashboard() {
               </View>
             </View>
           ))}
+          <AreaAdmin />
         </ScrollView>
       )}
     </View>

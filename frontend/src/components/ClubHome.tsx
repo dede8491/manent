@@ -56,7 +56,6 @@ export function ClubHome({ clubs, onOpenCircle, onCreateCircle, onJoinCircle }: 
       try {
         const st = await api<{ is_premium: boolean }>('/premium/status');
         setPremium(st.is_premium);
-        if (!st.is_premium) { setLoaded(true); return; }
       } catch { setPremium(true); }
       try {
         const r = await api<{ books: ClubBook[]; active_posts: Post[]; is_admin: boolean }>('/club/home');
@@ -149,26 +148,14 @@ export function ClubHome({ clubs, onOpenCircle, onCreateCircle, onJoinCircle }: 
   const EVENT_TYPES: [typeof evType, string][] = [['discussion', 'Discussion de livre'], ['rencontre_auteur', 'Rencontre avec un auteur'], ['visio', 'Visioconférence'], ['rencontre', 'Rencontre physique'], ['audio', 'Discussion audio'], ['challenge', 'Challenge']];
   const typeLabel = (ty: string) => (EVENT_TYPES.find(([k]) => k === ty)?.[1]) || ty;
 
-  if (premium === false) {
-    return (
-      <View style={styles.paywall} testID="club-paywall">
-        <View style={styles.paywallIcon}><Feather name="lock" size={22} color={colors.chambray} /></View>
-        <Text style={styles.paywallTitle}>{t('Le Club de lecture est réservé aux membres Premium.')}</Text>
-        <Text style={styles.paywallSub}>{t('Lectures communes, discussions, sondages, événements et challenges — rejoins la communauté.')}</Text>
-        <Pressable testID="club-paywall-cta" onPress={() => router.push('/premium')} style={styles.paywallBtn}>
-          <Text style={styles.paywallBtnText}>{t('Découvrir Premium')}</Text>
-        </Pressable>
-      </View>
-    );
-  }
-
   return (
     <ScrollView contentContainerStyle={{ paddingBottom: 100 }} testID="club-home">
       <Pressable testID="club-propose-book" onPress={() => router.push('/club/add')} style={styles.searchFake}>
         <Feather name="search" size={16} color={colors.clay} />
-        <Text style={styles.searchFakeText}>{t('Rechercher un livre à proposer au Club…')}</Text>
+        <Text style={styles.searchFakeText}>{t('Rechercher un livre à proposer à la communauté…')}</Text>
         <Feather name="plus-circle" size={18} color={colors.chambray} />
       </Pressable>
+      <Text style={[styles.sectionLabel, { marginTop: spacing.md }]}>{t('Ce que la communauté lit')}</Text>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: spacing.xl, marginTop: spacing.md }}>
         {SORTS.map(([s, label]) => (
@@ -177,49 +164,6 @@ export function ClubHome({ clubs, onOpenCircle, onCreateCircle, onJoinCircle }: 
           </Pressable>
         ))}
       </ScrollView>
-
-      {polls.map(p => {
-        const ends = p.ends_at ? new Date(p.ends_at) : null;
-        return (
-          <View key={p.poll_id} style={styles.pollCard} testID={`poll-${p.poll_id}`}>
-            <Text style={styles.pollLabel}>{p.closed ? t('SONDAGE TERMINÉ') : t('SONDAGE DU CLUB')}</Text>
-            <Text style={styles.pollQuestion}>{p.question}</Text>
-            {p.options.map((o: any, i: number) => {
-              const isMine = p.my_vote === i;
-              const isWinner = p.closed && p.winner === i;
-              const showResults = p.my_vote != null || p.closed;
-              return (
-                <Pressable
-                  key={i}
-                  testID={`poll-option-${i}`}
-                  disabled={p.my_vote != null || p.closed}
-                  onPress={() => vote(p.poll_id, i)}
-                  style={[styles.pollOption, (isMine || isWinner) && { borderColor: colors.chambray }]}
-                >
-                  {showResults && <View style={[styles.pollFill, { width: `${o.pct}%` }]} />}
-                  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    {(isMine || isWinner) && <Feather name={isWinner ? 'award' : 'check'} size={13} color={colors.chambray} />}
-                    <Text style={styles.pollOptionText} numberOfLines={1}>{o.title}{o.author ? ` — ${o.author}` : ''}</Text>
-                  </View>
-                  {showResults && <Text style={styles.pollPct}>{o.pct}%</Text>}
-                </Pressable>
-              );
-            })}
-            <Text style={styles.pollMeta}>
-              {t(p.total_votes > 1 ? '{n} votes' : '{n} vote', { n: p.total_votes })}
-              {!p.closed && ends ? ` · ${t('se termine le {date}', { date: ends.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' }) })}` : ''}
-              {p.closed && p.winner != null ? ` · ${t('Élu livre du mois : {title}', { title: p.options[p.winner].title })}` : ''}
-            </Text>
-          </View>
-        );
-      })}
-
-      {isAdmin && (
-        <Pressable testID="btn-create-poll" onPress={() => setPollModal(true)} style={styles.createPollBtn}>
-          <Feather name="bar-chart-2" size={15} color={colors.chambray} />
-          <Text style={styles.createPollText}>{t('Créer un sondage')}</Text>
-        </Pressable>
-      )}
 
       <View style={{ paddingHorizontal: spacing.xl, marginTop: spacing.md, gap: spacing.sm }}>
         {!loaded ? (
@@ -258,86 +202,13 @@ export function ClubHome({ clubs, onOpenCircle, onCreateCircle, onJoinCircle }: 
         ))}
       </View>
 
-      {gami && (
-        <View style={styles.gamiCard} testID="club-gami">
-          <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
-            <Text style={styles.pollLabel}>{t('CHALLENGE {year}', { year: gami.challenge.year })}</Text>
-            <Text style={styles.gamiPoints}>{gami.me.points} {t('pts')}{gami.me.rank ? ` · ${gami.me.rank}ᵉ` : ''}</Text>
-          </View>
-          <Text style={styles.gamiTitle}>{t('Lire 12 livres en 12 mois')}</Text>
-          <View style={styles.progressBar}><View style={[styles.progressFill, { width: `${Math.min(100, Math.round(gami.challenge.progress / gami.challenge.goal * 100))}%` }]} /></View>
-          <Text style={styles.gamiMeta}>{gami.challenge.progress} / {gami.challenge.goal}</Text>
-          {gami.me.badges.length > 0 && (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: spacing.sm }}>
-              {gami.me.badges.map((b: any) => (
-                <View key={b.id} style={styles.badgeChip}><Feather name="award" size={10} color={colors.chambray} /><Text style={styles.badgeChipText}>{t(b.label)}</Text></View>
-              ))}
-            </View>
-          )}
-          {gami.leaderboard.length > 0 && (
-            <View style={{ marginTop: spacing.sm }}>
-              {gami.leaderboard.slice(0, 3).map((u: any, i: number) => (
-                <View key={i} style={styles.leaderRow}>
-                  <Text style={styles.leaderRank}>{i + 1}{i === 0 ? 'ᵉʳ' : 'ᵉ'}</Text>
-                  <Text style={styles.leaderName} numberOfLines={1}>{u.pseudo}</Text>
-                  <Text style={styles.gamiMeta}>{u.points} {t('pts')}</Text>
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
-      )}
-
-      {(events.length > 0 || isAdmin) && (
-        <View style={{ marginTop: spacing.xl }}>
-          <Text style={styles.sectionLabel}>{t('Prochains événements')}</Text>
-          <View style={{ paddingHorizontal: spacing.xl, gap: spacing.sm }}>
-            {events.map(ev => (
-              <View key={ev.event_id} style={styles.eventCard} testID={`event-${ev.event_id}`}>
-                <Text style={styles.pollLabel}>{t(typeLabel(ev.type)).toUpperCase()} · {dateFr(ev.date, lang)}</Text>
-                <Text style={styles.eventTitle}>{ev.title}</Text>
-                {!!ev.location && <Text style={styles.gamiMeta}>{ev.location}</Text>}
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.sm }}>
-                  <Text style={styles.gamiMeta}>{t(ev.participants_count > 1 ? '{n} participants' : '{n} participant', { n: ev.participants_count })}</Text>
-                  <Pressable testID={`event-join-${ev.event_id}`} onPress={() => toggleEvent(ev)} style={[styles.joinEvBtn, ev.i_participate && styles.joinEvBtnActive]}>
-                    <Feather name={ev.i_participate ? 'check' : 'calendar'} size={13} color={ev.i_participate ? colors.espresso : colors.creme} />
-                    <Text style={[styles.joinEvText, ev.i_participate && { color: colors.espresso }]}>{ev.i_participate ? t('J’y participe') : t('Je participe')}</Text>
-                  </Pressable>
-                </View>
-              </View>
-            ))}
-            {isAdmin && (
-              <Pressable testID="btn-create-event" onPress={() => setEventModal(true)} style={styles.createPollBtn2}>
-                <Feather name="calendar" size={15} color={colors.chambray} />
-                <Text style={styles.createPollText}>{t('Créer un événement')}</Text>
-              </Pressable>
-            )}
-          </View>
-        </View>
-      )}
-
-      {posts.length > 0 && (
-        <View style={{ marginTop: spacing.xl }}>
-          <Text style={styles.sectionLabel}>{t('Discussions actives')}</Text>
-          <View style={{ paddingHorizontal: spacing.xl, gap: spacing.sm }}>
-            {posts.map(p => (
-              <Pressable key={p.post_id} testID={`club-active-post-${p.post_id}`} onPress={() => router.push({ pathname: '/club/book/[id]', params: { id: (p as any).cb_id, tab: 'posts' } })} style={styles.postCard}>
-                <Text style={styles.postMeta}>{p.author?.pseudo} · {p.book_title} · {timeAgo(p.created_at, lang)}</Text>
-                <Text style={styles.postText} numberOfLines={2}>{p.spoiler ? t('⚠ Spoiler masqué — ouvre la discussion pour révéler.') : p.text}</Text>
-                <View style={styles.metaRow}><Feather name="heart" size={11} color={colors.clay} /><Text style={styles.meta}>{p.likes_count}</Text></View>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-      )}
-
       <View style={{ marginTop: spacing.xl }}>
         <View style={styles.sectionHeaderRow}>
-          <Text style={[styles.sectionLabel, { paddingHorizontal: 0, marginBottom: 0 }]}>{t('Tes cercles')}</Text>
+          <Text style={[styles.sectionLabel, { paddingHorizontal: 0, marginBottom: 0 }]}>{t('Tes clubs')}</Text>
           <InfoTooltip
             testID="info-circles"
-            title={t('Cercles de lecture')}
-            text={t("Un cercle est ton mini club de lecture, avec ses lectures communes, ses messages et ses défis. Fermé (cadenas), il ne s'ouvre qu'avec son code d'invitation — parfait entre amis ou en famille. Public (globe), il apparaît dans « Cercles publics à rejoindre » et toute la communauté peut y entrer librement. Avec ton abonnement, tu peux en créer autant que tu veux.")}
+            title={t('Clubs de lecture')}
+            text={t("Un club de lecture a ses lectures communes, ses sondages, ses événements et ses messages. Fermé (cadenas), il ne s'ouvre qu'avec son code d'invitation — parfait entre amis ou en famille. Public (globe), il apparaît dans « Clubs publics à rejoindre » et toute la communauté peut y entrer librement. Avec ton abonnement, tu peux en créer autant que tu veux.")}
           />
         </View>
         <View style={{ paddingHorizontal: spacing.xl, gap: spacing.sm }}>
@@ -349,7 +220,7 @@ export function ClubHome({ clubs, onOpenCircle, onCreateCircle, onJoinCircle }: 
               <View style={{ flex: 1 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   <Text style={styles.circleName} numberOfLines={1}>{item.name}</Text>
-                  {item.is_owner && <Text style={styles.ownerBadge}>{t('TON CERCLE')}</Text>}
+                  {item.is_owner && <Text style={styles.ownerBadge}>{t('TON CLUB')}</Text>}
                 </View>
                 <Text style={styles.circleMeta}>
                   {item.visibility === 'public' ? t('PUBLIC') : t('FERMÉ')} · {item.members_count} {t(item.members_count > 1 ? 'MEMBRES' : 'MEMBRE')} · {item.messages_count} {t(item.messages_count > 1 ? 'MESSAGES' : 'MESSAGE')}
@@ -360,14 +231,14 @@ export function ClubHome({ clubs, onOpenCircle, onCreateCircle, onJoinCircle }: 
           ))}
           {clubs.length === 0 && (
             <View style={styles.circleEmpty}>
-              <Text style={styles.emptyTitle}>{t('Ton premier cercle t’attend.')}</Text>
+              <Text style={styles.emptyTitle}>{t('Ton premier club t’attend.')}</Text>
               <Text style={styles.emptySub}>{t('Crée-le fermé pour tes proches, ou public pour toute la communauté.')}</Text>
             </View>
           )}
           <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-            <Pressable testID="btn-new-club" onPress={onCreateCircle} style={[styles.circleAction, { flex: 1 }]}>
-              <Feather name="plus" size={16} color={colors.chambray} />
-              <Text style={styles.circleActionText}>{t('Créer un cercle')}</Text>
+            <Pressable testID="btn-new-club" onPress={() => (premium ? onCreateCircle() : router.push('/premium'))} style={[styles.circleAction, { flex: 1 }]}>
+              <Feather name={premium ? 'plus' : 'lock'} size={16} color={colors.chambray} />
+              <Text style={styles.circleActionText}>{t('Créer un club')}</Text>
             </Pressable>
             <Pressable testID="btn-join-club" onPress={onJoinCircle} style={[styles.circleAction, { flex: 1 }]}>
               <Feather name="key" size={15} color={colors.chambray} />
@@ -378,7 +249,7 @@ export function ClubHome({ clubs, onOpenCircle, onCreateCircle, onJoinCircle }: 
 
         {pubClubs.length > 0 && (
           <View style={{ marginTop: spacing.lg }}>
-            <Text style={styles.sectionLabel}>{t('Cercles publics à rejoindre')}</Text>
+            <Text style={styles.sectionLabel}>{t('Clubs publics à rejoindre')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm, paddingHorizontal: spacing.xl }}>
               {pubClubs.map((c: any) => (
                 <View key={c.club_id} style={styles.pubCard} testID={`pub-club-${c.club_id}`}>

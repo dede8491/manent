@@ -514,7 +514,7 @@ export default function BookDetail() {
             <Text style={styles.modalTitle}>{t('Supprimer ce livre ?')}</Text>
             <Text style={styles.modalText}>
               {t('« {title} » quittera ta bibliothèque, définitivement.', { title: book.title })}
-              {impact ? `\n\n${t('Seront aussi supprimées :')}\n· ${t(impact.quotes > 1 ? '{n} citations' : '{n} citation', { n: impact.quotes })}${impact.pins > 0 ? `\n· ${t(impact.pins > 1 ? '{n} épingles retirées de tes tableaux' : '{n} épingle retirée de tes tableaux', { n: impact.pins })}` : ''}${impact.clubs > 0 ? `\n· ${t('la lecture commune de {n} cercle(s)', { n: impact.clubs })}` : ''}` : ''}
+              {impact ? `\n\n${t('Seront aussi supprimées :')}\n· ${t(impact.quotes > 1 ? '{n} citations' : '{n} citation', { n: impact.quotes })}${impact.pins > 0 ? `\n· ${t(impact.pins > 1 ? '{n} épingles retirées de tes tableaux' : '{n} épingle retirée de tes tableaux', { n: impact.pins })}` : ''}${impact.clubs > 0 ? `\n· ${t('la lecture commune de {n} club(s)', { n: impact.clubs })}` : ''}` : ''}
             </Text>
             <Pressable testID="book-delete-confirm" onPress={deleteBook} disabled={deleting} style={styles.deleteBtn}>
               {deleting ? <ManentLoader size={20} /> : <Text style={styles.deleteBtnText}>{t('Supprimer définitivement')}</Text>}

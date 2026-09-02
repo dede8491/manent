@@ -6,6 +6,7 @@ import { Feather } from '@expo/vector-icons';
 import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
 import { api } from '@/src/api';
+import { shareUrl } from '@/src/share';
 import { useT } from '@/src/i18n';
 import { PrimaryButton, GhostButton } from '@/src/components/Button';
 import ManentLoader from '@/src/components/ManentLoader';
@@ -34,6 +35,10 @@ export default function ClubDetail() {
   const [recoBook, setRecoBook] = useState<any | null>(null);
   const [recoNote, setRecoNote] = useState('');
   const [progress, setProgress] = useState<any>(null);
+  const [cPolls, setCPolls] = useState<any[]>([]);
+  const [cEvents, setCEvents] = useState<any[]>([]);
+  const [pollForm, setPollForm] = useState<{ q: string; o: string[] } | null>(null);
+  const [evForm, setEvForm] = useState<{ title: string; date: string; loc: string } | null>(null);
   const [msgPage, setMsgPage] = useState('');
   const [revealed, setRevealed] = useState<Set<string>>(new Set());
   const scrollRef = useRef<ScrollView>(null);
@@ -47,6 +52,8 @@ export default function ClubDetail() {
       if (c.book) {
         try { setProgress(await api<any>(`/clubs/${id}/progress`)); } catch {}
       } else setProgress(null);
+      try { setCPolls((await api<any>(`/clubs/${id}/polls`)).polls); } catch {}
+      try { setCEvents((await api<any>(`/clubs/${id}/events`)).events); } catch {}
     } catch {}
   }, [id]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -57,6 +64,40 @@ export default function ClubDetail() {
     try {
       await api(`/clubs/${id}/progress/visibility`, { method: 'POST', body: JSON.stringify({ visible }) });
       setProgress(await api<any>(`/clubs/${id}/progress`));
+    } catch {}
+  };
+
+  const votePoll = async (pollId: string, option: number) => {
+    try {
+      await api(`/clubs/${id}/polls/${pollId}/vote`, { method: 'POST', body: JSON.stringify({ option }) });
+      setCPolls((await api<any>(`/clubs/${id}/polls`)).polls);
+    } catch {}
+  };
+
+  const submitPoll = async () => {
+    if (!pollForm || !pollForm.q.trim()) return;
+    const options = pollForm.o.map(x => x.trim()).filter(Boolean);
+    if (options.length < 2) return;
+    try {
+      await api(`/clubs/${id}/polls`, { method: 'POST', body: JSON.stringify({ question: pollForm.q.trim(), options }) });
+      setPollForm(null);
+      setCPolls((await api<any>(`/clubs/${id}/polls`)).polls);
+    } catch {}
+  };
+
+  const submitEvent = async () => {
+    if (!evForm || !evForm.title.trim() || !evForm.date.trim()) return;
+    try {
+      await api(`/clubs/${id}/events`, { method: 'POST', body: JSON.stringify({ title: evForm.title.trim(), date: evForm.date.trim(), location: evForm.loc.trim() || undefined }) });
+      setEvForm(null);
+      setCEvents((await api<any>(`/clubs/${id}/events`)).events);
+    } catch {}
+  };
+
+  const attendEvent = async (eventId: string) => {
+    try {
+      await api(`/clubs/${id}/events/${eventId}/attend`, { method: 'POST' });
+      setCEvents((await api<any>(`/clubs/${id}/events`)).events);
     } catch {}
   };
 
@@ -73,7 +114,7 @@ export default function ClubDetail() {
   };
 
   const shareCode = async () => {
-    const message = t('Rejoins mon club de lecture « {name} » sur Manent avec le code {code}', { name: club.name, code: club.code });
+    const message = `${t('Rejoins mon club de lecture « {name} » sur Manent avec le code {code}', { name: club.name, code: club.code })} — ${shareUrl.club(club.code)}`;
     try {
       if (Platform.OS === 'web') {
         const nav: any = navigator;
@@ -233,6 +274,62 @@ export default function ClubDetail() {
               <Feather name={progress.my_hidden ? 'eye' : 'eye-off'} size={13} color={colors.clay} />
               <Text style={styles.hideProgressText}>{progress.my_hidden ? t('Afficher ma progression') : t('Masquer ma progression')}</Text>
             </Pressable>
+          </View>
+        )}
+
+        <Text style={styles.sectionLabel}>{t('Sondages du club')}</Text>
+        {cPolls.map((p: any) => (
+          <View key={p.poll_id} style={styles.cPollCard} testID={`cpoll-${p.poll_id}`}>
+            <Text style={styles.cPollQ}>{p.question}</Text>
+            {p.results.map((r: any, i: number) => (
+              <Pressable key={i} testID={`cpoll-opt-${i}`} disabled={p.my_vote != null} onPress={() => votePoll(p.poll_id, i)}
+                style={[styles.cPollOpt, p.my_vote === i && { borderColor: colors.chambray }]}>
+                {p.my_vote != null && <View style={[styles.cPollFill, { width: `${r.pct}%` }]} />}
+                <Text style={styles.cPollOptText} numberOfLines={1}>{r.label}</Text>
+                {p.my_vote != null && <Text style={styles.cPollPct}>{r.pct}%</Text>}
+              </Pressable>
+            ))}
+            <Text style={styles.cMeta}>{p.total_votes} {t(p.total_votes > 1 ? 'votes' : 'vote')}</Text>
+          </View>
+        ))}
+        {club.is_owner && (
+          <Pressable testID="cpoll-create" onPress={() => setPollForm({ q: '', o: ['', '', ''] })} style={styles.cDashBtn}>
+            <Feather name="bar-chart-2" size={14} color={colors.chambray} />
+            <Text style={styles.cDashText}>{t('Créer un sondage')}</Text>
+          </Pressable>
+        )}
+        {pollForm && (
+          <View style={styles.cForm}>
+            <TextInput testID="cpoll-q" value={pollForm.q} onChangeText={v => setPollForm({ ...pollForm, q: v })} placeholder={t('Ta question')} placeholderTextColor={colors.clay} style={styles.cInput} />
+            {pollForm.o.map((o, i) => (
+              <TextInput key={i} testID={`cpoll-o-${i}`} value={o} onChangeText={v => setPollForm({ ...pollForm, o: pollForm.o.map((x, j) => (j === i ? v : x)) })} placeholder={`${t('Option')} ${i + 1}`} placeholderTextColor={colors.clay} style={styles.cInput} />
+            ))}
+            <Pressable testID="cpoll-submit" onPress={submitPoll} style={styles.cSubmit}><Text style={styles.cSubmitText}>{t('Publier')}</Text></Pressable>
+          </View>
+        )}
+
+        <Text style={styles.sectionLabel}>{t('Événements du club')}</Text>
+        {cEvents.map((e: any) => (
+          <View key={e.event_id} style={styles.cPollCard} testID={`cevent-${e.event_id}`}>
+            <Text style={styles.cPollQ}>{e.title}</Text>
+            <Text style={styles.cMeta}>{e.date}{e.location ? ` · ${e.location}` : ''} · {e.attendees_count} {t(e.attendees_count > 1 ? 'inscrits' : 'inscrit')}</Text>
+            <Pressable testID={`cevent-attend-${e.event_id}`} onPress={() => attendEvent(e.event_id)} style={[styles.cSubmit, e.going && { backgroundColor: colors.clay }]}>
+              <Text style={styles.cSubmitText}>{e.going ? t('Je me désinscris') : t('J’y serai')}</Text>
+            </Pressable>
+          </View>
+        ))}
+        {club.is_owner && (
+          <Pressable testID="cevent-create" onPress={() => setEvForm({ title: '', date: '', loc: '' })} style={styles.cDashBtn}>
+            <Feather name="calendar" size={14} color={colors.chambray} />
+            <Text style={styles.cDashText}>{t('Créer un événement')}</Text>
+          </Pressable>
+        )}
+        {evForm && (
+          <View style={styles.cForm}>
+            <TextInput testID="cevent-title" value={evForm.title} onChangeText={v => setEvForm({ ...evForm, title: v })} placeholder={t('Titre (ex. Discussion finale)')} placeholderTextColor={colors.clay} style={styles.cInput} />
+            <TextInput testID="cevent-date" value={evForm.date} onChangeText={v => setEvForm({ ...evForm, date: v })} placeholder={t('Date : JJ/MM/AAAA 18h30')} placeholderTextColor={colors.clay} style={styles.cInput} />
+            <TextInput testID="cevent-loc" value={evForm.loc} onChangeText={v => setEvForm({ ...evForm, loc: v })} placeholder={t('Lieu ou lien (optionnel)')} placeholderTextColor={colors.clay} style={styles.cInput} />
+            <Pressable testID="cevent-submit" onPress={submitEvent} style={styles.cSubmit}><Text style={styles.cSubmitText}>{t('Publier')}</Text></Pressable>
           </View>
         )}
 
@@ -493,6 +590,19 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   revealLink: { fontFamily: fonts.bodyMedium, fontSize: 12, color: colors.chambray, marginTop: 6, textDecorationLine: 'underline' },
   msgPageTag: { fontFamily: fonts.bodyMedium, fontSize: 9.5, color: colors.clay, letterSpacing: 0.8, marginTop: 4, textTransform: 'uppercase' },
   pageInput: { width: 58, height: 46, borderWidth: 1, borderColor: colors.borderSoft, borderRadius: radius.pill, textAlign: 'center', fontFamily: fonts.body, fontSize: 13, color: colors.espresso, backgroundColor: colors.creme },
+  cPollCard: { backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md, marginBottom: spacing.sm },
+  cPollQ: { fontFamily: fonts.displayMedium, fontSize: 17, color: colors.espresso, marginBottom: spacing.sm },
+  cPollOpt: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: colors.borderSoft, borderRadius: radius.sm, padding: 10, marginBottom: 6, overflow: 'hidden' },
+  cPollFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: colors.glacier },
+  cPollOptText: { fontFamily: fonts.body, fontSize: 13, color: colors.espresso, flex: 1 },
+  cPollPct: { fontFamily: fonts.bodyMedium, fontSize: 11.5, color: colors.chambray },
+  cMeta: { fontFamily: fonts.body, fontSize: 11, color: colors.clay, marginTop: 2 },
+  cDashBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 42, borderRadius: radius.pill, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.chambray, backgroundColor: colors.creme, marginBottom: spacing.sm },
+  cDashText: { fontFamily: fonts.bodyMedium, fontSize: 12.5, color: colors.chambray },
+  cForm: { backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md, gap: 8, marginBottom: spacing.sm },
+  cInput: { height: 42, borderWidth: 1, borderColor: colors.borderSoft, borderRadius: radius.sm, paddingHorizontal: spacing.md, fontFamily: fonts.body, fontSize: 13, color: colors.espresso, backgroundColor: colors.glacier },
+  cSubmit: { height: 40, borderRadius: radius.pill, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
+  cSubmitText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.creme },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSoft, backgroundColor: colors.glacier },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontFamily: fonts.displayMedium, fontSize: 19, color: colors.espresso, flex: 1, textAlign: 'center', marginHorizontal: spacing.sm },

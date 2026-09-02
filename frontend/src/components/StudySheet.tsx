@@ -113,7 +113,7 @@ export function StudySheet({ sheet, onSave }: { sheet?: Sheet | null; onSave: (s
         multiline
       />
 
-      <Text style={styles.label}>{t('Thèmes de l’œuvre')}</Text>
+      <Text style={styles.label}>{t('Sujets de l’œuvre')}</Text>
       <View style={styles.themeWrap}>
         {themes.map(t => (
           <Pressable key={t} testID={`sheet-theme-${t}`} onPress={() => removeTheme(t)} style={styles.themeChip}>
@@ -123,7 +123,7 @@ export function StudySheet({ sheet, onSave }: { sheet?: Sheet | null; onSave: (s
         ))}
       </View>
       <View style={{ flexDirection: 'row', gap: 8 }}>
-        <TextInput testID="sheet-theme-input" value={newTheme} onChangeText={setNewTheme} onSubmitEditing={addTheme} placeholder={t('Ajoute un thème (ex. destin)')} placeholderTextColor={colors.clay} style={[styles.input, { flex: 1 }]} />
+        <TextInput testID="sheet-theme-input" value={newTheme} onChangeText={setNewTheme} onSubmitEditing={addTheme} placeholder={t('Ajoute un sujet (ex. destin)')} placeholderTextColor={colors.clay} style={[styles.input, { flex: 1 }]} />
         <Pressable testID="sheet-theme-add" onPress={addTheme} style={styles.plusBtn}><Feather name="plus" size={20} color={colors.creme} /></Pressable>
       </View>
     </View>

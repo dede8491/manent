@@ -309,3 +309,12 @@ Audit (read-only) : CONDITIONAL PASS, 3 failles moyennes — toutes corrigées e
 - Section UI « Où en est le club » (club/[id].tsx, testID club-progress-section) : résumé Cormorant, avatars initiales, barres Chambray sur fond Bisque, p. X / Y · Z %, toggle œil « Masquer ma progression ».
 **Voir plus de livres** : pool par thème porté à 60 (requêtes élargies Google 30/20/20 + OL subject/language:fre 40/30) ; theme/[name].tsx → grille 3 colonnes, 12 affichés, bouton « Voir plus de livres » (+12, testID theme-see-more).
 Testé e2e via curl (création publique, discover, join, correspondance titre insensible casse, masquage, beyond, reveal) + screenshots. Comptes/cercle de test supprimés.
+
+## Itérations 36-40 — REFONTE Chantiers 1-7 (validée par l'utilisatrice, spec complète dans son message)
+- Catalogue catalog_books (routes/catalog.py) : upsert norm_key/ISBN, index texte FR (language_override=idioma), worker asyncio (catalog_tasks : cover/summary, échecs 7 j), subject_mapping, AREAS+AREA_QUERIES, endpoints /catalog/* (+ admin aires protégé require_admin). Seed relançable seed_catalog.py (1 393 livres, relancer quand quota Google dispo), migrate_catalog.py.
+- theme_page paginé (?area,page,size) 100 % catalogue ; discover sans _find_cover ; POST /books → upsert catalogue+catalog_id+popularity.
+- Sujets : saisie libre onboarding/recherche, chips accueil = themes de l'utilisatrice + « + », Sujets du moment, renommage UI complet.
+- Aires : AreaAdmin.tsx dans admin, app/area/[key].tsx, filtre croisé sujet×aire, section Littératures accueil (masquée si vide).
+- Clubs unifiés : paywall seulement sur créer (402 backend), Communauté Manent auto (is_community), polls/events PAR club (club_polls avec club_id, club_events2), ClubHome purgé du club global (sections retirées, states legacy inutilisés = warnings lint tolérés), « cercle » banni.
+- Partage : PUBLIC_BASE_URL (une variable, backend+frontend+app.config.js), src/share.ts, routes q/[id] b/[id] c/[code] [slug](@handle), pages OG /api/s/*, .well-known dans frontend/public (AASA appID TEAMID.com.manent.app et assetlinks empreinte À REMPLACER au moment du build store).
+- Restant/known : qualité variable des titres OL sur certains sujets (albums musicaux sur « amour ») — s'améliorera via popularity et relances du seed ; enrichissement (~1 600 tâches) continue en fond ; pytest legacy à moderniser.

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
-import { useRouter } from 'expo-router';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput } from 'react-native';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
@@ -21,18 +21,39 @@ export default function Themes() {
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { updateUser } = useAuth();
+  const { updateUser, user } = useAuth();
+  const { edit } = useLocalSearchParams<{ edit?: string }>();
+  const isEdit = edit === '1';
   const [mode, setMode] = useState<'plaisir'|'etudes'|'both'|null>(null);
   const [themes, setThemes] = useState<string[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
+  const [custom, setCustom] = useState('');
+  const [showCustom, setShowCustom] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    api<{ themes: string[] }>('/themes').then(r => setThemes(r.themes));
+    api<{ themes: string[] }>('/themes').then(r => {
+      const mine = (user?.themes || []).filter(Boolean);
+      setThemes([...r.themes, ...mine.filter((x: string) => !r.themes.includes(x))]);
+      if (isEdit) {
+        setSelected(mine);
+        setMode((user as any)?.reading_mode || 'plaisir');
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const toggle = (t: string) => {
     setSelected(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]);
+  };
+
+  const addCustom = () => {
+    const label = custom.trim().toLowerCase().slice(0, 40);
+    if (!label) return;
+    if (!themes.includes(label)) setThemes(prev => [...prev, label]);
+    if (!selected.includes(label)) setSelected(prev => [...prev, label]);
+    setCustom('');
+    setShowCustom(false);
   };
 
   const save = async () => {
@@ -40,8 +61,9 @@ export default function Themes() {
     setLoading(true);
     try {
       await updateUser({ reading_mode: mode, themes: selected });
-      // Seed demo data so home feed isn't empty
-      try { await api('/dev/seed', { method: 'POST' }); } catch {}
+      if (!isEdit) {
+        try { await api('/dev/seed', { method: 'POST' }); } catch {}
+      }
       router.replace('/(tabs)/home');
     } finally { setLoading(false); }
   };
@@ -65,7 +87,7 @@ export default function Themes() {
           ))}
         </View>
 
-        <Text style={[styles.title, { marginTop: spacing.xxl }]}>{t('Choisis tes thèmes')}</Text>
+        <Text style={[styles.title, { marginTop: spacing.xxl }]}>{t('Choisis tes sujets')}</Text>
         <Text style={styles.sub}>{t('Au moins 3, pour construire ton fil.')}</Text>
         <View style={styles.tagWrap}>
           {themes.map(t => {
@@ -76,12 +98,31 @@ export default function Themes() {
               </Pressable>
             );
           })}
+          <Pressable testID="theme-custom" onPress={() => setShowCustom(true)} style={[styles.tag, { borderStyle: 'dashed' }]}>
+            <Text style={styles.tagText}>{t('Autre…')}</Text>
+          </Pressable>
         </View>
+        {showCustom && (
+          <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md, alignItems: 'center' }}>
+            <TextInput
+              testID="theme-custom-input"
+              value={custom} onChangeText={setCustom}
+              placeholder={t('Ton sujet (ex. sororité)')}
+              placeholderTextColor={colors.clay}
+              autoFocus
+              onSubmitEditing={addCustom}
+              style={styles.customInput}
+            />
+            <Pressable testID="theme-custom-add" onPress={addCustom} style={styles.customAdd}>
+              <Text style={{ fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.creme }}>{t('Ajouter')}</Text>
+            </Pressable>
+          </View>
+        )}
       </ScrollView>
       <View style={{ paddingHorizontal: spacing.xl, paddingTop: spacing.sm }}>
         <PrimaryButton
           testID="btn-themes-continue"
-          title={selected.length < 3 ? t('{n}/3 thèmes', { n: selected.length }) : t('Continuer')}
+          title={selected.length < 3 ? t('{n}/3 sujets', { n: selected.length }) : t(isEdit ? 'Enregistrer' : 'Continuer')}
           disabled={!mode || selected.length < 3}
           loading={loading}
           onPress={save}
@@ -92,6 +133,8 @@ export default function Themes() {
 }
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
+  customInput: { flex: 1, height: 44, borderWidth: 1, borderColor: colors.borderSoft, borderRadius: radius.md, paddingHorizontal: spacing.md, fontFamily: fonts.body, fontSize: 14, color: colors.espresso, backgroundColor: colors.creme },
+  customAdd: { height: 44, paddingHorizontal: spacing.lg, borderRadius: radius.pill, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },
   c: { flex: 1, backgroundColor: colors.glacier },
   step: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase' },
   title: { fontFamily: fonts.displayMedium, fontSize: 30, color: colors.espresso, marginTop: spacing.sm },

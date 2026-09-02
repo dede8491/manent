@@ -216,7 +216,7 @@ export default function Community() {
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
           <View style={[styles.modal, { paddingBottom: insets.bottom + spacing.lg }]}>
             <View style={styles.grabber} />
-            <Text style={styles.modalTitle}>{t('Nouveau cercle')}</Text>
+            <Text style={styles.modalTitle}>{t('Nouveau club')}</Text>
             <TextInput testID="new-club-name" value={clubName} onChangeText={setClubName} placeholder={t('Nom (ex: Les soirées Voltaire)')} placeholderTextColor={colors.clay} style={styles.input} />
             <TextInput testID="new-club-desc" value={clubDesc} onChangeText={setClubDesc} placeholder={t('Description (optionnel)')} placeholderTextColor={colors.clay} style={[styles.input, { height: 80 }]} multiline />
             <View style={{ gap: spacing.sm }}>
@@ -225,17 +225,17 @@ export default function Community() {
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <Feather name={v === 'private' ? 'lock' : 'globe'} size={14} color={clubVisibility === v ? colors.creme : colors.chambray} />
                     <Text style={[styles.visLabel, clubVisibility === v && { color: colors.creme }]}>
-                      {v === 'private' ? t('Cercle fermé') : t('Cercle public')}
+                      {v === 'private' ? t('Club fermé') : t('Club public')}
                     </Text>
                   </View>
                   <Text style={[styles.visDesc, clubVisibility === v && { color: colors.creme, opacity: 0.9 }]}>
-                    {v === 'private' ? t('Sur invitation uniquement — un code sera généré pour tes proches.') : t('Visible par toute la communauté, chacun peut le rejoindre librement.')}
+                    {v === 'private' ? t('Sur invitation uniquement — un code sera généré pour tes invités.') : t('Visible par toute la communauté, chacun peut le rejoindre librement.')}
                   </Text>
                 </Pressable>
               ))}
             </View>
             <View style={{ height: spacing.md }} />
-            <PrimaryButton testID="btn-create-club" title={t('Créer le cercle')} onPress={createClub} loading={creating} disabled={!clubName.trim()} />
+            <PrimaryButton testID="btn-create-club" title={t('Créer le club')} onPress={createClub} loading={creating} disabled={!clubName.trim()} />
             <GhostButton title={t('Annuler')} onPress={() => setClubModal(false)} />
           </View>
         </KeyboardAvoidingView>
@@ -245,7 +245,7 @@ export default function Community() {
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
           <View style={[styles.modal, { paddingBottom: insets.bottom + spacing.lg }]}>
             <View style={styles.grabber} />
-            <Text style={styles.modalTitle}>{t('Rejoindre un cercle')}</Text>
+            <Text style={styles.modalTitle}>{t('Rejoindre un club')}</Text>
             <TextInput testID="join-club-code" value={joinCode} onChangeText={t => setJoinCode(t.toUpperCase())} placeholder={t('Code (ex: A7K2PX)')} autoCapitalize="characters" placeholderTextColor={colors.clay} style={[styles.input, styles.codeInput]} maxLength={6} />
             {joinError ? <Text style={styles.joinError} testID="join-club-error">{joinError}</Text> : null}
             <View style={{ height: spacing.md }} />

@@ -28,6 +28,8 @@ export default function Home() {
   const { user, refresh } = useAuth();
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [themes, setThemes] = useState<string[]>([]);
+  const [trending, setTrending] = useState<string[]>([]);
+  const [areas, setAreas] = useState<any[]>([]);
   const [daily, setDaily] = useState<Quote | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -94,8 +96,23 @@ export default function Home() {
 
   useEffect(() => {
     (async () => {
-      const t = await api<{ themes: string[] }>('/themes');
-      setThemes(t.themes);
+      try {
+        // Sujets choisis par l'utilisateur d'abord, référentiel sinon
+        const me = await api<any>('/auth/me');
+        const mine = ((me.user || me).themes || []).filter(Boolean);
+        if (mine.length) setThemes(mine);
+        else setThemes((await api<{ themes: string[] }>('/themes')).themes);
+      } catch {
+        try { setThemes((await api<{ themes: string[] }>('/themes')).themes); } catch {}
+      }
+      try {
+        const tr = await api<{ subjects: string[] }>('/catalog/subjects/trending');
+        setTrending(tr.subjects || []);
+      } catch {}
+      try {
+        const ar = await api<{ areas: any[] }>('/catalog/areas');
+        setAreas(ar.areas || []);
+      } catch {}
       await load();
       setLoading(false);
     })();
@@ -141,13 +158,41 @@ export default function Home() {
                 <Text style={styles.chipText}>{t}</Text>
               </Pressable>
             ))}
+            <Pressable testID="home-chip-add" onPress={() => router.push('/onboarding/themes?edit=1')} style={styles.chip}>
+              <Text style={styles.chipText}>+</Text>
+            </Pressable>
           </ScrollView>
         </View>
+        {trending.length > 0 && (
+          <View style={[styles.chipRow, { marginTop: 6 }]}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: spacing.xl, alignItems: 'center' }}>
+              <Text style={styles.trendLabel}>{t('Sujets du moment')}</Text>
+              {trending.filter(s => !themes.includes(s)).slice(0, 6).map(s => (
+                <Pressable key={s} testID={`trend-chip-${s}`} onPress={() => router.push({ pathname: '/theme/[name]', params: { name: s } })} style={styles.chip}>
+                  <Text style={styles.chipText}>{s}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        )}
       </View>
       <ScrollView
         contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + 80 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.chambray} />}
       >
+        {areas.length > 0 && (
+          <View style={{ marginBottom: spacing.lg }} testID="home-areas">
+            <Text style={styles.areasLabel}>{t('Littératures')}</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>
+              {areas.map((a: any) => (
+                <Pressable key={a.key} testID={`area-card-${a.key}`} onPress={() => router.push({ pathname: '/area/[key]', params: { key: a.key } })} style={styles.areaCard}>
+                  <Text style={styles.areaName}>{a.label}</Text>
+                  <Text style={styles.areaCount}>{a.count} {t(a.count > 1 ? 'livres' : 'livre')}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </View>
+        )}
         {discover?.resume && (
           <View style={{ marginBottom: spacing.lg }}>
             <ResumeCard
@@ -278,6 +323,11 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   scanBtn: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: colors.creme, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center' },
   dailyLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: spacing.sm },
   chipRow: { height: 44 },
+  trendLabel: { fontFamily: fonts.bodyMedium, fontSize: 10.5, color: colors.clay, letterSpacing: 1.2, textTransform: 'uppercase' },
+  areasLabel: { fontFamily: fonts.displayMedium, fontSize: 21, color: colors.espresso, marginBottom: spacing.md },
+  areaCard: { backgroundColor: colors.bisque, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.md, minWidth: 150 },
+  areaName: { fontFamily: fonts.displayMedium, fontSize: 16.5, color: colors.espresso },
+  areaCount: { fontFamily: fonts.bodyMedium, fontSize: 10.5, color: colors.clay, letterSpacing: 0.8, marginTop: 3, textTransform: 'uppercase' },
   chip: { height: 36, paddingHorizontal: 14, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   chipActive: { backgroundColor: colors.chambray, borderColor: colors.chambray },
   chipText: { fontFamily: fonts.body, fontSize: 13, color: colors.espresso },

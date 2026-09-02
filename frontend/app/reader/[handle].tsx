@@ -9,6 +9,7 @@ import { QuoteCard, Quote } from '@/src/components/QuoteCard';
 import { BookCover } from '@/src/components/BookCover';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '@/src/api';
+import { shareUrl } from '@/src/share';
 import { useT } from '@/src/i18n';
 import ManentLoader from '@/src/components/ManentLoader';
 
@@ -41,7 +42,7 @@ export default function ReaderProfile() {
     setFollowBusy(true);
     try {
       const r = await api<{ following: boolean; followers: number }>(`/readers/${encodeURIComponent(handle)}/follow`, { method: 'POST' });
-      setProfile({ ...profile, is_following: r.following, stats: { ...profile.stats, followers: r.followers } });
+      setProfile({ ...profile, is_following: r.following, stats: { ...profile.stats, followers: r.followers } as any });
     } catch {} finally {
       setFollowBusy(false);
     }
@@ -60,7 +61,7 @@ export default function ReaderProfile() {
 
   const shareProfile = async () => {
     if (!profile) return;
-    const url = `manent.app/@${profile.user.handle}`;
+    const url = shareUrl.profile(profile.user.handle);
     const message = t('Découvre les lectures de {pseudo} sur Manent — {url}', { pseudo: profile.user.pseudo, url });
     try {
       if (Platform.OS === 'web') {

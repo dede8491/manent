@@ -27,6 +27,8 @@ export default function SearchScreen() {
   const [results, setResults] = useState<{ quotes: Quote[]; books: any[]; readers: any[] }>({ quotes: [], books: [], readers: [] });
   const [catalog, setCatalog] = useState<any[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogTotal, setCatalogTotal] = useState(0);
+  const [catalogPage, setCatalogPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const timer = useRef<any>(null);
   const catalogTimer = useRef<any>(null);
@@ -76,10 +78,10 @@ export default function SearchScreen() {
     setCatalogLoading(true);
     catalogTimer.current = setTimeout(async () => {
       try {
-        const r = await api<{ results: any[] }>(`/books/search?q=${encodeURIComponent(qv)}`);
-        // Priorité aux livres avec couverture
-        const all = r.results || [];
-        setCatalog([...all.filter((x: any) => x.cover), ...all.filter((x: any) => !x.cover)].slice(0, 8));
+        const r = await api<{ results: any[]; total: number }>(`/catalog/search?q=${encodeURIComponent(qv)}&page=1&size=10`);
+        setCatalog(r.results || []);
+        setCatalogTotal(r.total || 0);
+        setCatalogPage(1);
       } catch {
         setCatalog([]);
       }
@@ -87,6 +89,15 @@ export default function SearchScreen() {
     }, 450);
     return () => clearTimeout(catalogTimer.current);
   }, [q, scope, theme, bookId]);
+
+  const catalogMore = async () => {
+    try {
+      const p = catalogPage + 1;
+      const r = await api<{ results: any[] }>(`/catalog/search?q=${encodeURIComponent(q.trim())}&page=${p}&size=10`);
+      setCatalog(prev => [...prev, ...(r.results || [])]);
+      setCatalogPage(p);
+    } catch {}
+  };
 
   const filtersActive = theme || bookId;
   const showBooks = scope !== 'quotes' && !filtersActive;
@@ -130,7 +141,7 @@ export default function SearchScreen() {
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xxl }} keyboardShouldPersistTaps="handled">
-        <Text style={styles.filterLabel}>{t('Par thème')}</Text>
+        <Text style={styles.filterLabel}>{t('Par sujet')}</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipScroll}>
           {themes.map(t => (
             <Pressable key={t} testID={`search-theme-${t}`} onPress={() => setTheme(theme === t ? null : t)} style={[styles.chip, theme === t && styles.chipActive]}>
@@ -213,19 +224,35 @@ export default function SearchScreen() {
                   </View>
                   {catalog.map((b: any, i: number) => (
                     <Pressable
-                      key={`cat-${i}`}
+                      key={b.catalog_id || `cat-${i}`}
                       testID={`search-catalog-${i}`}
                       onPress={() => router.push({ pathname: '/book/add', params: { title: b.title || '', author: b.author || '', cover: b.cover || '', isbn: b.isbn || '', pages: b.pages ? String(b.pages) : '', year: b.year || '' } })}
                       style={styles.bookRow}
                     >
-                      <View style={styles.bookCover}><Text style={styles.bookInitial}>{(b.title?.[0] || 'M').toUpperCase()}</Text></View>
+                      {b.cover ? (
+                        <Image source={{ uri: b.cover }} style={styles.bookCoverImg} />
+                      ) : (
+                        <View style={styles.bookCover}><Text style={styles.bookInitial}>{(b.title?.[0] || 'M').toUpperCase()}</Text></View>
+                      )}
                       <View style={{ flex: 1 }}>
                         <Text style={styles.bookTitle} numberOfLines={1}>{b.title}</Text>
                         <Text style={styles.bookAuthor} numberOfLines={1}>{[b.author, b.year].filter(Boolean).join('  ·  ')}</Text>
+                        {!!b.summary && <Text style={styles.bookSummary} numberOfLines={2}>{b.summary}</Text>}
                       </View>
                       <Feather name="plus-circle" size={19} color={colors.chambray} />
                     </Pressable>
                   ))}
+                  {catalog.length < catalogTotal && (
+                    <Pressable testID="search-see-more" onPress={catalogMore} style={styles.moreBtn}>
+                      <Text style={styles.moreBtnText}>{t('Voir plus de livres')}</Text>
+                    </Pressable>
+                  )}
+                  {q.trim().length >= 2 && (
+                    <Pressable testID="open-subject-page" onPress={() => router.push({ pathname: '/theme/[name]', params: { name: q.trim().toLowerCase() } })} style={[styles.moreBtn, { marginTop: spacing.sm }]}>
+                      <Feather name="hash" size={13} color={colors.chambray} />
+                      <Text style={styles.moreBtnText}>{t('Ouvrir le sujet « {s} »', { s: q.trim().toLowerCase() })}</Text>
+                    </Pressable>
+                  )}
                 </>
               )}
             </>
@@ -256,6 +283,10 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   sectionLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase', marginTop: spacing.xl, marginBottom: spacing.sm },
   bookRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, marginBottom: 8 },
   bookCover: { width: 40, height: 56, borderRadius: radius.sm, backgroundColor: colors.bisque, alignItems: 'center', justifyContent: 'center' },
+  bookCoverImg: { width: 40, height: 56, borderRadius: radius.sm, backgroundColor: colors.bisque },
+  bookSummary: { fontFamily: fonts.body, fontSize: 11, color: colors.clay, lineHeight: 15, marginTop: 2 },
+  moreBtn: { marginTop: spacing.md, height: 42, borderRadius: radius.pill, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.chambray, backgroundColor: colors.creme, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  moreBtnText: { fontFamily: fonts.bodyMedium, fontSize: 12.5, color: colors.chambray },
   readerAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.bisque, alignItems: 'center', justifyContent: 'center' },
   bookInitial: { fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso },
   bookTitle: { fontFamily: fonts.bodyMedium, fontSize: 15, color: colors.espresso },

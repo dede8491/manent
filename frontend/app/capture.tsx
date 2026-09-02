@@ -207,7 +207,7 @@ export default function CaptureModal() {
           </View>
         </View>
 
-        <Text style={styles.label}>{t('Thèmes')}</Text>
+        <Text style={styles.label}>{t('Sujets')}</Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           {themes.map(t => {
             const on = selectedThemes.includes(t);
@@ -326,7 +326,7 @@ export default function CaptureModal() {
             <Text style={styles.promptTitle}>
               {progressPrompt?.unit === 'chapitre' ? t('Tu en es au chapitre {n} ?', { n: progressPrompt?.page ?? 0 }) : t('Tu en es à la page {n} ?', { n: progressPrompt?.page ?? 0 })}
             </Text>
-            <Text style={styles.promptSub}>{t('On met à jour ta progression de lecture — tes cercles la verront aussi.')}</Text>
+            <Text style={styles.promptSub}>{t('On met à jour ta progression de lecture — tes clubs la verront aussi.')}</Text>
             <Pressable testID="progress-prompt-yes" onPress={() => confirmProgress(true)} style={styles.promptYes}>
               <Text style={styles.promptYesText}>{t('Oui, mettre à jour')}</Text>
             </Pressable>

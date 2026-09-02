@@ -28,6 +28,9 @@ SUPABASE_BUCKET = os.environ.get('SUPABASE_BUCKET', 'manent-photos')
 
 from routes.book_search import router as book_search_router, _search_google, _search_openlibrary
 from routes.push import router as push_router, send_push
+import routes.catalog as catalog
+from routes.catalog import router as catalog_router, admin_router as catalog_admin_router, upsert_catalog_book
+import routes.share as share_pages
 from routes.club import router as club_router, event_reminder_loop
 
 client = AsyncIOMotorClient(MONGO_URL)
@@ -71,6 +74,12 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
     user = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0, "password_hash": 0})
     if not user:
         raise HTTPException(status_code=401, detail="user_not_found")
+    return user
+
+
+async def require_admin(user=Depends(get_current_user)) -> dict:
+    if not user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="admin_only")
     return user
 
 
@@ -290,7 +299,7 @@ async def _attach_public_meta(quotes: list):
 
 
 @api.get("/themes/{theme}/page")
-async def theme_page(theme: str, user=Depends(get_current_user)):
+async def theme_page(theme: str, area: Optional[str] = None, page: int = 1, size: int = 12, user=Depends(get_current_user)):
     q = {"is_public": True, "themes": theme, "is_hidden": {"$ne": True}, **sensitive_filter(user)}
     total = await db.quotes.count_documents(q)
     readers = len(await db.quotes.distinct("user_id", q))
@@ -319,45 +328,24 @@ async def theme_page(theme: str, user=Depends(get_current_user)):
                 "is_mine": b["user_id"] == user["user_id"],
             })
         suggestions = suggestions[:10]
-    # Propositions externes (multi-sources, avec couverture uniquement), cache 7 jours par thème
-    discover = []
-    cache = await db.theme_suggestions.find_one({"theme": theme.lower()}, {"_id": 0})
-    if cache and (now_utc() - cache["at"].replace(tzinfo=timezone.utc)).total_seconds() < 7 * 86400:
-        discover = cache.get("items") or []
-    else:
-        try:
-            # Multi-requêtes en parallèle (Google + Open Library) pour un vrai catalogue par thème
-            async with httpx.AsyncClient(timeout=12) as http:
-                batches = await asyncio.gather(
-                    _search_google(http, f"{theme} roman", 30),
-                    _search_google(http, f"{theme} essai", 20),
-                    _search_google(http, theme, 20),
-                    _search_openlibrary(http, f"subject:{theme} language:fre", 40),
-                    _search_openlibrary(http, f"{theme} language:fre", 30),
-                    return_exceptions=True,
-                )
-            results = []
-            for b in batches:
-                if isinstance(b, list):
-                    results += b
-            # Priorité aux éditions françaises, puis à celles avec couverture
-            results.sort(key=lambda r: (not r.get("_fr"), not r.get("cover")))
-            seen2 = {s["title"].strip().lower() for s in suggestions}
-            for r in results:
-                ttl = (r.get("title") or "").strip()
-                if not ttl or not r.get("cover") or ttl.lower() in seen2:
-                    continue
-                seen2.add(ttl.lower())
-                discover.append({"title": ttl, "author": r.get("author"), "cover": r["cover"], "year": r.get("year"), "summary": r.get("summary")})
-                if len(discover) >= 60:
-                    break
-            if discover:
-                await db.theme_suggestions.update_one({"theme": theme.lower()}, {"$set": {"at": now_utc(), "items": discover}}, upsert=True)
-        except Exception as e:
-            logger.warning("theme discover failed: %s", e)
-        if not discover and cache:
-            discover = cache.get("items") or []
-    return {"theme": theme, "stats": {"quotes": total, "readers": readers, "books": books}, "quotes": quotes, "suggested_books": suggestions, "discover_books": discover}
+    # Livres du sujet — depuis le CATALOGUE uniquement (aucun appel externe pendant la requête), paginé
+    size = min(max(size, 1), 40)
+    skip = max(page - 1, 0) * size
+    subj = catalog._norm_subject(theme)
+    cflt: dict = {"subjects": subj}
+    if area:
+        cflt["areas"] = area
+    discover_total = await db.catalog_books.count_documents(cflt)
+    cdocs = await db.catalog_books.find(cflt, {"_id": 0}).sort([("popularity", -1), ("year", -1)]) \
+        .skip(skip).limit(size).to_list(size)
+    discover = [{"catalog_id": b["catalog_id"], "title": b["title"], "author": ", ".join(b.get("authors") or []),
+                 "cover": b.get("cover"), "year": b.get("year"), "summary": b.get("summary")} for b in cdocs]
+    if page == 1:
+        await db.subject_views.update_one({"subject": subj, "day": now_utc().strftime("%Y-%m-%d")},
+                                          {"$inc": {"count": 1}}, upsert=True)
+    return {"theme": theme, "stats": {"quotes": total, "readers": readers, "books": books}, "quotes": quotes,
+            "suggested_books": suggestions, "discover_books": discover,
+            "discover_total": discover_total, "page": page, "size": size}
 
 
 @api.get("/readers/suggestions")
@@ -519,7 +507,7 @@ async def _find_cover(title: Optional[str], author: Optional[str], isbn: Optiona
                     for it in (r.json().get("items") or []):
                         th = (it.get("volumeInfo", {}).get("imageLinks") or {}).get("thumbnail")
                         if th:
-                            return th.replace("http://", "https://") + "&zoom=1"
+                            return th.replace("http://", "https://") + "&zoom=2"
         except Exception:
             pass
         # Repli : recherche Open Library par titre + auteur (utile quand Google est en quota)
@@ -609,6 +597,21 @@ async def create_book(body: BookCreate, user=Depends(get_current_user)):
         doc["finished_at"] = now_utc()
         doc["read_count"] = 1
     await db.books.insert_one(doc.copy())
+    # Catalogue : source unique — le livre rejoint catalog_books (upsert, popularité +1)
+    if body.type != "etude":
+        try:
+            cb = await upsert_catalog_book({"title": doc["title"], "author": doc.get("author"),
+                                            "isbn": doc.get("isbn"), "pages": doc.get("pages"),
+                                            "year": doc.get("year"), "cover": doc.get("cover")}, source="library")
+            if cb:
+                doc["catalog_id"] = cb["catalog_id"]
+                await db.books.update_one({"book_id": book_id}, {"$set": {"catalog_id": cb["catalog_id"]}})
+                await db.catalog_books.update_one({"catalog_id": cb["catalog_id"]}, {"$inc": {"popularity": 1}})
+                if not doc.get("cover") and cb.get("cover"):
+                    doc["cover"] = cb["cover"]
+                    await db.books.update_one({"book_id": book_id}, {"$set": {"cover": cb["cover"]}})
+        except Exception as e:
+            logger.warning("catalog link failed: %s", e)
     # Récupération de couverture en arrière-plan si absente
     if not doc.get("cover"):
         asyncio.create_task(_backfill_cover(book_id, doc.get("title"), doc.get("author"), doc.get("isbn")))
@@ -1436,6 +1439,20 @@ async def create_club(body: ClubCreate, user=Depends(get_current_user)):
 @api.get("/clubs")
 async def list_clubs(user=Depends(get_current_user)):
     clubs = await db.clubs.find({"members": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    # Club « Communauté Manent » : public, tout le monde en est membre
+    if not any(c.get("is_community") for c in clubs):
+        comm = await db.clubs.find_one({"is_community": True})
+        if not comm:
+            await db.clubs.insert_one({
+                "club_id": new_id("cl"), "name": "Communauté Manent",
+                "description": "Le grand salon de lecture — ouvert à toutes et tous.",
+                "visibility": "public", "is_community": True, "code": _club_code(),
+                "owner_id": user["user_id"], "members": [user["user_id"]],
+                "book": None, "created_at": now_utc(),
+            })
+        else:
+            await db.clubs.update_one({"club_id": comm["club_id"]}, {"$addToSet": {"members": user["user_id"]}})
+        clubs = await db.clubs.find({"members": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
     for c in clubs:
         c["members_count"] = len(c.get("members", []))
         c["messages_count"] = await db.club_messages.count_documents({"club_id": c["club_id"]})
@@ -1552,6 +1569,89 @@ async def club_progress(club_id: str, user=Depends(get_current_user)):
 
 class ProgressVisibility(BaseModel):
     visible: bool
+
+
+class ClubPollBody(BaseModel):
+    question: str = Field(..., max_length=200)
+    options: List[str] = Field(..., min_length=2, max_length=6)
+
+
+@api.post("/clubs/{club_id}/polls")
+async def create_club_poll(club_id: str, body: ClubPollBody, user=Depends(get_current_user)):
+    club = await _club_or_404(club_id, user["user_id"])
+    if club["owner_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="owner_only")
+    doc = {"poll_id": new_id("pl"), "club_id": club_id, "question": body.question.strip(),
+           "options": [o.strip()[:120] for o in body.options if o.strip()], "votes": {},
+           "closed": False, "created_at": now_utc()}
+    await db.club_polls.insert_one(doc.copy())
+    return clean_doc(doc)
+
+
+@api.get("/clubs/{club_id}/polls")
+async def list_club_polls(club_id: str, user=Depends(get_current_user)):
+    await _club_or_404(club_id, user["user_id"])
+    polls = await db.club_polls.find({"club_id": club_id}, {"_id": 0}).sort("created_at", -1).to_list(20)
+    for p in polls:
+        votes = p.pop("votes", {})
+        counts = [0] * len(p["options"])
+        for v in votes.values():
+            if 0 <= v < len(counts):
+                counts[v] += 1
+        total = sum(counts) or 1
+        p["results"] = [{"label": o, "count": c, "pct": round(c * 100 / total)} for o, c in zip(p["options"], counts)]
+        p["total_votes"] = sum(counts)
+        p["my_vote"] = votes.get(user["user_id"])
+    return {"polls": polls}
+
+
+class ClubVoteBody(BaseModel):
+    option: int = Field(..., ge=0, le=5)
+
+
+@api.post("/clubs/{club_id}/polls/{poll_id}/vote")
+async def vote_club_poll(club_id: str, poll_id: str, body: ClubVoteBody, user=Depends(get_current_user)):
+    await _club_or_404(club_id, user["user_id"])
+    await db.club_polls.update_one({"poll_id": poll_id, "club_id": club_id},
+                                   {"$set": {f"votes.{user['user_id']}": body.option}})
+    return {"ok": True}
+
+
+class ClubEventBody(BaseModel):
+    title: str = Field(..., max_length=140)
+    date: str = Field(..., max_length=60)
+    location: Optional[str] = Field(None, max_length=140)
+
+
+@api.post("/clubs/{club_id}/events")
+async def create_club_event(club_id: str, body: ClubEventBody, user=Depends(get_current_user)):
+    club = await _club_or_404(club_id, user["user_id"])
+    if club["owner_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="owner_only")
+    doc = {"event_id": new_id("ev"), "club_id": club_id, "title": body.title.strip(),
+           "date": body.date.strip(), "location": (body.location or "").strip(),
+           "attendees": [], "created_at": now_utc()}
+    await db.club_events2.insert_one(doc.copy())
+    return clean_doc(doc)
+
+
+@api.get("/clubs/{club_id}/events")
+async def list_club_events(club_id: str, user=Depends(get_current_user)):
+    await _club_or_404(club_id, user["user_id"])
+    evs = await db.club_events2.find({"club_id": club_id}, {"_id": 0}).sort("created_at", -1).to_list(20)
+    for e in evs:
+        e["going"] = user["user_id"] in e.get("attendees", [])
+        e["attendees_count"] = len(e.pop("attendees", []))
+    return {"events": evs}
+
+
+@api.post("/clubs/{club_id}/events/{event_id}/attend")
+async def attend_club_event(club_id: str, event_id: str, user=Depends(get_current_user)):
+    await _club_or_404(club_id, user["user_id"])
+    e = await db.club_events2.find_one({"event_id": event_id, "club_id": club_id})
+    op = "$pull" if user["user_id"] in (e or {}).get("attendees", []) else "$addToSet"
+    await db.club_events2.update_one({"event_id": event_id}, {op: {"attendees": user["user_id"]}})
+    return {"ok": True}
 
 
 @api.post("/clubs/{club_id}/progress/visibility")
@@ -2374,7 +2474,7 @@ async def _cached_new_books() -> list:
                     items.append({
                         "title": v["title"],
                         "author": ", ".join(v.get("authors") or []),
-                        "cover": th.replace("http://", "https://") + "&zoom=1",
+                        "cover": th.replace("http://", "https://") + "&zoom=2",
                         "year": (v.get("publishedDate") or "")[:4] or None,
                         "summary": (v.get("description") or "")[:400],
                     })
@@ -2405,13 +2505,7 @@ async def home_discover(user=Depends(get_current_user)):
         {"$limit": 8},
     ]
     popular = await db.books.aggregate(pipeline).to_list(8)
-    # Complète les couvertures manquantes des plus lus (persisté pour les prochains chargements)
-    for p in popular:
-        if not p.get("cover"):
-            c = await _find_cover(p["title"], p.get("author"), None)
-            if c:
-                p["cover"] = c
-                await db.books.update_many({"title": p["title"], "cover": {"$in": [None, ""]}}, {"$set": {"cover": c}})
+    # Couvertures manquantes : jamais résolues pendant la requête (repli affiché, enrichissement en fond)
     # Collections thématiques : thèmes les plus épinglés + couvertures associées
     collections = []
     theme_counts = await db.quotes.aggregate([
@@ -2635,6 +2729,7 @@ async def on_startup():
     asyncio.get_event_loop().create_task(_migrate_covers())
     asyncio.get_event_loop().create_task(_seed_featured())
     asyncio.get_event_loop().create_task(event_reminder_loop())
+    await catalog.init(db)
     logger.info("Manent backend ready")
 
 
@@ -2644,6 +2739,10 @@ async def shutdown_db_client():
 
 
 app.include_router(book_search_router, dependencies=[Depends(get_current_user)])
+app.include_router(catalog_router, dependencies=[Depends(get_current_user)])
+app.include_router(catalog_admin_router, dependencies=[Depends(require_admin)])
+share_pages.db = db
+app.include_router(share_pages.router)
 app.include_router(push_router)
 app.include_router(club_router)
 app.include_router(api)

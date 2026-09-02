@@ -90,7 +90,7 @@ export default function Profile() {
         <View style={styles.stat}><Text style={styles.statNum}>{stats.books}</Text><Text style={styles.statLbl} numberOfLines={1} adjustsFontSizeToFit>{t('livres')}</Text></View>
         <View style={styles.stat}><Text style={styles.statNum}>{stats.quotes}</Text><Text style={styles.statLbl} numberOfLines={1} adjustsFontSizeToFit>{t('citations')}</Text></View>
         <View style={styles.stat}><Text style={styles.statNum}>{stats.boards}</Text><Text style={styles.statLbl} numberOfLines={1} adjustsFontSizeToFit>{t('tableaux')}</Text></View>
-        <View style={styles.stat}><Text style={styles.statNum}>{user?.themes?.length || 0}</Text><Text style={styles.statLbl} numberOfLines={1} adjustsFontSizeToFit>{t('thèmes')}</Text></View>
+        <View style={styles.stat}><Text style={styles.statNum}>{user?.themes?.length || 0}</Text><Text style={styles.statLbl} numberOfLines={1} adjustsFontSizeToFit>{t('sujets')}</Text></View>
       </View>
 
       {clubSummary && clubSummary.joined > 0 && (

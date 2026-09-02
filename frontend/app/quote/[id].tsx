@@ -11,6 +11,7 @@ import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
 import { QuoteCard, Quote } from '@/src/components/QuoteCard';
 import { api } from '@/src/api';
+import { shareUrl } from '@/src/share';
 import { useT } from '@/src/i18n';
 import { PrimaryButton, GhostButton } from '@/src/components/Button';
 import ManentLoader from '@/src/components/ManentLoader';
@@ -142,6 +143,7 @@ export default function QuoteDetail() {
   const shareImage = async () => {
     setFeedback('');
     setBusy('share');
+    const link = (quote as any)?.is_public ? shareUrl.quote((quote as any).quote_id) : null;
     try {
       const uri = await capture();
       if (Platform.OS === 'web') {
@@ -150,7 +152,7 @@ export default function QuoteDetail() {
           const file = new File([blob], 'manent-citation.png', { type: 'image/png' });
           const nav: any = navigator;
           if (nav.canShare && nav.canShare({ files: [file] })) {
-            await nav.share({ files: [file], title: 'Manent' });
+            await nav.share({ files: [file], title: 'Manent', ...(link ? { text: link } : {}) });
           } else {
             downloadWeb(uri);
             setFeedback(t('Image téléchargée — partage-la sur Instagram ou WhatsApp.'));
@@ -162,6 +164,7 @@ export default function QuoteDetail() {
       } else {
         if (await Sharing.isAvailableAsync()) {
           await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Partager la citation' });
+          if (link) setFeedback(`${t('Lien de la citation :')} ${link}`);
         } else {
           setFeedback("Le partage n'est pas disponible sur cet appareil.");
         }

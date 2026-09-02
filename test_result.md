@@ -110,3 +110,39 @@ Notes pour le testing agent:
 - i18n: Réglages → chip English → toute l'app passe en anglais (persisté AsyncStorage + PATCH /me/settings).
 - Backend: GET /api/books/search?q=... renvoie {results:[...]} FR en premier; GET /api/books/search/isbn?isbn=9782290398487 doit renvoyer un livre (source bnf).
 - Prix affichés en Test Store peuvent être $9.99/$79.99 (USD) — connu, pas un bug bloquant.
+
+## Refonte — Chantiers 1 à 7 (sept 2026)
+### Chantier 1 — Catalogue (catalog_books)
+- [x] Un même livre = même couverture/résumé partout (source unique catalog_books)
+- [x] Aucun appel HTTP externe pendant une requête (exception voulue : /catalog/search si <5 résultats)
+- [x] Recherche titre < 300 ms (mesuré : 248 ms sur 1 393 livres, index texte french + language_override)
+- Scripts relançables : seed_catalog.py (sujet × aire, OL+BnF+Google, upsert norm_key/ISBN), migrate_catalog.py
+### Chantier 3 — Couvertures
+- [x] Fil d'accueil < 500 ms (mesuré 343 ms) — plus de _find_cover pendant la requête
+- [x] Échecs mémorisés 7 j (cover_status=failed + cover_checked_at)
+- [x] zoom=2 partout, edge=curl retiré, https forcé (clean_cover_url)
+### Chantier 2 — Résumés partout
+- [x] Résumés dans recherche (/catalog/search), pages sujets, aires — depuis le cache uniquement
+- [x] File catalog_tasks (worker 6 tâches/20 s) : Google→OL→IA ; plafond IA≠récupération gratuite
+### Chantier 4 — Sujets
+- [x] Renommage thème→sujet dans l'UI ; routes /themes conservées en interne
+- [x] Saisie libre (onboarding « Autre… », recherche « Ouvrir le sujet », chip + sur l'accueil)
+- [x] subject_mapping 12 sujets → catégories Google/subjects OL ; requêtes par subject: (plus de Louis L'Amour)
+- [x] Pagination serveur ?page=&size= + « Voir plus » (sujets, aires, recherche)
+- [x] Sujets du moment (compteur subject_views 7 j)
+### Chantier 5 — Aires littéraires
+- [x] catalog_books.areas[] + référentiel 8 aires ; admin : collections (ajout/retrait en un tap) + suggestions « à valider » (jamais visibles sans validation)
+- [x] Filtre Aire sur les pages sujets (croisable) ; page /area/[key] ; section Littératures (accueil, seulement si collection non vide)
+### Chantier 6 — Clubs unifiés
+- [x] « cercle » → « club » partout ; paywall UNIQUEMENT sur Créer (non-premium voit tout, rejoint par code — testé 402 création / accès libre)
+- [x] Club « Communauté Manent » public, adhésion automatique ; posts globaux migrés en messages
+- [x] Sondages + événements PAR club (/clubs/{id}/polls|events, owner-only création — testé 403)
+- [x] Livres proposés + avis → « Ce que la communauté lit » visible de tous
+### Chantier 7 — Partage universel
+- [x] PUBLIC_BASE_URL unique (backend .env + EXPO_PUBLIC_PUBLIC_BASE_URL) — aucun domaine en dur
+- [x] Liens /@handle, /q/, /b/, /c/ → routes app (app/[slug], q/[id], b/[id], c/[code]) ; partage profil corrigé (https)
+- [x] Pages OG backend /api/s/{q|b|u|c} (contenu public uniquement, bouton Rejoindre Manent + manent://)
+- [x] .well-known AASA + assetlinks servis à la racine (via frontend/public) ; app.config.js pilote associatedDomains/intentFilters par variable
+- Note : liens universels testables uniquement sur build store/TestFlight, pas Expo Go
+### Pytest
+- 120 passed ; échecs restants = rate-limit login (5/15 min) déclenché par le volume de la suite + anciens tests obsolètes (premium sans reçu RC → bloqué volontairement depuis l'audit sécurité). Pas de régression fonctionnelle identifiée via curl e2e.
