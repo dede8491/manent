@@ -1,4 +1,4 @@
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { Stack, usePathname, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { LogBox, View, Platform, Linking, Alert } from 'react-native';
@@ -97,6 +97,15 @@ function NavGate() {
     };
   }, [router]);
 
+  // Lot A4 : un lien profond ouvert sans compte est mémorisé, puis appliqué après l'onboarding.
+  const pathname = usePathname();
+  const isDeepLink = (p: string) => /^\/(q|b|c)\//.test(p) || p.startsWith('/@') || p.startsWith('/api/s/');
+  const normalizeDeepLink = (p: string) => {
+    let x = p.replace(/^\/api\/s/, '');
+    if (x.startsWith('/u/')) x = '/@' + x.slice(3);
+    return x;
+  };
+
   useEffect(() => {
     if (loading) return;
     const first = segments[0];
@@ -104,15 +113,31 @@ function NavGate() {
     const inOnboarding = first === 'onboarding';
     const inAuth = first === '(auth)';
     if (!user) {
-      if (atRoot) router.replace('/onboarding');
-      else if (!inOnboarding && !inAuth) router.replace('/onboarding');
+      if (isDeepLink(pathname)) {
+        AsyncStorage.setItem('pending_deep_link', normalizeDeepLink(pathname)).catch(() => {});
+        router.replace('/onboarding');
+      } else if (atRoot || (!inOnboarding && !inAuth)) {
+        router.replace('/onboarding');
+      }
     } else {
       if (atRoot || inOnboarding || inAuth) {
         if (!user.reading_mode) router.replace('/onboarding/themes');
-        else router.replace('/(tabs)/home');
+        else {
+          (async () => {
+            try {
+              const pending = await AsyncStorage.getItem('pending_deep_link');
+              if (pending) {
+                await AsyncStorage.removeItem('pending_deep_link');
+                router.replace(pending as any);
+                return;
+              }
+            } catch {}
+            router.replace('/(tabs)/home');
+          })();
+        }
       }
     }
-  }, [user, loading, segments]);
+  }, [user, loading, segments, pathname]);
 
   return <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.glacier } }} />;
 }

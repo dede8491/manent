@@ -29,7 +29,7 @@ export default function ClubAddBook() {
     setLoading(true);
     timer.current = setTimeout(async () => {
       try {
-        const r = await api<{ results: any[] }>(`/books/search?q=${encodeURIComponent(qv)}`);
+        const r = await api<{ results: any[] }>(`/catalog/search?q=${encodeURIComponent(qv)}`);
         setResults(r.results || []);
       } catch { setResults([]); }
       setLoading(false);

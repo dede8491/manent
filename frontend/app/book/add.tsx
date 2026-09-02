@@ -100,7 +100,7 @@ export default function AddBook() {
     timer.current = setTimeout(async () => {
       setSearching(true);
       try {
-        const r = await api<{ results: any[] }>(`/books/search?q=${encodeURIComponent(query.trim())}`);
+        const r = await api<{ results: any[] }>(`/catalog/search?q=${encodeURIComponent(query.trim())}`);
         setResults(r.results);
       } catch { setResults([]); }
       setSearched(true);
@@ -138,7 +138,7 @@ export default function AddBook() {
   const lookupIsbn = async (code: string) => {
     setLookingUp(true); setScanFail(null);
     try {
-      const r = await api<any>(`/books/search/isbn?isbn=${encodeURIComponent(code)}`);
+      const r = await api<any>(`/catalog/isbn/${encodeURIComponent(code)}`);
       setSelected(r);
       setManualIsbn(false);
     } catch {

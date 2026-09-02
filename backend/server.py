@@ -26,7 +26,7 @@ SUPABASE_URL = os.environ.get('SUPABASE_URL', '')
 SUPABASE_KEY = os.environ.get('SUPABASE_KEY', '')
 SUPABASE_BUCKET = os.environ.get('SUPABASE_BUCKET', 'manent-photos')
 
-from routes.book_search import router as book_search_router, _search_google, _search_openlibrary
+from routes.book_search import _search_google, _search_openlibrary
 from routes.push import router as push_router, send_push
 import routes.catalog as catalog
 from routes.catalog import router as catalog_router, admin_router as catalog_admin_router, upsert_catalog_book
@@ -2740,11 +2740,12 @@ async def shutdown_db_client():
     client.close()
 
 
-app.include_router(book_search_router, dependencies=[Depends(get_current_user)])
 app.include_router(catalog_router, dependencies=[Depends(get_current_user)])
 app.include_router(catalog_admin_router, dependencies=[Depends(require_admin)])
 share_pages.db = db
 app.include_router(share_pages.router)
+app.include_router(share_pages.root_router)
+app.include_router(share_pages.wk_router)
 app.include_router(push_router)
 app.include_router(club_router)
 app.include_router(api)

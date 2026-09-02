@@ -167,7 +167,7 @@ async def upsert_catalog_book(data: dict, source: str = "app", subjects: Optiona
             "cover": cover, "cover_status": "ok" if cover else "missing", "cover_checked_at": None,
             "summary": (data.get("summary") or "")[:900] or None,
             "summary_source": source if data.get("summary") else None,
-            "subjects": mapped, "areas": [], "sources": [source],
+            "subjects": mapped, "areas": [], "countries": [], "author_ids": [], "sources": [source],
             "norm_key": nk, "popularity": 0,
             "created_at": now, "updated_at": now,
         }
@@ -178,10 +178,11 @@ async def upsert_catalog_book(data: dict, source: str = "app", subjects: Optiona
         await enqueue_task(cid, "cover")
     if not fresh.get("summary"):
         await enqueue_task(cid, "summary")
-    if area_suggestion:
-        await db.area_suggestions.update_one(
-            {"catalog_id": cid, "area": area_suggestion},
-            {"$setOnInsert": {"status": "pending", "source": "auto", "created_at": now}}, upsert=True)
+    # Lot C : les aires sont désormais DÉRIVÉES de l'origine des auteurs.
+    if authors:
+        aids = [x for x in [await ensure_author(a) for a in authors[:4]] if x]
+        if aids:
+            await db.catalog_books.update_one({"catalog_id": cid}, {"$addToSet": {"author_ids": {"$each": aids}}})
     return await db.catalog_books.find_one({"catalog_id": cid}, {"_id": 0})
 
 
@@ -316,7 +317,8 @@ async def _propagate(catalog_id: str, field: str, value: str):
 
 async def process_tasks(limit: int = 5):
     """Traite quelques travaux d'enrichissement. Échec de couverture mémorisé 7 jours."""
-    tasks = await db.catalog_tasks.find({"status": "pending"}).sort("created_at", 1).to_list(limit)
+    tasks = await db.catalog_tasks.find({"status": "pending", "kind": {"$in": ["cover", "summary"]}}) \
+        .sort("created_at", 1).to_list(limit)
     if not tasks:
         return 0
     done = 0
@@ -368,7 +370,28 @@ async def _worker_loop():
             await process_tasks(6)
         except Exception as e:
             logger.warning("catalog worker error: %s", e)
+        try:
+            await process_author_tasks(4)
+        except Exception as e:
+            logger.warning("author worker error: %s", e)
         await asyncio.sleep(20)
+
+
+async def _backfill_authors():
+    """One-shot : crée les auteurs du catalogue existant et met en file la recherche d'origine."""
+    if await db.meta.find_one({"key": "authors_backfill_v1"}):
+        return
+    await db.meta.update_one({"key": "authors_backfill_v1"}, {"$set": {"at": now_utc()}}, upsert=True)
+    n = 0
+    async for b in db.catalog_books.find(
+            {"$or": [{"author_ids": {"$exists": False}}, {"author_ids": []}]},
+            {"_id": 0, "catalog_id": 1, "authors": 1}):
+        aids = [x for x in [await ensure_author(a) for a in (b.get("authors") or [])[:4]] if x]
+        if aids:
+            await db.catalog_books.update_one({"catalog_id": b["catalog_id"]},
+                                              {"$addToSet": {"author_ids": {"$each": aids}}})
+            n += 1
+    logger.info("authors backfill: %s livres reliés", n)
 
 
 async def init(database):
@@ -382,20 +405,26 @@ async def init(database):
         await db.catalog_books.create_index("isbn13")
         await db.catalog_books.create_index("subjects")
         await db.catalog_books.create_index("areas")
+        await db.catalog_books.create_index("countries")
+        await db.catalog_books.create_index("author_ids")
+        await db.catalog_authors.create_index("norm_name")
         await db.catalog_tasks.create_index([("status", 1), ("created_at", 1)])
     except Exception as e:
         logger.warning("catalog indexes: %s", e)
     if not _worker_started:
         _worker_started = True
         asyncio.create_task(_worker_loop())
+        asyncio.create_task(_backfill_authors())
 
 
 def _card(b: dict) -> dict:
+    countries = b.get("countries") or []
     return {"catalog_id": b["catalog_id"], "title": b["title"],
             "author": ", ".join(b.get("authors") or []), "cover": b.get("cover"),
-            "year": b.get("year"), "pages": b.get("pages"),
+            "year": b.get("year"), "pages": b.get("pages"), "isbn": b.get("isbn13"),
             "summary": b.get("summary"), "subjects": b.get("subjects") or [],
-            "areas": b.get("areas") or []}
+            "areas": b.get("areas") or [], "countries": countries,
+            "country_labels": [COUNTRY_FR.get(c, c) for c in countries]}
 
 
 # ---------------------------------------------------------------- Endpoints (utilisateur)
@@ -481,21 +510,48 @@ async def list_areas():
 
 
 @router.get("/areas/{area}")
-async def area_books(area: str, subject: Optional[str] = None, page: int = 1, size: int = 12):
+async def area_books(area: str, subject: Optional[str] = None, country: Optional[str] = None,
+                     page: int = 1, size: int = 12):
     size = min(max(size, 1), 40)
     skip = max(page - 1, 0) * size
     flt: dict = {"areas": area}
     if subject:
         flt["subjects"] = _norm_subject(subject)
+    if country:
+        flt["countries"] = country.upper()[:2]
     total = await db.catalog_books.count_documents(flt)
     docs = await db.catalog_books.find(flt, {"_id": 0}).sort([("popularity", -1), ("year", -1)]) \
         .skip(skip).limit(size).to_list(size)
     pipe = [{"$match": {"areas": area}}, {"$unwind": "$subjects"},
             {"$group": {"_id": "$subjects", "n": {"$sum": 1}}}, {"$sort": {"n": -1}}, {"$limit": 8}]
     tops = await db.catalog_books.aggregate(pipe).to_list(8)
+    # Chips pays de l'aire (Lot C)
+    pipec = [{"$match": {"areas": area}}, {"$unwind": "$countries"},
+             {"$group": {"_id": "$countries", "n": {"$sum": 1}}}, {"$sort": {"n": -1}}, {"$limit": 14}]
+    cn = await db.catalog_books.aggregate(pipec).to_list(14)
     label = next((a["label"] for a in AREAS if a["key"] == area), area)
     return {"label": label, "books": [_card(b) for b in docs], "top_subjects": [x["_id"] for x in tops],
+            "countries": [{"code": x["_id"], "label": COUNTRY_FR.get(x["_id"], x["_id"]), "count": x["n"]} for x in cn],
             "total": total, "page": page, "size": size}
+
+
+@router.get("/isbn/{isbn}")
+async def catalog_isbn(isbn: str):
+    """E1 : cherche l'ISBN dans le catalogue d'abord, sinon sources externes puis upsert."""
+    isbn = re.sub(r"[^0-9Xx]", "", isbn)
+    if not isbn:
+        raise HTTPException(status_code=404, detail="isbn_not_found")
+    b = await db.catalog_books.find_one({"$or": [{"isbn13": isbn}, {"isbn10": isbn}]}, {"_id": 0})
+    if not b:
+        from routes.book_search import search_isbn
+        try:
+            meta = await search_isbn(isbn)
+        except HTTPException:
+            raise HTTPException(status_code=404, detail="isbn_not_found")
+        b = await upsert_catalog_book(dict(meta) | {"isbn": isbn}, source="isbn")
+        if not b:
+            raise HTTPException(status_code=404, detail="isbn_not_found")
+    return _card(b)
 
 
 @router.get("/book/{catalog_id}")
@@ -507,48 +563,247 @@ async def catalog_book(catalog_id: str):
                        "isbn13": b.get("isbn13"), "popularity": b.get("popularity", 0)}
 
 
-# ---------------------------------------------------------------- Endpoints (admin)
-class AreaBookBody(BaseModel):
-    catalog_id: str
-    add: bool = True
-
-
-@admin_router.post("/areas/{area}/books")
-async def admin_area_book(area: str, body: AreaBookBody):
-    if area not in {a["key"] for a in AREAS}:
-        raise HTTPException(status_code=422, detail="unknown_area")
-    op = "$addToSet" if body.add else "$pull"
-    r = await db.catalog_books.update_one({"catalog_id": body.catalog_id}, {op: {"areas": area}, "$set": {"updated_at": now_utc()}})
-    if not r.matched_count:
-        raise HTTPException(status_code=404, detail="not_found")
-    return {"ok": True}
-
-
-@admin_router.get("/area-suggestions")
-async def admin_area_suggestions(page: int = 1, size: int = 20):
-    size = min(max(size, 1), 50)
+# ---------------------------------------------------------------- Endpoints (admin) — Auteurs (Lot C)
+@admin_router.get("/authors")
+async def admin_authors(q: str = "", page: int = 1, size: int = 30):
+    """Auteurs du catalogue — pays inconnu / faible confiance en tête."""
+    size = min(max(size, 1), 60)
     skip = max(page - 1, 0) * size
-    total = await db.area_suggestions.count_documents({"status": "pending"})
-    rows = await db.area_suggestions.find({"status": "pending"}, {"_id": 0}).sort("created_at", -1) \
-        .skip(skip).limit(size).to_list(size)
+    flt: dict = {}
+    if q.strip():
+        flt["norm_name"] = {"$regex": re.escape(_norm_name(q))}
+    total = await db.catalog_authors.count_documents(flt)
+    pipe = [{"$match": flt},
+            {"$addFields": {"rank": {"$switch": {"branches": [
+                {"case": {"$not": ["$country"]}, "then": 0},
+                {"case": {"$eq": ["$origin_confidence", "low"]}, "then": 1}], "default": 2}}}},
+            {"$sort": {"rank": 1, "name": 1}}, {"$skip": skip}, {"$limit": size},
+            {"$project": {"_id": 0, "rank": 0}}]
+    rows = await db.catalog_authors.aggregate(pipe).to_list(size)
     for r in rows:
-        b = await db.catalog_books.find_one({"catalog_id": r["catalog_id"]}, {"_id": 0})
-        r["book"] = _card(b) if b else None
-    return {"suggestions": rows, "total": total, "page": page, "size": size}
+        r["country_label"] = COUNTRY_FR.get(r.get("country"), r.get("country"))
+        r["book_count"] = await db.catalog_books.count_documents({"author_ids": r["author_id"]})
+    return {"authors": rows, "total": total, "page": page, "size": size}
 
 
-class SuggestionDecision(BaseModel):
-    catalog_id: str
-    area: str
-    accept: bool
+class AuthorPatch(BaseModel):
+    country: Optional[str] = Field(default=None, max_length=2)
 
 
-@admin_router.post("/area-suggestions/decide")
-async def admin_decide_suggestion(body: SuggestionDecision):
-    await db.area_suggestions.update_one(
-        {"catalog_id": body.catalog_id, "area": body.area},
-        {"$set": {"status": "accepted" if body.accept else "rejected", "decided_at": now_utc()}})
-    if body.accept:
-        await db.catalog_books.update_one({"catalog_id": body.catalog_id},
-                                          {"$addToSet": {"areas": body.area}, "$set": {"updated_at": now_utc()}})
-    return {"ok": True}
+@admin_router.patch("/authors/{author_id}")
+async def admin_patch_author(author_id: str, body: AuthorPatch):
+    a = await db.catalog_authors.find_one({"author_id": author_id}, {"_id": 0, "author_id": 1})
+    if not a:
+        raise HTTPException(status_code=404, detail="not_found")
+    iso = (body.country or "").strip().upper() or None
+    if iso and not re.fullmatch(r"[A-Z]{2}", iso):
+        raise HTTPException(status_code=422, detail="invalid_country")
+    areas = COUNTRY_TO_AREAS.get(iso, []) if iso else []
+    await db.catalog_authors.update_one({"author_id": author_id}, {"$set": {
+        "country": iso, "countries": [iso] if iso else [], "areas": areas,
+        "country_label_fr": COUNTRY_FR.get(iso) if iso else None,
+        "origin_source": "manual", "origin_confidence": "high" if iso else None,
+        "origin_checked_at": now_utc()}})
+    await _recompute_books_for_author(author_id)
+    return {"ok": True, "country": iso, "areas": areas}
+
+
+# ---------------------------------------------------------------- Lot C : aires dérivées de l'origine de l'auteur
+AFR = ["SN","CM","CI","ML","BF","NE","TG","BJ","GN","CD","CG","GA","TD","CF","MG","RW","BI","DJ","KM","MU","NG","GH","KE","ZA","ET","AO","MZ","GM","SL","LR","UG","TZ","ZM","ZW","BW","NA","GQ","GW","CV","ST","SO","SS","SD","ER","MW","LS","SZ"]
+COUNTRY_TO_AREAS: dict[str, list[str]] = {**{c: ["africaine"] for c in AFR},
+    **{c: ["maghrébine", "africaine"] for c in ["DZ", "MA", "TN", "LY", "MR"]},
+    **{c: ["antillaise"] for c in ["MQ", "GP", "GF", "HT", "DM", "LC"]},
+    "CA": ["québécoise"], "BE": ["belge"], "CH": ["suisse"], "FR": ["française"],
+    **{c: ["autres francophones"] for c in ["LB", "VN", "KH", "LA", "LU", "MC"]}}
+
+# Libellés français des pays (affichage cartes + chips)
+COUNTRY_FR: dict[str, str] = {
+    "SN": "Sénégal", "CM": "Cameroun", "CI": "Côte d'Ivoire", "ML": "Mali", "BF": "Burkina Faso",
+    "NE": "Niger", "TG": "Togo", "BJ": "Bénin", "GN": "Guinée", "CD": "RD Congo", "CG": "Congo",
+    "GA": "Gabon", "TD": "Tchad", "CF": "Centrafrique", "MG": "Madagascar", "RW": "Rwanda",
+    "BI": "Burundi", "DJ": "Djibouti", "KM": "Comores", "MU": "Maurice", "NG": "Nigeria",
+    "GH": "Ghana", "KE": "Kenya", "ZA": "Afrique du Sud", "ET": "Éthiopie", "AO": "Angola",
+    "MZ": "Mozambique", "GM": "Gambie", "SL": "Sierra Leone", "LR": "Liberia", "UG": "Ouganda",
+    "TZ": "Tanzanie", "ZM": "Zambie", "ZW": "Zimbabwe", "BW": "Botswana", "NA": "Namibie",
+    "GQ": "Guinée équatoriale", "GW": "Guinée-Bissau", "CV": "Cap-Vert", "ST": "Sao Tomé",
+    "SO": "Somalie", "SS": "Soudan du Sud", "SD": "Soudan", "ER": "Érythrée", "MW": "Malawi",
+    "LS": "Lesotho", "SZ": "Eswatini",
+    "DZ": "Algérie", "MA": "Maroc", "TN": "Tunisie", "LY": "Libye", "MR": "Mauritanie",
+    "MQ": "Martinique", "GP": "Guadeloupe", "GF": "Guyane", "HT": "Haïti", "DM": "Dominique", "LC": "Sainte-Lucie",
+    "CA": "Québec (Canada)", "BE": "Belgique", "CH": "Suisse", "FR": "France",
+    "LB": "Liban", "VN": "Vietnam", "KH": "Cambodge", "LA": "Laos", "LU": "Luxembourg", "MC": "Monaco",
+    "US": "États-Unis", "GB": "Royaume-Uni", "DE": "Allemagne", "IT": "Italie", "ES": "Espagne",
+    "PT": "Portugal", "RU": "Russie", "JP": "Japon", "CN": "Chine", "IN": "Inde", "BR": "Brésil",
+    "AR": "Argentine", "MX": "Mexique", "CO": "Colombie", "CL": "Chili", "NL": "Pays-Bas",
+    "SE": "Suède", "NO": "Norvège", "DK": "Danemark", "PL": "Pologne", "AT": "Autriche",
+    "IE": "Irlande", "GR": "Grèce", "TR": "Turquie", "IR": "Iran", "EG": "Égypte", "IL": "Israël",
+    "AU": "Australie", "NZ": "Nouvelle-Zélande", "KR": "Corée du Sud", "AF": "Afghanistan",
+    "CZ": "Tchéquie", "UA": "Ukraine", "RO": "Roumanie", "HU": "Hongrie",
+}
+
+# Nom de pays (fr/en, minuscules sans accents) → ISO, pour lire les lieux de naissance Open Library
+_EN_ALIASES = {
+    "france": "FR", "belgium": "BE", "switzerland": "CH", "canada": "CA", "quebec": "CA",
+    "senegal": "SN", "cameroon": "CM", "ivory coast": "CI", "cote divoire": "CI", "morocco": "MA",
+    "algeria": "DZ", "tunisia": "TN", "lebanon": "LB", "haiti": "HT", "martinique": "MQ",
+    "guadeloupe": "GP", "french guiana": "GF", "united states": "US", "usa": "US", "england": "GB",
+    "united kingdom": "GB", "germany": "DE", "italy": "IT", "spain": "ES", "russia": "RU",
+    "japan": "JP", "china": "CN", "india": "IN", "brazil": "BR", "nigeria": "NG", "south africa": "ZA",
+    "egypt": "EG", "greece": "GR", "ireland": "IE", "austria": "AT", "netherlands": "NL",
+    "sweden": "SE", "norway": "NO", "denmark": "DK", "poland": "PL", "portugal": "PT",
+    "argentina": "AR", "mexico": "MX", "colombia": "CO", "chile": "CL", "turkey": "TR",
+    "iran": "IR", "israel": "IL", "australia": "AU", "new zealand": "NZ", "south korea": "KR",
+    "czech republic": "CZ", "ukraine": "UA", "romania": "RO", "hungary": "HU", "congo": "CG",
+    "madagascar": "MG", "mali": "ML", "guinea": "GN", "vietnam": "VN", "cambodia": "KH",
+}
+
+
+def _country_from_text(text: str) -> Optional[str]:
+    """Retrouve un code ISO dans un lieu en toutes lettres (« Dakar, Sénégal », « Paris, France »)."""
+    if not text:
+        return None
+    t = " " + _norm_name(text) + " "
+    for iso, label in COUNTRY_FR.items():
+        if f" {_norm_name(label)} " in t:
+            return iso
+    for name, iso in _EN_ALIASES.items():
+        if f" {name} " in t:
+            return iso
+    return None
+
+
+def _norm_name(n: str) -> str:
+    s = unicodedata.normalize("NFD", (n or "").lower())
+    return re.sub(r"[^a-z ]", "", "".join(c for c in s if unicodedata.category(c) != "Mn")).strip()
+
+
+async def ensure_author(name: str) -> Optional[str]:
+    """Crée/retrouve un auteur du catalogue et met en file la recherche d'origine."""
+    name = (name or "").strip()
+    if not name or len(name) < 3:
+        return None
+    nn = _norm_name(name)
+    a = await db.catalog_authors.find_one({"norm_name": nn}, {"_id": 0, "author_id": 1})
+    if a:
+        return a["author_id"]
+    aid = new_id("au")
+    await db.catalog_authors.insert_one({"author_id": aid, "name": name, "norm_name": nn, "aliases": [],
+        "country": None, "countries": [], "country_label_fr": None, "areas": [],
+        "origin_source": None, "origin_confidence": None, "origin_checked_at": None,
+        "created_at": now_utc()})
+    await db.catalog_tasks.update_one({"catalog_id": aid, "kind": "author_origin", "status": "pending"},
+        {"$setOnInsert": {"tries": 0, "created_at": now_utc()}}, upsert=True)
+    return aid
+
+
+async def _wikidata_origin(http, name: str):
+    try:
+        r = await http.get("https://www.wikidata.org/w/api.php", params={"action": "wbsearchentities",
+            "search": name, "language": "fr", "format": "json", "type": "item", "limit": 1})
+        hits = r.json().get("search") or []
+        if not hits:
+            return None, None
+        qid = hits[0]["id"]
+        r2 = await http.get("https://www.wikidata.org/w/api.php", params={"action": "wbgetclaims", "entity": qid, "format": "json"})
+        claims = r2.json().get("claims", {})
+        for prop, conf in [("P27", "high"), ("P19", "medium")]:
+            for c in claims.get(prop, [])[:1]:
+                target = c["mainsnak"].get("datavalue", {}).get("value", {}).get("id")
+                if not target:
+                    continue
+                r3 = await http.get("https://www.wikidata.org/w/api.php", params={"action": "wbgetclaims", "entity": target, "property": "P297", "format": "json"})
+                iso = None
+                for cc in r3.json().get("claims", {}).get("P297", [])[:1]:
+                    iso = cc["mainsnak"].get("datavalue", {}).get("value")
+                if prop == "P19" and not iso:  # lieu → pays
+                    r4 = await http.get("https://www.wikidata.org/w/api.php", params={"action": "wbgetclaims", "entity": target, "property": "P17", "format": "json"})
+                    for cc in r4.json().get("claims", {}).get("P17", [])[:1]:
+                        pays = cc["mainsnak"].get("datavalue", {}).get("value", {}).get("id")
+                        if pays:
+                            r5 = await http.get("https://www.wikidata.org/w/api.php", params={"action": "wbgetclaims", "entity": pays, "property": "P297", "format": "json"})
+                            for c5 in r5.json().get("claims", {}).get("P297", [])[:1]:
+                                iso = c5["mainsnak"].get("datavalue", {}).get("value")
+                if iso:
+                    return iso.upper(), ("wikidata", conf)
+    except Exception:
+        pass
+    return None, None
+
+
+async def _ol_origin(http, name: str) -> Optional[str]:
+    """Open Library : lieu de naissance de l'auteur → pays."""
+    try:
+        r = await http.get("https://openlibrary.org/search/authors.json", params={"q": name, "limit": 1})
+        docs = r.json().get("docs") or []
+        key = (docs[0].get("key") or "") if docs else ""
+        if not key:
+            return None
+        r2 = await http.get(f"https://openlibrary.org/authors/{key}.json")
+        if r2.status_code != 200:
+            return None
+        return _country_from_text(str(r2.json().get("birth_place") or ""))
+    except Exception:
+        return None
+
+
+async def _ai_origin(name: str) -> Optional[str]:
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        chat = LlmChat(api_key=EMERGENT_LLM_KEY, session_id=f"orig_{abs(hash(name)) % 10**8}",
+            system_message="Tu donnes le pays d'origine d'un auteur. Réponds UNIQUEMENT par un code ISO 3166-1 alpha-2 (ex. SN, MQ pour Martinique, GP Guadeloupe, GF Guyane) ou INCONNU. N'invente jamais.").with_model("anthropic", "claude-sonnet-4-6")
+        r = (await chat.send_message(UserMessage(text=f"Pays d'origine de l'auteur : {name}"))).strip().upper()
+        return r if re.fullmatch(r"[A-Z]{2}", r) else None
+    except Exception:
+        return None
+
+
+async def _recompute_books_for_author(author_id: str):
+    """Recalcule countries[] et areas[] (dérivés) des livres reliés à cet auteur."""
+    async for b in db.catalog_books.find({"author_ids": author_id}, {"_id": 0, "catalog_id": 1, "author_ids": 1}):
+        auths = await db.catalog_authors.find({"author_id": {"$in": b.get("author_ids") or []}},
+                                              {"_id": 0, "country": 1}).to_list(10)
+        countries = sorted({a["country"] for a in auths if a.get("country")})
+        areas = sorted({ar for c in countries for ar in COUNTRY_TO_AREAS.get(c, [])})
+        await db.catalog_books.update_one({"catalog_id": b["catalog_id"]}, {"$set": {
+            "countries": countries, "areas": areas, "updated_at": now_utc()}})
+
+
+async def process_author_origin(task):
+    a = await db.catalog_authors.find_one({"author_id": task["catalog_id"]}, {"_id": 0})
+    if not a:
+        await db.catalog_tasks.delete_one({"_id": task["_id"]})
+        return
+    iso, meta = None, None
+    _ua = {"User-Agent": "Manent/1.0 (https://manentlc.app)"}
+    async with httpx.AsyncClient(timeout=10, headers=_ua) as http:
+        iso, meta = await _wikidata_origin(http, a["name"])
+        if not iso:
+            iso = await _ol_origin(http, a["name"])
+            meta = ("openlibrary", "medium") if iso else None
+    if not iso:
+        iso = await _ai_origin(a["name"])
+        meta = ("ai", "low") if iso else None
+    upd = {"origin_checked_at": now_utc()}
+    if iso:
+        upd.update({"country": iso, "countries": [iso], "areas": COUNTRY_TO_AREAS.get(iso, []),
+                    "country_label_fr": COUNTRY_FR.get(iso),
+                    "origin_source": meta[0], "origin_confidence": meta[1]})
+    await db.catalog_authors.update_one({"author_id": a["author_id"]}, {"$set": upd})
+    if iso:
+        await _recompute_books_for_author(a["author_id"])
+    await db.catalog_tasks.delete_one({"_id": task["_id"]})
+
+
+async def process_author_tasks(limit: int = 4):
+    tasks = await db.catalog_tasks.find({"status": "pending", "kind": "author_origin"}) \
+        .sort("created_at", 1).to_list(limit)
+    for t in tasks:
+        await db.catalog_tasks.update_one({"_id": t["_id"]}, {"$set": {"status": "running"}})
+        try:
+            await process_author_origin(t)
+        except Exception as e:
+            logger.warning("author origin task failed: %s", e)
+            await db.catalog_tasks.update_one({"_id": t["_id"]}, {"$set": {"status": "pending"}, "$inc": {"tries": 1}})
+            if t.get("tries", 0) >= 3:
+                await db.catalog_tasks.delete_one({"_id": t["_id"]})
+    return len(tasks)
