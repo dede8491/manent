@@ -100,7 +100,7 @@ export default function Library() {
               text={t("Le « + » ajoute une lecture par titre, ISBN ou Wattpad. Tes livres se rangent en trois étapes : Liste de lecture, En cours, Terminés. La liste de lecture s'ordonne dans « Lecture suivante », le prochain livre en tête. Sur l'onglet Citations, le « + » sert à écrire un passage ; sélectionnes-en plusieurs pour changer leur visibilité d'un geste.")}
             />
           </View>
-          <Pressable testID="btn-library-add" onPress={() => (seg === 'citations' ? router.push('/capture') : setAddSheet(true))} style={styles.addBtn}>
+          <Pressable testID="btn-library-add" onPress={() => (seg === 'citations' ? router.push('/capture?mode=write' as any) : setAddSheet(true))} style={styles.addBtn}>
             <Feather name="plus" size={22} color={colors.creme} />
           </Pressable>
         </View>

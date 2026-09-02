@@ -178,10 +178,15 @@ export function QuotesManager({ initialBookId }: { initialBookId?: string | null
           <View style={{ alignItems: 'center', paddingVertical: spacing.xxl }}>
             <Text style={styles.emptyTitle}>{quotes.length === 0 ? t('Photographie ta première citation.') : t('Rien ne correspond à ces filtres.')}</Text>
             {quotes.length === 0 && (
-              <Pressable testID="mq-empty-capture" onPress={() => router.push('/capture')} style={styles.captureBtn}>
-                <Feather name="camera" size={15} color={colors.creme} />
-                <Text style={styles.captureBtnText}>{t('Capturer un passage')}</Text>
-              </Pressable>
+              <>
+                <Pressable testID="mq-empty-capture" onPress={() => router.push('/capture?mode=camera' as any)} style={styles.captureBtn}>
+                  <Feather name="camera" size={15} color={colors.creme} />
+                  <Text style={styles.captureBtnText}>{t('Photographier')}</Text>
+                </Pressable>
+                <Pressable testID="mq-empty-write" onPress={() => router.push('/capture?mode=write' as any)} hitSlop={8} style={{ marginTop: spacing.sm }}>
+                  <Text style={styles.writeLink}>{t('ou écris-la')}</Text>
+                </Pressable>
+              </>
             )}
           </View>
         ) : grid ? (
@@ -262,6 +267,7 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   emptyTitle: { fontFamily: fonts.displayMedium, fontSize: 20, color: colors.espresso, textAlign: 'center' },
   captureBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 44, paddingHorizontal: spacing.lg, borderRadius: radius.pill, backgroundColor: colors.chambray, marginTop: spacing.lg },
   captureBtnText: { fontFamily: fonts.bodyMedium, fontSize: 13.5, color: colors.creme },
+  writeLink: { fontFamily: fonts.body, fontSize: 13, color: colors.clay, textDecorationLine: 'underline' },
   bulkBar: { position: 'absolute', bottom: 90, left: spacing.xl, right: spacing.xl, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.espresso, borderRadius: radius.pill, paddingHorizontal: spacing.md, height: 54 },
   bulkCount: { fontFamily: fonts.displayMedium, fontSize: 18, color: colors.creme, marginRight: 2 },
   bulkBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },

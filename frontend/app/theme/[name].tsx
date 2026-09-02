@@ -23,6 +23,8 @@ export default function ThemePage() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [areaFilter, setAreaFilter] = useState<string | null>(null);
+  const [genreFilter, setGenreFilter] = useState<string | null>(null);
+  const [genres, setGenres] = useState<any[]>([]);
   const [areas, setAreas] = useState<any[]>([]);
   const [loadingMore, setLoadingMore] = useState(false);
   const gridCardW = (width - spacing.xl * 2 - spacing.sm * 2) / 3;
@@ -30,17 +32,18 @@ export default function ThemePage() {
   useEffect(() => {
     (async () => {
       try {
-        const r = await api<any>(`/themes/${encodeURIComponent(name)}/page?page=1&size=12${areaFilter ? `&area=${encodeURIComponent(areaFilter)}` : ''}`);
+        const r = await api<any>(`/themes/${encodeURIComponent(name)}/page?page=1&size=12${areaFilter ? `&area=${encodeURIComponent(areaFilter)}` : ''}${genreFilter ? `&genre=${encodeURIComponent(genreFilter)}` : ''}`);
         setData(r);
         setBooks(r.discover_books || []);
         setTotal(r.discover_total || 0);
         setPage(1);
       } catch {}
     })();
-  }, [name, areaFilter]);
+  }, [name, areaFilter, genreFilter]);
 
   useEffect(() => {
     api<{ areas: any[] }>('/catalog/areas').then(r => setAreas(r.areas || [])).catch(() => {});
+    api<{ genres: any[] }>('/catalog/genres').then(r => setGenres((r.genres || []).filter((g: any) => g.count > 0))).catch(() => {});
   }, []);
 
   const loadMore = async () => {
@@ -48,7 +51,7 @@ export default function ThemePage() {
     setLoadingMore(true);
     try {
       const p = page + 1;
-      const r = await api<any>(`/themes/${encodeURIComponent(name)}/page?page=${p}&size=12${areaFilter ? `&area=${encodeURIComponent(areaFilter)}` : ''}`);
+      const r = await api<any>(`/themes/${encodeURIComponent(name)}/page?page=${p}&size=12${areaFilter ? `&area=${encodeURIComponent(areaFilter)}` : ''}${genreFilter ? `&genre=${encodeURIComponent(genreFilter)}` : ''}`);
       setBooks(prev => [...prev, ...(r.discover_books || [])]);
       setPage(p);
     } finally { setLoadingMore(false); }
@@ -124,9 +127,21 @@ export default function ThemePage() {
           </View>
         )}
 
-        {(books.length > 0 || areas.length > 0) && (
+        {(books.length > 0 || areas.length > 0 || genres.length > 0) && (
           <View style={{ marginTop: spacing.lg }} testID="theme-discover">
             <Text style={styles.suggestLabel}>{t('À découvrir sur ce sujet')}</Text>
+            {genres.length > 0 && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: spacing.xl, marginBottom: spacing.sm }}>
+                <Pressable testID="genre-filter-all" onPress={() => setGenreFilter(null)} style={[styles.areaChip, !genreFilter && styles.areaChipActive]}>
+                  <Text style={[styles.areaChipText, !genreFilter && styles.areaChipTextActive]}>{t('Tous les genres')}</Text>
+                </Pressable>
+                {genres.map((g: any) => (
+                  <Pressable key={g.key} testID={`genre-filter-${g.key}`} onPress={() => setGenreFilter(genreFilter === g.key ? null : g.key)} style={[styles.areaChip, genreFilter === g.key && styles.areaChipActive]}>
+                    <Text style={[styles.areaChipText, genreFilter === g.key && styles.areaChipTextActive]}>{g.label}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            )}
             {areas.length > 0 && (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: spacing.xl, marginBottom: spacing.md }}>
                 <Pressable testID="area-filter-all" onPress={() => setAreaFilter(null)} style={[styles.areaChip, !areaFilter && styles.areaChipActive]}>
@@ -134,7 +149,7 @@ export default function ThemePage() {
                 </Pressable>
                 {areas.map((a: any) => (
                   <Pressable key={a.key} testID={`area-filter-${a.key}`} onPress={() => setAreaFilter(areaFilter === a.key ? null : a.key)} style={[styles.areaChip, areaFilter === a.key && styles.areaChipActive]}>
-                    <Text style={[styles.areaChipText, areaFilter === a.key && styles.areaChipTextActive]}>{a.label.replace('Littérature ', '')}</Text>
+                    <Text style={[styles.areaChipText, areaFilter === a.key && styles.areaChipTextActive]}>{a.label.replace(/^(Autres littératures |Littératures |Littérature )/, '')}</Text>
                   </Pressable>
                 ))}
               </ScrollView>

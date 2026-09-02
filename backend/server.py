@@ -307,7 +307,7 @@ async def _attach_public_meta(quotes: list):
 
 
 @api.get("/themes/{theme}/page")
-async def theme_page(theme: str, area: Optional[str] = None, page: int = 1, size: int = 12, user=Depends(get_current_user)):
+async def theme_page(theme: str, area: Optional[str] = None, genre: Optional[str] = None, page: int = 1, size: int = 12, user=Depends(get_current_user)):
     q = {"is_public": True, "themes": theme, "is_hidden": {"$ne": True}, **sensitive_filter(user)}
     total = await db.quotes.count_documents(q)
     readers = len(await db.quotes.distinct("user_id", q))
@@ -342,7 +342,9 @@ async def theme_page(theme: str, area: Optional[str] = None, page: int = 1, size
     subj = catalog._norm_subject(theme)
     cflt: dict = {"subjects": subj}
     if area:
-        cflt["areas"] = area
+        cflt |= catalog._area_filter(area)
+    if genre:
+        cflt["genre"] = genre
     discover_total = await db.catalog_books.count_documents(cflt)
     cdocs = await db.catalog_books.find(cflt, {"_id": 0}).sort([("popularity", -1), ("year", -1)]) \
         .skip(skip).limit(size).to_list(size)
@@ -488,6 +490,7 @@ class BookPatch(BaseModel):
     chapters: Optional[int] = None
     status: Optional[Literal['a_lire', 'en_cours', 'termine']] = None
     rating: Optional[int] = None
+    review: Optional[str] = Field(None, max_length=600)
     recap: Optional[str] = Field(None, max_length=4000)
     summary: Optional[str] = Field(None, max_length=3000)
     lessons: Optional[List[str]] = None

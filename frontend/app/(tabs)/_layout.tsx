@@ -11,7 +11,7 @@ function CaptureTabButton() {
   return (
     <Pressable
       testID="tab-capture"
-      onPress={() => router.push('/capture')}
+      onPress={() => router.push('/capture?mode=camera' as any)}
       hitSlop={{ top: 20, bottom: 8, left: 12, right: 12 }}
       style={styles.captureBtn}
     >

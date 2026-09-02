@@ -54,6 +54,21 @@ export default function BookDetail() {
   const [sumSaving, setSumSaving] = useState(false);
   const [catalogMeta, setCatalogMeta] = useState<{ area_labels?: string[]; country_labels?: string[] } | null>(null);
   const [shareSheet, setShareSheet] = useState(false);
+  const [rateSheet, setRateSheet] = useState(false);
+  const [reviewInput, setReviewInput] = useState('');
+  const [rateSaving, setRateSaving] = useState(false);
+
+  // Notation demandée, jamais imposée : étoiles + un mot, enregistrés ensemble
+  const saveRating = async () => {
+    if (rateSaving) return;
+    setRateSaving(true);
+    try {
+      const b = await api<any>(`/books/${id}`, { method: 'PATCH', body: JSON.stringify({ rating: rating || undefined, review: reviewInput.trim() }) });
+      setBook(b);
+      setRateSheet(false);
+      setFinishedBanner(false);
+    } finally { setRateSaving(false); }
+  };
 
   const openDelete = async () => {
     setConfirmDelete(true);
@@ -364,13 +379,15 @@ export default function BookDetail() {
           <View style={styles.finishedBox} testID="finished-banner">
             <Feather name="award" size={16} color={colors.chambray} />
             <View style={{ flex: 1 }}>
-              <Text style={styles.finishedText}>{t('Bravo. Note ta lecture en un geste : tes étoiles nourrissent « Pour toi ».')}</Text>
-              <View style={{ flexDirection: 'row', gap: 6, marginTop: 8 }}>
-                {[1,2,3,4,5].map(i => (
-                  <Pressable key={i} testID={`finished-star-${i}`} onPress={async () => { setRating(i); await saveField({ rating: i }); }} hitSlop={4}>
-                    <Feather name="star" size={22} color={colors.chambray} style={{ opacity: i <= rating ? 1 : 0.3 }} />
-                  </Pressable>
-                ))}
+              <Text style={styles.finishedText}>{t('Lecture terminée. Tu veux la noter et dire ce que tu en penses ?')}</Text>
+              <View style={{ flexDirection: 'row', gap: spacing.md, marginTop: 8, alignItems: 'center' }}>
+                <Pressable testID="btn-rate-book" onPress={() => { setReviewInput(book.review || ''); setRateSheet(true); }} style={styles.rateBtn}>
+                  <Feather name="star" size={13} color={colors.creme} />
+                  <Text style={styles.rateBtnText}>{t('Noter ce livre')}</Text>
+                </Pressable>
+                <Pressable testID="btn-rate-later" onPress={() => setFinishedBanner(false)} hitSlop={6}>
+                  <Text style={styles.laterText}>{t('Plus tard')}</Text>
+                </Pressable>
               </View>
               <Pressable testID="btn-next-reading" onPress={() => router.push('/queue')} hitSlop={6} style={{ marginTop: 8 }}>
                 <Text style={styles.nextReading}>{t('Passer à la lecture suivante')}  ›</Text>
@@ -509,6 +526,18 @@ export default function BookDetail() {
           </>
         )}
 
+        {book.status === 'termine' && (
+          <>
+            <Text style={styles.sectionLabel}>{t('Mon avis')}</Text>
+            <Pressable testID="book-review" onPress={() => { setReviewInput(book.review || ''); setRateSheet(true); }} style={styles.reviewBox}>
+              <View style={{ flexDirection: 'row', gap: 3 }}>
+                {[1,2,3,4,5].map(i => <Feather key={i} name="star" size={14} color={colors.chambray} style={{ opacity: i <= rating ? 1 : 0.3 }} />)}
+              </View>
+              <Text style={book.review ? styles.reviewText : styles.reviewPlaceholder}>{book.review || t('Note ce livre et dis en un mot ce que tu en penses.')}</Text>
+            </Pressable>
+          </>
+        )}
+
         <Text style={styles.sectionLabel}>{t('Mon récapitulatif')}</Text>
         <TextInput
           testID="book-recap"
@@ -604,6 +633,30 @@ export default function BookDetail() {
             </Pressable>
       </BottomSheet>
 
+      <BottomSheet visible={rateSheet} onClose={() => setRateSheet(false)} title={t('Ton avis sur ce livre')} subtitle={book.title} testID="sheet-rate">
+        <View style={{ flexDirection: 'row', gap: 10, marginTop: spacing.sm, marginBottom: spacing.md }}>
+          {[1,2,3,4,5].map(i => (
+            <Pressable key={i} testID={`rate-star-${i}`} onPress={() => setRating(i)} hitSlop={4}>
+              <Feather name="star" size={30} color={colors.chambray} style={{ opacity: i <= rating ? 1 : 0.3 }} />
+            </Pressable>
+          ))}
+        </View>
+        <TextInput
+          testID="rate-review-input"
+          value={reviewInput} onChangeText={v => setReviewInput(v.slice(0, 600))}
+          multiline
+          placeholder={t('Un mot sur cette lecture (optionnel)…')}
+          placeholderTextColor={colors.clay}
+          style={[styles.summaryInput, { minHeight: 100 }]}
+        />
+        <Pressable testID="rate-save" onPress={saveRating} disabled={rateSaving || !rating} style={[styles.detectConfirm, { marginTop: spacing.md }, (rateSaving || !rating) && { opacity: 0.6 }]}>
+          <Text style={styles.photoBtnText}>{t('Enregistrer')}</Text>
+        </Pressable>
+        <Pressable testID="rate-cancel" onPress={() => setRateSheet(false)} style={[styles.cancelBtn, { marginTop: spacing.sm }]}>
+          <Text style={styles.cancelBtnText}>{t('Plus tard')}</Text>
+        </Pressable>
+      </BottomSheet>
+
       <ShareBookSheet visible={shareSheet} onClose={() => setShareSheet(false)} book={{ catalog_id: book.catalog_id, title: book.title, author: book.author, cover: book.cover }} />
 
       <BottomSheet visible={sumModal} onClose={() => setSumModal(false)} title={t('Résumé du livre')} testID="sheet-summary">
@@ -665,6 +718,12 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   finishedBox: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.bisque, borderRadius: radius.md, padding: spacing.md, marginTop: spacing.md },
   finishedText: { fontFamily: fonts.body, fontSize: 12.5, color: colors.espresso, lineHeight: 18 },
   nextReading: { fontFamily: fonts.bodyMedium, fontSize: 12.5, color: colors.chambray },
+  rateBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 32, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: colors.chambray },
+  rateBtnText: { fontFamily: fonts.bodyMedium, fontSize: 12.5, color: colors.creme },
+  laterText: { fontFamily: fonts.body, fontSize: 12.5, color: colors.clay, textDecorationLine: 'underline' },
+  reviewBox: { backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md, gap: 6 },
+  reviewText: { fontFamily: fonts.display, fontSize: 15, color: colors.espresso, lineHeight: 21 },
+  reviewPlaceholder: { fontFamily: fonts.body, fontSize: 13, color: colors.clay },
   markPageBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: spacing.md, paddingHorizontal: spacing.md, height: 42, borderRadius: radius.md, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.chambray, backgroundColor: colors.creme },
   markPageText: { fontFamily: fonts.bodyMedium, fontSize: 12.5, color: colors.chambray, flexShrink: 1 },
   pageInput: { height: 56, borderWidth: 1, borderColor: colors.borderSoft, borderRadius: radius.md, fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso, backgroundColor: colors.creme, marginVertical: spacing.md, textAlign: 'center' },

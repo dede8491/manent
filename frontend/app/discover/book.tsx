@@ -29,30 +29,31 @@ export default function DiscoverBook() {
   const [meta, setMeta] = useState<any>(null);
   const [shareSheet, setShareSheet] = useState(false);
 
-  // Fiche catalogue (aire, pays, résumé) si le livre est connu du catalogue
+  // Résumé : catalogue d'abord (aire, pays, résumé), puis repli sur la recherche en ligne
+  // s'il manque encore — pour ne jamais afficher une fiche sans quatrième de couverture.
   useEffect(() => {
-    if (!catalog_id) return;
+    if (!title) return;
+    let alive = true;
     (async () => {
-      try {
-        const m = await api<any>(`/catalog/book/${catalog_id}`);
-        setMeta(m);
-        if (!desc && m.summary) setDesc(m.summary);
-      } catch {}
+      let found: string | null = summary || null;
+      if (catalog_id) {
+        try {
+          const m = await api<any>(`/catalog/book/${catalog_id}`);
+          if (!alive) return;
+          setMeta(m);
+          if (!found && m.summary) { found = m.summary; setDesc(m.summary); }
+        } catch {}
+      }
+      if (!found) {
+        try {
+          const r = await api<{ summary: string | null }>(`/books-summary?title=${encodeURIComponent(title)}&author=${encodeURIComponent(author || '')}&lang=${lang}`);
+          if (alive && r.summary) setDesc(r.summary);
+        } catch {}
+      }
     })();
+    return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [catalog_id]);
-
-  // Synopsis (4e de couverture) récupéré automatiquement si absent
-  useEffect(() => {
-    if (summary || !title || catalog_id) return;
-    (async () => {
-      try {
-        const r = await api<{ summary: string | null }>(`/books-summary?title=${encodeURIComponent(title)}&author=${encodeURIComponent(author || '')}&lang=${lang}`);
-        if (r.summary) setDesc(r.summary);
-      } catch {}
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [catalog_id, title]);
 
   const add = async () => {
     setAdding(true);

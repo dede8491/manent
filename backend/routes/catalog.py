@@ -86,6 +86,77 @@ AREA_QUERIES: dict[str, list[str]] = {
 }
 
 
+# Genres (même grille que les grandes librairies en ligne) : déduits des catégories des
+# sources (Google Books, Open Library, BnF). Les aires littéraires ne s'appliquent
+# qu'aux genres de fiction (romans, polars, imaginaire, jeunesse, romance, BD, manga).
+GENRES = [
+    {"key": "litterature", "label": "Littérature"},
+    {"key": "polar", "label": "Polar et thriller"},
+    {"key": "imaginaire", "label": "Imaginaire"},
+    {"key": "jeunesse", "label": "Jeunesse"},
+    {"key": "romance", "label": "Romance"},
+    {"key": "bd", "label": "Bande dessinée"},
+    {"key": "manga", "label": "Manga"},
+    {"key": "nonfiction", "label": "Non-fiction"},
+]
+# Ordre d'évaluation : du plus spécifique au plus général.
+GENRE_MARKERS: list[tuple[str, list[str]]] = [
+    ("manga", ["manga", "mangas"]),
+    ("bd", ["bande dessinee", "bandes dessinees", "comics", "comic books", "graphic novel", "graphic novels", "cartoons"]),
+    ("jeunesse", ["juvenile", "jeunesse", "children", "young adult", "enfants", "albums jeunesse", "ados", "teen"]),
+    ("polar", ["thriller", "thrillers", "polar", "policier", "policiers", "mystery", "detective", "crime", "suspense", "roman noir", "espionnage", "spy"]),
+    ("imaginaire", ["fantasy", "science-fiction", "science fiction", "fantastique", "imaginaire", "dystopi", "horror", "horreur", "paranormal", "sf", "space opera"]),
+    ("romance", ["romance", "love stories", "sentimental", "chick lit", "new romance", "romantic"]),
+    ("litterature", ["fiction", "roman", "romans", "nouvelles", "novel", "novels", "poesie", "poetry", "theatre", "drama",
+                     "litterature", "literature", "literary", "recit", "recits", "conte", "contes", "tales", "short stories",
+                     "saga", "classics", "classiques", "autofiction"]),
+    ("nonfiction", ["business", "self-help", "self help", "developpement personnel", "health", "sante", "finance", "money",
+                    "management", "leadership", "cooking", "cuisine", "travel guide", "guide", "psychology", "psychologie",
+                    "religion", "spirituality", "spiritualite", "education", "science", "history", "histoire", "biography",
+                    "biographie", "autobiography", "memoir", "essai", "essais", "essays", "computers", "reference", "study aids",
+                    "philosophy", "philosophie", "politics", "politique", "economics", "economie", "art", "sports", "nature"]),
+]
+FICTION_GENRES = {"litterature", "polar", "imaginaire", "jeunesse", "romance", "bd", "manga"}
+NONFICTION_SUBJECTS = {"finance", "entrepreneuriat", "leadership", "santé"}
+
+
+def classify_genre(raw_subjects: list, mapped_subjects: Optional[list] = None) -> Optional[str]:
+    """Clé de GENRES d'après les catégories sources ; None si rien d'exploitable."""
+    low = " | ".join(_norm_subject(x) for x in (raw_subjects or []) if x)
+    if low:
+        for key, markers in GENRE_MARKERS:
+            if any(m in low for m in markers):
+                return key
+    if mapped_subjects and set(mapped_subjects) <= NONFICTION_SUBJECTS:
+        return "nonfiction"
+    return None
+
+
+def classify_kind(raw_subjects: list, mapped_subjects: list) -> str:
+    """fiction | nonfiction | unknown, dérivé du genre."""
+    g = classify_genre(raw_subjects, mapped_subjects)
+    if g is None:
+        return "unknown"
+    return "nonfiction" if g == "nonfiction" else "fiction"
+
+
+CONTINENTS = [
+    {"key": "c-afrique", "label": "Littérature africaine", "short": "Afrique"},
+    {"key": "c-europe", "label": "Littérature européenne", "short": "Europe"},
+    {"key": "c-ameriques", "label": "Littérature des Amériques", "short": "Amériques"},
+    {"key": "c-asie", "label": "Littérature asiatique", "short": "Asie"},
+    {"key": "c-oceanie", "label": "Littérature océanienne", "short": "Océanie"},
+]
+_CONT = {
+    "c-afrique": "DZ AO BJ BW BF BI CV CM CF TD KM CG CD CI DJ EG GQ ER SZ ET GA GM GH GN GW KE LS LR LY MG MW ML MR MU MA MZ NA NE NG RW ST SN SC SL SO ZA SS SD TZ TG TN UG ZM ZW EH RE YT",
+    "c-europe": "AL AD AT BY BE BA BG HR CY CZ DK EE FI FR DE GR HU IS IE IT XK LV LI LT LU MT MD MC ME NL MK NO PL PT RO RU SM RS SK SI ES SE CH UA GB VA GI FO IM JE GG AX",
+    "c-ameriques": "AG AR BS BB BZ BO BR CA CL CO CR CU DM DO EC SV GD GT GY HT HN JM MX NI PA PY PE KN LC VC SR TT US UY VE PR MQ GP GF BL MF PM AW CW SX KY BM VG VI TC AI MS GL FK",
+    "c-asie": "AF AM AZ BH BD BT BN KH CN GE IN ID IR IQ IL JP JO KZ KW KG LA LB MY MV MN MM NP KP OM PK PS PH QA SA SG KR LK SY TW TJ TH TL TR TM AE UZ VN YE HK MO",
+    "c-oceanie": "AU FJ KI MH FM NR NZ PW PG WS SB TO TV VU NC PF WF CK NU TK",
+}
+COUNTRY_TO_CONTINENT: dict[str, str] = {c: k for k, codes in _CONT.items() for c in codes.split()}
+
+
 def _norm_subject(label: str) -> str:
     s = unicodedata.normalize("NFD", (label or "").strip().lower())
     s = "".join(c for c in s if unicodedata.category(c) != "Mn")
@@ -136,9 +207,18 @@ async def upsert_catalog_book(data: dict, source: str = "app", subjects: Optiona
     existing = await db.catalog_books.find_one(query, {"_id": 0})
     cover = clean_cover_url(data.get("cover"))
     mapped = sorted(set((subjects or []) + _map_source_subjects(data.get("raw_subjects") or [])))
+    raw = [str(x)[:80] for x in (data.get("raw_subjects") or []) if x][:20]
+    kind = classify_kind(raw, mapped)
+    genre = classify_genre(raw, mapped)
     now = now_utc()
     if existing:
         upd, push = {}, {}
+        if raw:
+            push["raw_subjects"] = {"$each": raw}
+        if kind != "unknown" and existing.get("kind") in (None, "unknown"):
+            upd["kind"] = kind
+        if genre and not existing.get("genre"):
+            upd["genre"] = genre
         for field, val in [("isbn13", isbn13), ("isbn10", isbn10), ("pages", data.get("pages")),
                            ("year", data.get("year")), ("publisher", data.get("publisher")),
                            ("language", data.get("language"))]:
@@ -167,7 +247,8 @@ async def upsert_catalog_book(data: dict, source: str = "app", subjects: Optiona
             "cover": cover, "cover_status": "ok" if cover else "missing", "cover_checked_at": None,
             "summary": (data.get("summary") or "")[:900] or None,
             "summary_source": source if data.get("summary") else None,
-            "subjects": mapped, "areas": [], "countries": [], "author_ids": [], "sources": [source],
+            "subjects": mapped, "areas": [], "countries": [], "continents": [], "author_ids": [], "sources": [source],
+            "raw_subjects": raw, "kind": kind, "genre": genre,
             "norm_key": nk, "popularity": 0,
             "created_at": now, "updated_at": now,
         }
@@ -257,8 +338,8 @@ async def _translate_fr(text: str) -> Optional[str]:
         return None
 
 
-async def _fetch_summary(http: httpx.AsyncClient, title: str, author: str) -> Optional[str]:
-    """Google → Open Library → IA, résultat en français."""
+async def _fetch_summary(http: httpx.AsyncClient, title: str, author: str, categories_out: Optional[list] = None) -> Optional[str]:
+    """Google → Open Library → IA, résultat en français. Remplit categories_out (genre) si fourni."""
     summary = None
     try:
         for params in ({"q": f"intitle:{title} inauthor:{author}".strip(), "maxResults": 5, "langRestrict": "fr"},
@@ -266,7 +347,10 @@ async def _fetch_summary(http: httpx.AsyncClient, title: str, author: str) -> Op
             r = await http.get("https://www.googleapis.com/books/v1/volumes", params=params)
             if r.status_code == 200:
                 for it in (r.json().get("items") or []):
-                    d = (it.get("volumeInfo") or {}).get("description")
+                    vi = it.get("volumeInfo") or {}
+                    if categories_out is not None:
+                        categories_out.extend([c for c in (vi.get("categories") or []) if c])
+                    d = vi.get("description")
                     if d:
                         summary = d[:900]
                         break
@@ -346,11 +430,25 @@ async def process_tasks(limit: int = 5):
                     if cover:
                         await _propagate(book["catalog_id"], "cover", cover)
                 elif t["kind"] == "summary" and not book.get("summary"):
-                    s = await _fetch_summary(http, book["title"], author)
+                    cats: list = []
+                    s = await _fetch_summary(http, book["title"], author, cats)
+                    upd: dict = {"updated_at": now_utc()}
                     if s:
-                        await db.catalog_books.update_one({"catalog_id": book["catalog_id"]}, {"$set": {
-                            "summary": s, "summary_source": "auto", "updated_at": now_utc()}})
+                        upd |= {"summary": s, "summary_source": "auto"}
+                    if cats:
+                        k = classify_kind(cats, book.get("subjects") or [])
+                        if k != "unknown":
+                            upd["kind"] = k
+                        g = classify_genre(cats, book.get("subjects") or [])
+                        if g and not book.get("genre"):
+                            upd["genre"] = g
+                        await db.catalog_books.update_one({"catalog_id": book["catalog_id"]},
+                                                          {"$addToSet": {"raw_subjects": {"$each": cats[:10]}}})
+                    await db.catalog_books.update_one({"catalog_id": book["catalog_id"]}, {"$set": upd})
+                    if s:
                         await _propagate(book["catalog_id"], "summary", s)
+                    if upd.get("kind") == "nonfiction":
+                        await db.catalog_books.update_one({"catalog_id": book["catalog_id"]}, {"$set": {"areas": [], "continents": []}})
                 await db.catalog_tasks.delete_one({"_id": t["_id"]})
                 done += 1
             except Exception as e:
@@ -398,6 +496,24 @@ async def _backfill_authors():
     logger.info("authors backfill: %s livres reliés", n)
 
 
+async def _backfill_continents():
+    """One-shot : genre d'après les sujets connus, continents d'après les pays déjà trouvés."""
+    if await db.meta.find_one({"key": "continents_backfill_v2"}):
+        return
+    await db.meta.update_one({"key": "continents_backfill_v2"}, {"$set": {"at": now_utc()}}, upsert=True)
+    n = 0
+    async for b in db.catalog_books.find({}, {"_id": 0, "catalog_id": 1, "countries": 1, "subjects": 1, "kind": 1, "raw_subjects": 1, "areas": 1}):
+        kind = b.get("kind") or classify_kind(b.get("raw_subjects") or [], b.get("subjects") or [])
+        genre = b.get("genre") or classify_genre(b.get("raw_subjects") or [], b.get("subjects") or [])
+        literary = kind != "nonfiction"
+        countries = b.get("countries") or []
+        conts = sorted({COUNTRY_TO_CONTINENT[c] for c in countries if c in COUNTRY_TO_CONTINENT}) if literary else []
+        areas = (b.get("areas") or []) if literary else []
+        await db.catalog_books.update_one({"catalog_id": b["catalog_id"]}, {"$set": {"kind": kind, "genre": genre, "continents": conts, "areas": areas}})
+        n += 1
+    logger.info("continents backfill: %s livres", n)
+
+
 async def init(database):
     """Appelé au démarrage par server.py : injecte la base, crée les index, lance le travailleur."""
     global db, _worker_started
@@ -410,6 +526,8 @@ async def init(database):
         await db.catalog_books.create_index("subjects")
         await db.catalog_books.create_index("areas")
         await db.catalog_books.create_index("countries")
+        await db.catalog_books.create_index("continents")
+        await db.catalog_books.create_index("genre")
         await db.catalog_books.create_index("author_ids")
         await db.catalog_authors.create_index("norm_name")
         await db.catalog_tasks.create_index([("status", 1), ("created_at", 1)])
@@ -419,30 +537,37 @@ async def init(database):
         _worker_started = True
         asyncio.create_task(_worker_loop())
         asyncio.create_task(_backfill_authors())
+        asyncio.create_task(_backfill_continents())
 
 
 def _card(b: dict) -> dict:
     countries = b.get("countries") or []
     areas = b.get("areas") or []
     labels = {a["key"]: a["label"] for a in AREAS}
+    conts = b.get("continents") or []
+    clabels = {c["key"]: c["label"] for c in CONTINENTS}
     return {"catalog_id": b["catalog_id"], "title": b["title"],
             "author": ", ".join(b.get("authors") or []), "cover": b.get("cover"),
             "year": b.get("year"), "pages": b.get("pages"), "isbn": b.get("isbn13"),
-            "summary": b.get("summary"), "subjects": b.get("subjects") or [],
+            "summary": b.get("summary"), "subjects": b.get("subjects") or [], "kind": b.get("kind") or "unknown",
+            "genre": b.get("genre"), "genre_label": next((g["label"] for g in GENRES if g["key"] == b.get("genre")), None),
             "areas": areas, "area_labels": [labels.get(a, a) for a in areas], "countries": countries,
-            "country_labels": [COUNTRY_FR.get(c, c) for c in countries]}
+            "country_labels": [COUNTRY_FR.get(c, c) for c in countries],
+            "continents": conts, "continent_labels": [clabels.get(c, c) for c in conts]}
 
 
 # ---------------------------------------------------------------- Endpoints (utilisateur)
 @router.get("/search")
-async def catalog_search(q: str, page: int = 1, size: int = 20):
+async def catalog_search(q: str, page: int = 1, size: int = 20, genre: Optional[str] = None):
     """Recherche : d'abord le catalogue ; sources externes seulement si trop peu de résultats (puis upsert)."""
     q = q.strip()[:120]
     if not q:
         return {"results": [], "total": 0, "page": page, "size": size}
     size = min(max(size, 1), 40)
     skip = max(page - 1, 0) * size
-    flt = {"$text": {"$search": q}}
+    flt: dict = {"$text": {"$search": q}}
+    if genre:
+        flt["genre"] = genre
     total = await db.catalog_books.count_documents(flt)
     docs = await db.catalog_books.find(flt, {"_id": 0, "score": {"$meta": "textScore"}}) \
         .sort([("score", {"$meta": "textScore"})]).skip(skip).limit(size).to_list(size)
@@ -477,7 +602,7 @@ async def trending_subjects():
 
 
 @router.get("/subjects/{subject}")
-async def subject_books(subject: str, area: Optional[str] = None, page: int = 1, size: int = 12):
+async def subject_books(subject: str, area: Optional[str] = None, genre: Optional[str] = None, page: int = 1, size: int = 12):
     subject = _norm_subject(subject)[:60]
     size = min(max(size, 1), 40)
     skip = max(page - 1, 0) * size
@@ -487,7 +612,9 @@ async def subject_books(subject: str, area: Optional[str] = None, page: int = 1,
                                           {"$inc": {"count": 1}}, upsert=True)
     flt: dict = {"subjects": subject}
     if area:
-        flt["areas"] = area
+        flt |= _area_filter(area)
+    if genre:
+        flt["genre"] = genre
     total = await db.catalog_books.count_documents(flt)
     docs = await db.catalog_books.find(flt, {"_id": 0}).sort([("popularity", -1), ("year", -1)]) \
         .skip(skip).limit(size).to_list(size)
@@ -507,35 +634,46 @@ async def subject_books(subject: str, area: Optional[str] = None, page: int = 1,
 
 @router.get("/areas")
 async def list_areas():
+    """Littératures : les continents d'abord (filtre large), puis les aires francophones fines."""
     out = []
+    for c in CONTINENTS:
+        count = await db.catalog_books.count_documents({"continents": c["key"]})
+        if count > 0:
+            out.append({"key": c["key"], "label": c["label"], "count": count, "level": "continent"})
     for a in AREAS:
         count = await db.catalog_books.count_documents({"areas": a["key"]})
         if count > 0:
-            out.append({**a, "count": count})
+            out.append({**a, "count": count, "level": "area"})
     return {"areas": out}
+
+
+def _area_filter(key: str) -> dict:
+    return {"continents": key} if key.startswith("c-") else {"areas": key}
 
 
 @router.get("/areas/{area}")
 async def area_books(area: str, subject: Optional[str] = None, country: Optional[str] = None,
-                     page: int = 1, size: int = 12):
+                     genre: Optional[str] = None, page: int = 1, size: int = 12):
     size = min(max(size, 1), 40)
     skip = max(page - 1, 0) * size
-    flt: dict = {"areas": area}
+    flt: dict = _area_filter(area)
     if subject:
         flt["subjects"] = _norm_subject(subject)
+    if genre:
+        flt["genre"] = genre
     if country:
         flt["countries"] = country.upper()[:2]
     total = await db.catalog_books.count_documents(flt)
     docs = await db.catalog_books.find(flt, {"_id": 0}).sort([("popularity", -1), ("year", -1)]) \
         .skip(skip).limit(size).to_list(size)
-    pipe = [{"$match": {"areas": area}}, {"$unwind": "$subjects"},
+    pipe = [{"$match": _area_filter(area)}, {"$unwind": "$subjects"},
             {"$group": {"_id": "$subjects", "n": {"$sum": 1}}}, {"$sort": {"n": -1}}, {"$limit": 8}]
     tops = await db.catalog_books.aggregate(pipe).to_list(8)
     # Chips pays de l'aire (Lot C)
-    pipec = [{"$match": {"areas": area}}, {"$unwind": "$countries"},
+    pipec = [{"$match": _area_filter(area)}, {"$unwind": "$countries"},
              {"$group": {"_id": "$countries", "n": {"$sum": 1}}}, {"$sort": {"n": -1}}, {"$limit": 14}]
     cn = await db.catalog_books.aggregate(pipec).to_list(14)
-    label = next((a["label"] for a in AREAS if a["key"] == area), area)
+    label = next((a["label"] for a in AREAS + CONTINENTS if a["key"] == area), area)
     return {"label": label, "books": [_card(b) for b in docs], "top_subjects": [x["_id"] for x in tops],
             "countries": [{"code": x["_id"], "label": COUNTRY_FR.get(x["_id"], x["_id"]), "count": x["n"]} for x in cn],
             "total": total, "page": page, "size": size}
@@ -560,11 +698,42 @@ async def catalog_isbn(isbn: str):
     return _card(b)
 
 
+@router.get("/genres")
+async def list_genres():
+    out = []
+    for g in GENRES:
+        count = await db.catalog_books.count_documents({"genre": g["key"]})
+        out.append({**g, "count": count})
+    return {"genres": out}
+
+
+@router.get("/genres/{genre}")
+async def genre_books(genre: str, area: Optional[str] = None, subject: Optional[str] = None, page: int = 1, size: int = 12):
+    size = min(max(size, 1), 40)
+    skip = max(page - 1, 0) * size
+    flt: dict = {"genre": genre}
+    if area:
+        flt |= _area_filter(area)
+    if subject:
+        flt["subjects"] = _norm_subject(subject)
+    total = await db.catalog_books.count_documents(flt)
+    docs = await db.catalog_books.find(flt, {"_id": 0}).sort([("popularity", -1), ("year", -1)]) \
+        .skip(skip).limit(size).to_list(size)
+    pipe = [{"$match": {"genre": genre}}, {"$unwind": "$subjects"},
+            {"$group": {"_id": "$subjects", "n": {"$sum": 1}}}, {"$sort": {"n": -1}}, {"$limit": 8}]
+    tops = await db.catalog_books.aggregate(pipe).to_list(8)
+    label = next((g["label"] for g in GENRES if g["key"] == genre), genre)
+    return {"label": label, "books": [_card(b) for b in docs], "top_subjects": [x["_id"] for x in tops],
+            "total": total, "page": page, "size": size}
+
+
 @router.get("/book/{catalog_id}")
 async def catalog_book(catalog_id: str):
     b = await db.catalog_books.find_one({"catalog_id": catalog_id}, {"_id": 0})
     if not b:
         raise HTTPException(status_code=404, detail="not_found")
+    if not b.get("summary"):
+        await enqueue_task(catalog_id, "summary")
     return _card(b) | {"publisher": b.get("publisher"), "language": b.get("language"),
                        "isbn13": b.get("isbn13"), "popularity": b.get("popularity", 0)}
 
@@ -765,13 +934,15 @@ async def _ai_origin(name: str) -> Optional[str]:
 
 async def _recompute_books_for_author(author_id: str):
     """Recalcule countries[] et areas[] (dérivés) des livres reliés à cet auteur."""
-    async for b in db.catalog_books.find({"author_ids": author_id}, {"_id": 0, "catalog_id": 1, "author_ids": 1}):
+    async for b in db.catalog_books.find({"author_ids": author_id}, {"_id": 0, "catalog_id": 1, "author_ids": 1, "kind": 1}):
         auths = await db.catalog_authors.find({"author_id": {"$in": b.get("author_ids") or []}},
                                               {"_id": 0, "country": 1}).to_list(10)
         countries = sorted({a["country"] for a in auths if a.get("country")})
-        areas = sorted({ar for c in countries for ar in COUNTRY_TO_AREAS.get(c, [])})
+        literary = b.get("kind") != "nonfiction"
+        areas = sorted({ar for c in countries for ar in COUNTRY_TO_AREAS.get(c, [])}) if literary else []
+        continents = sorted({COUNTRY_TO_CONTINENT[c] for c in countries if c in COUNTRY_TO_CONTINENT}) if literary else []
         await db.catalog_books.update_one({"catalog_id": b["catalog_id"]}, {"$set": {
-            "countries": countries, "areas": areas, "updated_at": now_utc()}})
+            "countries": countries, "areas": areas, "continents": continents, "updated_at": now_utc()}})
 
 
 async def process_author_origin(task):

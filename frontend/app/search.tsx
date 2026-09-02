@@ -25,6 +25,7 @@ export default function SearchScreen() {
   const [bookId, setBookId] = useState<string | null>(null);
   const [themes, setThemes] = useState<string[]>([]);
   const [areas, setAreas] = useState<any[]>([]);
+  const [genres, setGenres] = useState<any[]>([]);
   const [myBooks, setMyBooks] = useState<{ book_id: string; title: string }[]>([]);
   const [results, setResults] = useState<{ quotes: Quote[]; books: any[]; readers: any[] }>({ quotes: [], books: [], readers: [] });
   const [catalog, setCatalog] = useState<any[]>([]);
@@ -48,6 +49,10 @@ export default function SearchScreen() {
       try {
         const ar = await api<{ areas: any[] }>('/catalog/areas');
         setAreas(ar.areas || []);
+      } catch {}
+      try {
+        const g = await api<{ genres: any[] }>('/catalog/genres');
+        setGenres((g.genres || []).filter((x: any) => x.count > 0));
       } catch {}
     })();
   }, []);
@@ -169,6 +174,18 @@ export default function SearchScreen() {
           </>
         )}
 
+        {genres.length > 0 && !q.trim() && (
+          <>
+            <Text style={styles.filterLabel}>{t('Par genre')}</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipScroll}>
+              {genres.map((g: any) => (
+                <Pressable key={g.key} testID={`search-genre-${g.key}`} onPress={() => router.push({ pathname: '/genre/[key]', params: { key: g.key } })} style={styles.chip}>
+                  <Text style={styles.chipText}>{g.label}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </>
+        )}
         {areas.length > 0 && !q.trim() && (
           <>
             <Text style={styles.filterLabel}>{t('Littératures')}</Text>
