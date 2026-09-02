@@ -9,6 +9,7 @@ import { QuoteCard, Quote } from '@/src/components/QuoteCard';
 import { api } from '@/src/api';
 import { useT } from '@/src/i18n';
 import ManentLoader from '@/src/components/ManentLoader';
+import { AreaCard } from '@/src/components/AreaCard';
 
 type Scope = 'all' | 'quotes' | 'books';
 
@@ -23,6 +24,7 @@ export default function SearchScreen() {
   const [theme, setTheme] = useState<string | null>(null);
   const [bookId, setBookId] = useState<string | null>(null);
   const [themes, setThemes] = useState<string[]>([]);
+  const [areas, setAreas] = useState<any[]>([]);
   const [myBooks, setMyBooks] = useState<{ book_id: string; title: string }[]>([]);
   const [results, setResults] = useState<{ quotes: Quote[]; books: any[]; readers: any[] }>({ quotes: [], books: [], readers: [] });
   const [catalog, setCatalog] = useState<any[]>([]);
@@ -42,6 +44,10 @@ export default function SearchScreen() {
         ]);
         setThemes(t.themes);
         setMyBooks(b.books.map((x: any) => ({ book_id: x.book_id, title: x.title })));
+      } catch {}
+      try {
+        const ar = await api<{ areas: any[] }>('/catalog/areas');
+        setAreas(ar.areas || []);
       } catch {}
     })();
   }, []);
@@ -158,6 +164,17 @@ export default function SearchScreen() {
                 <Pressable key={b.book_id} testID={`search-book-${b.book_id}`} onPress={() => setBookId(bookId === b.book_id ? null : b.book_id)} style={[styles.chip, bookId === b.book_id && styles.chipActive]}>
                   <Text style={[styles.chipText, bookId === b.book_id && styles.chipTextActive]} numberOfLines={1}>{b.title}</Text>
                 </Pressable>
+              ))}
+            </ScrollView>
+          </>
+        )}
+
+        {areas.length > 0 && !q.trim() && (
+          <>
+            <Text style={styles.filterLabel}>{t('Littératures')}</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipScroll}>
+              {areas.map((a: any) => (
+                <AreaCard key={a.key} testID={`search-area-${a.key}`} label={a.label} count={a.count} onPress={() => router.push({ pathname: '/area/[key]', params: { key: a.key } })} />
               ))}
             </ScrollView>
           </>
