@@ -346,3 +346,11 @@ Testé e2e via curl (création publique, discover, join, correspondance titre in
 - Domaine : rattachement manentlc.app à faire côté plateforme (bouton Publish → domaine personnalisé) ; variables déjà pointées dessus.
 - A2 non réalisable sans évolution d'ingress → statiques .well-known conservés provisoirement.
 - Le shelf « Ce que la communauté lit » est retiré du Club (D1) mais pas encore réaffiché dans Découvrir (D2 à faire) : fonctionnalité momentanément non visible.
+
+## Session juin 2026 — Lots C/A/E + fusion branche GitHub
+- Lot C : catalog_authors + worker origines (Wikidata→OpenLibrary→IA), aires dérivées, admin Auteurs, chips pays sur /area, pays sur fiches livres.
+- Lot A : pages OG backend /api/s/* (stores, manent://, base dérivée de l'hôte), .well-known dynamiques, deep link mémorisé (pending_deep_link, fiable via capture window.location au chargement) appliqué après onboarding, suffixe ?follow=1.
+- Lot E : GET /books/search supprimé ; scan ISBN et recherches via /catalog/isbn et /catalog/search.
+- Déploiement : /health ajouté, DB_NAME/AUTH_SESSION_URL depuis env, httpx+bs4 dans requirements, .gitignore corrigé, Supabase → Emergent Object Storage (upload + /api/files publics), _attach_public_meta batché. Health check: PASS (warns: plist push iOS, URL politique de confidentialité).
+- Domaine : rattachement custom non supporté pour déploiements mobiles (réponse support) ; PUBLIC_BASE_URL vidé, URLs dérivées dynamiquement.
+- Fusion branche claude/sillage-mobile-app-4hvnle : BottomSheet/BookHero/AreaCard/ClubCard partagés, liste de lecture (queue + réordonnancement), écran Lecture suivante, Pour toi (moteur + worker), Recommandations entre lectrices (+badge), Partager ma bibliothèque, pages publiques profil (Suivre) et bibliothèque, refonte onboarding/accueil/bibliothèque/fiches. Conflits résolus : share.py (fusion base dynamique + extra/open_label), _layout.tsx (deep link fiable + follow=1). Fix post-fusion : /readers/contacts déclaré avant /readers/{handle}.

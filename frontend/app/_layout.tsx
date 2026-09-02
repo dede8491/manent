@@ -9,12 +9,6 @@ import { StatusBar } from 'expo-status-bar';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// URL initiale du web, lue avant tout rendu (les redirections d'alias /q → /quote ne l'écrasent pas)
-const INITIAL_WEB_PATH: string | null =
-  Platform.OS === 'web' && typeof window !== 'undefined' ? window.location.pathname : null;
-const INITIAL_WEB_SEARCH: string =
-  Platform.OS === 'web' && typeof window !== 'undefined' ? window.location.search : '';
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useIconFonts } from '@/src/hooks/use-icon-fonts';
 import { AuthProvider, useAuth } from '@/src/auth';
@@ -22,6 +16,12 @@ import { ThemeProvider, useColors, useScheme } from '@/src/themeCtx';
 import { I18nProvider, useT } from '@/src/i18n';
 import { initializeRevenueCat, SubscriptionProvider } from '@/src/revenuecat';
 import ManentLoader from '@/src/components/ManentLoader';
+
+// URL initiale du web, lue avant tout rendu (les redirections d'alias /q → /quote ne l'écrasent pas)
+const INITIAL_WEB_PATH: string | null =
+  Platform.OS === 'web' && typeof window !== 'undefined' ? window.location.pathname : null;
+const INITIAL_WEB_SEARCH: string =
+  Platform.OS === 'web' && typeof window !== 'undefined' ? window.location.search : '';
 
 LogBox.ignoreAllLogs(true);
 SplashScreen.preventAutoHideAsync();

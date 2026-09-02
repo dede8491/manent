@@ -424,6 +424,21 @@ async def toggle_follow(handle: str, user=Depends(get_current_user)):
     return {"following": following, "followers": followers}
 
 
+@api.get("/readers/contacts")
+async def reader_contacts(q: str = "", user=Depends(get_current_user)):
+    """Lectrices que je suis ou qui me suivent (destinataires possibles d'une recommandation)."""
+    uid = user["user_id"]
+    ids = set(f["followed_id"] for f in await db.follows.find({"follower_id": uid}, {"_id": 0, "followed_id": 1}).to_list(500))
+    ids |= set(f["follower_id"] for f in await db.follows.find({"followed_id": uid}, {"_id": 0, "follower_id": 1}).to_list(500))
+    flt: dict = {"user_id": {"$in": list(ids)}}
+    if q.strip():
+        rx = {"$regex": re.escape(q.strip()), "$options": "i"}
+        flt["$or"] = [{"pseudo": rx}, {"handle": rx}]
+    users = await db.users.find(flt, {"_id": 0, "pseudo": 1, "handle": 1, "picture": 1, "recos_enabled": 1}).sort("pseudo", 1).to_list(200)
+    return {"readers": [{"pseudo": u["pseudo"], "handle": u["handle"], "picture": u.get("picture"),
+                         "accepts": u.get("recos_enabled", True) is not False} for u in users]}
+
+
 @api.get("/readers/{handle}")
 async def public_profile(handle: str, user=Depends(get_current_user)):
     u = await db.users.find_one(
@@ -2623,21 +2638,6 @@ class RecommendationBody(BaseModel):
 
 class RecommendationDecision(BaseModel):
     accept: bool
-
-
-@api.get("/readers/contacts")
-async def reader_contacts(q: str = "", user=Depends(get_current_user)):
-    """Lectrices que je suis ou qui me suivent (destinataires possibles d'une recommandation)."""
-    uid = user["user_id"]
-    ids = set(f["followed_id"] for f in await db.follows.find({"follower_id": uid}, {"_id": 0, "followed_id": 1}).to_list(500))
-    ids |= set(f["follower_id"] for f in await db.follows.find({"followed_id": uid}, {"_id": 0, "follower_id": 1}).to_list(500))
-    flt: dict = {"user_id": {"$in": list(ids)}}
-    if q.strip():
-        rx = {"$regex": re.escape(q.strip()), "$options": "i"}
-        flt["$or"] = [{"pseudo": rx}, {"handle": rx}]
-    users = await db.users.find(flt, {"_id": 0, "pseudo": 1, "handle": 1, "picture": 1, "recos_enabled": 1}).sort("pseudo", 1).to_list(200)
-    return {"readers": [{"pseudo": u["pseudo"], "handle": u["handle"], "picture": u.get("picture"),
-                         "accepts": u.get("recos_enabled", True) is not False} for u in users]}
 
 
 @api.post("/recommendations")
