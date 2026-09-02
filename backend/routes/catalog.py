@@ -21,6 +21,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from routes.book_search import _search_google, _search_openlibrary, _search_bnf, _libraires_cover, _norm_key
+import routes.classification as classification
 
 logger = logging.getLogger("manent")
 
@@ -264,6 +265,9 @@ async def upsert_catalog_book(data: dict, source: str = "app", subjects: Optiona
         aids = [x for x in [await ensure_author(a) for a in authors[:4]] if x]
         if aids:
             await db.catalog_books.update_one({"catalog_id": cid}, {"$addToSet": {"author_ids": {"$each": aids}}})
+    # Classification multidimensionnelle (règles + IA) en tâche de fond, une seule fiche par livre.
+    if not existing or not existing.get("classification"):
+        await classification.enqueue(cid)
     return await db.catalog_books.find_one({"catalog_id": cid}, {"_id": 0})
 
 
@@ -449,6 +453,8 @@ async def process_tasks(limit: int = 5):
                         await _propagate(book["catalog_id"], "summary", s)
                     if upd.get("kind") == "nonfiction":
                         await db.catalog_books.update_one({"catalog_id": book["catalog_id"]}, {"$set": {"areas": [], "continents": []}})
+                    if (s or cats) and not (book.get("classification") or {}).get("ai_version"):
+                        await classification.enqueue(book["catalog_id"])
                 await db.catalog_tasks.delete_one({"_id": t["_id"]})
                 done += 1
             except Exception as e:
@@ -476,7 +482,17 @@ async def _worker_loop():
             await process_for_you_batch(3)
         except Exception as e:
             logger.warning("for-you worker error: %s", e)
+        try:
+            await classification.process_tasks(4)
+            _ticks[0] += 1
+            if _ticks[0] % 180 == 0:  # ~ toutes les heures : livres classés sans IA faute de quota
+                await classification.retry_ai_pending(20)
+        except Exception as e:
+            logger.warning("classification worker error: %s", e)
         await asyncio.sleep(20)
+
+
+_ticks = [0]
 
 
 async def _backfill_authors():
@@ -531,13 +547,20 @@ async def init(database):
         await db.catalog_books.create_index("author_ids")
         await db.catalog_authors.create_index("norm_name")
         await db.catalog_tasks.create_index([("status", 1), ("created_at", 1)])
+        await db.catalog_tasks.create_index([("catalog_id", 1), ("kind", 1)])
     except Exception as e:
         logger.warning("catalog indexes: %s", e)
+    classification.db = db
+    try:
+        await classification.ensure_indexes()
+    except Exception as e:
+        logger.warning("classification indexes: %s", e)
     if not _worker_started:
         _worker_started = True
         asyncio.create_task(_worker_loop())
         asyncio.create_task(_backfill_authors())
         asyncio.create_task(_backfill_continents())
+        asyncio.create_task(classification.backfill())
 
 
 def _card(b: dict) -> dict:
@@ -553,7 +576,9 @@ def _card(b: dict) -> dict:
             "genre": b.get("genre"), "genre_label": next((g["label"] for g in GENRES if g["key"] == b.get("genre")), None),
             "areas": areas, "area_labels": [labels.get(a, a) for a in areas], "countries": countries,
             "country_labels": [COUNTRY_FR.get(c, c) for c in countries],
-            "continents": conts, "continent_labels": [clabels.get(c, c) for c in conts]}
+            "continents": conts, "continent_labels": [clabels.get(c, c) for c in conts],
+            "lines": classification.lines(b),
+            "classification": {k: v for k, v in (b.get("classification") or {}).items() if k != "labels"} or None}
 
 
 # ---------------------------------------------------------------- Endpoints (utilisateur)
@@ -583,7 +608,21 @@ async def catalog_search(q: str, page: int = 1, size: int = 20, genre: Optional[
                 .sort([("score", {"$meta": "textScore"})]).skip(skip).limit(size).to_list(size)
         except Exception as e:
             logger.warning("catalog external search failed: %s", e)
-    return {"results": [_card(b) for b in docs], "total": total, "page": page, "size": size}
+    # Recherche étendue : les mots du référentiel (« deuil », « polar », « Gabon », « réconfortant »…) deviennent
+    # des filtres de classification ; leurs livres complètent la page sans doublon.
+    matched = classification.labels_in_query(q)
+    chips = classification.selected_chips(matched) if matched else []
+    if matched and page == 1 and len(docs) < size:
+        cflt = classification.build_filter(matched)
+        if genre:
+            cflt["genre"] = genre
+        seen = {b["catalog_id"] for b in docs}
+        extra = await db.catalog_books.find(cflt, {"_id": 0}).sort([("popularity", -1)]).limit(size * 2).to_list(size * 2)
+        for b in extra:
+            if b["catalog_id"] not in seen and len(docs) < size:
+                docs.append(b); seen.add(b["catalog_id"]); total += 1
+    return {"results": [_card(b) for b in docs], "total": total, "page": page, "size": size,
+            "matched_filters": matched, "matched_chips": chips}
 
 
 @router.get("/subjects")
@@ -943,6 +982,11 @@ async def _recompute_books_for_author(author_id: str):
         continents = sorted({COUNTRY_TO_CONTINENT[c] for c in countries if c in COUNTRY_TO_CONTINENT}) if literary else []
         await db.catalog_books.update_one({"catalog_id": b["catalog_id"]}, {"$set": {
             "countries": countries, "areas": areas, "continents": continents, "updated_at": now_utc()}})
+        # l'origine a changé : la classification (pays → région → continent) se recalcule sans IA
+        try:
+            await classification.classify_book(b["catalog_id"], use_ai=False)
+        except Exception as e:
+            logger.warning("reclassify after origin failed: %s", e)
 
 
 async def process_author_origin(task):

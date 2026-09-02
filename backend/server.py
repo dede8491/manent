@@ -2930,6 +2930,8 @@ async def shutdown_db_client():
 
 app.include_router(catalog_router, dependencies=[Depends(get_current_user)])
 app.include_router(catalog_admin_router, dependencies=[Depends(require_admin)])
+app.include_router(catalog.classification.router, dependencies=[Depends(get_current_user)])
+app.include_router(catalog.classification.admin_router, dependencies=[Depends(require_admin)])
 share_pages.db = db
 app.include_router(share_pages.router)
 app.include_router(share_pages.root_router)

@@ -10,6 +10,7 @@ import { api } from '@/src/api';
 import { useT } from '@/src/i18n';
 import ManentLoader from '@/src/components/ManentLoader';
 import { AreaCard } from '@/src/components/AreaCard';
+import { ClassificationLines } from '@/src/components/ClassificationLines';
 
 type Scope = 'all' | 'quotes' | 'books';
 
@@ -32,6 +33,8 @@ export default function SearchScreen() {
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogTotal, setCatalogTotal] = useState(0);
   const [catalogPage, setCatalogPage] = useState(1);
+  const [matched, setMatched] = useState<{ dim: string; key: string; label: string }[]>([]);
+  const [matchedSel, setMatchedSel] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(true);
   const timer = useRef<any>(null);
   const catalogTimer = useRef<any>(null);
@@ -89,12 +92,15 @@ export default function SearchScreen() {
     setCatalogLoading(true);
     catalogTimer.current = setTimeout(async () => {
       try {
-        const r = await api<{ results: any[]; total: number }>(`/catalog/search?q=${encodeURIComponent(qv)}&page=1&size=10`);
+        const r = await api<{ results: any[]; total: number; matched_chips?: any[]; matched_filters?: Record<string, string[]> }>(`/catalog/search?q=${encodeURIComponent(qv)}&page=1&size=10`);
         setCatalog(r.results || []);
         setCatalogTotal(r.total || 0);
         setCatalogPage(1);
+        setMatched(r.matched_chips || []);
+        setMatchedSel(r.matched_filters || {});
       } catch {
         setCatalog([]);
+        setMatched([]);
       }
       setCatalogLoading(false);
     }, 450);
@@ -152,6 +158,30 @@ export default function SearchScreen() {
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xxl }} keyboardShouldPersistTaps="handled">
+        <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: spacing.xl, marginTop: spacing.md }}>
+          <Pressable testID="search-intent" onPress={() => router.push('/intent')} style={[styles.chip, { flex: 1, maxWidth: undefined, backgroundColor: colors.bisque, borderColor: colors.bisque }]}>
+            <Text style={styles.chipText} numberOfLines={1}>✨ {t('Je cherche un livre qui…')}</Text>
+          </Pressable>
+          <Pressable testID="search-filters" onPress={() => router.push({ pathname: '/filters', params: { q: q.trim() } })} style={[styles.chip, { flexDirection: 'row', gap: 6 }]}>
+            <Feather name="sliders" size={13} color={colors.espresso} />
+            <Text style={styles.chipText}>{t('Filtres')}</Text>
+          </Pressable>
+        </View>
+        {matched.length > 0 && q.trim().length >= 2 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.chipScroll, { marginTop: spacing.sm }]}>
+            {matched.map((c: any) => (
+              <Pressable key={`${c.dim}:${c.key}`} testID={`search-matched-${c.dim}-${c.key}`} onPress={() => router.push({ pathname: '/browse', params: { f: JSON.stringify({ [c.dim]: [c.key] }), title: c.label } })} style={[styles.chip, styles.chipActive, { flexDirection: 'row', gap: 6 }]}>
+                <Text style={[styles.chipText, styles.chipTextActive]}>{c.label}</Text>
+                <Feather name="arrow-right" size={12} color={colors.creme} />
+              </Pressable>
+            ))}
+            {matched.length > 1 && (
+              <Pressable testID="search-matched-all" onPress={() => router.push({ pathname: '/browse', params: { f: JSON.stringify(matchedSel), title: q.trim() } })} style={styles.chip}>
+                <Text style={styles.chipText}>{t('Combiner')}</Text>
+              </Pressable>
+            )}
+          </ScrollView>
+        )}
         <Text style={styles.filterLabel}>{t('Par sujet')}</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipScroll}>
           {themes.map(t => (
@@ -271,7 +301,8 @@ export default function SearchScreen() {
                       <View style={{ flex: 1 }}>
                         <Text style={styles.bookTitle} numberOfLines={1}>{b.title}</Text>
                         <Text style={styles.bookAuthor} numberOfLines={1}>{[b.author, b.year].filter(Boolean).join('  ·  ')}</Text>
-                        {!!b.summary && <Text style={styles.bookSummary} numberOfLines={2}>{b.summary}</Text>}
+                        {(b.lines || []).length > 0 ? <ClassificationLines lines={b.lines} compact style={{ marginTop: 2 }} />
+                          : !!b.summary && <Text style={styles.bookSummary} numberOfLines={2}>{b.summary}</Text>}
                       </View>
                       <Feather name="plus-circle" size={19} color={colors.chambray} />
                     </Pressable>

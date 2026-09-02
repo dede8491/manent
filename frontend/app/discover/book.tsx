@@ -8,6 +8,7 @@ import { api } from '@/src/api';
 import { BookCover } from '@/src/components/BookCover';
 import { PrimaryButton } from '@/src/components/Button';
 import { BookHero, AreaLine } from '@/src/components/BookHero';
+import { ClassificationLines } from '@/src/components/ClassificationLines';
 import { ShareBookSheet } from '@/src/components/ShareBookSheet';
 import { Feather } from '@expo/vector-icons';
 import { useT, useI18n } from '@/src/i18n';
@@ -84,6 +85,7 @@ export default function DiscoverBook() {
             <Text style={styles.title}>{title}</Text>
             {!!author && <Text style={styles.author}>{author}{year ? `  ·  ${year}` : ''}</Text>}
             <AreaLine areas={meta?.area_labels} countries={meta?.country_labels} style={{ marginTop: 6 }} />
+            <ClassificationLines lines={meta?.lines} style={{ marginTop: 8, alignItems: 'center' }} testID="discover-classification" />
           </View>
         </BookHero>
 

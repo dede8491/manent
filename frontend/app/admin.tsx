@@ -8,6 +8,7 @@ import { useColors, useStyles } from '@/src/themeCtx';
 import { api } from '@/src/api';
 import ManentLoader from '@/src/components/ManentLoader';
 import { AuthorAdmin } from '@/src/components/AuthorAdmin';
+import { ClassificationAdmin } from '@/src/components/ClassificationAdmin';
 import { timeAgo } from '@/src/timeago';
 import { useT, useLang } from '@/src/i18n';
 
@@ -101,6 +102,7 @@ export default function AdminDashboard() {
             </View>
           ))}
           <AuthorAdmin />
+          <ClassificationAdmin />
         </ScrollView>
       )}
     </View>
