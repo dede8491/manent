@@ -17,6 +17,9 @@ import { BookCover } from '@/src/components/BookCover';
 import { useT, useI18n } from '@/src/i18n';
 import { InfoTooltip } from '@/src/components/InfoTooltip';
 import ManentLoader from '@/src/components/ManentLoader';
+import { BookHero, AreaLine } from '@/src/components/BookHero';
+import { BottomSheet } from '@/src/components/BottomSheet';
+import { ShareBookSheet } from '@/src/components/ShareBookSheet';
 
 export default function BookDetail() {
   const t = useT();
@@ -24,8 +27,9 @@ export default function BookDetail() {
   const colors = useColors();
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, page: pageParam } = useLocalSearchParams<{ id: string; page?: string }>();
   const router = useRouter();
+  const [markPage, setMarkPage] = useState<number | null>(pageParam ? parseInt(String(pageParam), 10) || null : null);
   const [book, setBook] = useState<any>(null);
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [rating, setRating] = useState(0);
@@ -48,6 +52,8 @@ export default function BookDetail() {
   const [sumModal, setSumModal] = useState(false);
   const [sumInput, setSumInput] = useState('');
   const [sumSaving, setSumSaving] = useState(false);
+  const [catalogMeta, setCatalogMeta] = useState<{ area_labels?: string[]; country_labels?: string[] } | null>(null);
+  const [shareSheet, setShareSheet] = useState(false);
 
   const openDelete = async () => {
     setConfirmDelete(true);
@@ -148,6 +154,9 @@ export default function BookDetail() {
       setRating(b.rating || 0); setRecap(b.recap || ''); setLessons(b.lessons || []);
       const q = await api<{ quotes: Quote[] }>(`/quotes?book_id=${id}`);
       setQuotes(q.quotes);
+      if (b.catalog_id) {
+        try { setCatalogMeta(await api<any>(`/catalog/book/${b.catalog_id}`)); } catch {}
+      }
       if (b.type === 'etude') {
         try {
           const f = await api<{ total: number; due: number }>(`/flashcards?book_id=${id}`);
@@ -224,6 +233,18 @@ export default function BookDetail() {
     } finally { setDetecting(false); }
   };
 
+  // Depuis une citation : marquer la page de la citation comme dernière page lue
+  const markQuotePage = async () => {
+    if (!markPage || markPage < 1) return;
+    const patch: any = { progress_page: markPage };
+    if (book.pages && markPage >= book.pages) patch.status = 'termine';
+    else if (book.status === 'a_lire') patch.status = 'en_cours';
+    const b = await api<any>(`/books/${id}`, { method: 'PATCH', body: JSON.stringify(patch) });
+    setBook(b);
+    setMarkPage(null);
+    if (patch.status === 'termine') setFinishedBanner(true);
+  };
+
   const confirmDetectedPage = async () => {
     if (!detectedPage || detectedPage < 1) return;
     const patch: any = { progress_page: detectedPage };
@@ -285,40 +306,51 @@ export default function BookDetail() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.glacier }} testID="screen-book-detail">
-      <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-        <Pressable onPress={() => router.back()} testID="book-back" style={styles.iconBtn}><Feather name="chevron-left" size={22} color={colors.espresso} /></Pressable>
-        <Text style={styles.headerTitle} numberOfLines={1}>{book.title}</Text>
-        <InfoTooltip
-          testID="info-book"
-          title={t('Ta fiche livre')}
-          text={t("Fais vivre ta lecture : mets à jour ta page pour suivre ta progression, note le livre une fois terminé, et retrouve toutes les citations que tu y as capturées. Les flashcards et la fiche de lecture t'aident à retenir l'essentiel.")}
-        />
-        <Pressable onPress={openDelete} testID="book-delete" style={styles.iconBtn}>
-          <Feather name="trash-2" size={19} color={colors.clay} />
-        </Pressable>
-      </View>
-      <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + spacing.xxl }}>
-        <View style={styles.top}>
-          <Pressable testID="book-cover-edit" onPress={changeCover}>
-            <BookCover uri={book.cover} title={book.title} width={64} height={88} radius={8} initialSize={28} />
-            <View style={styles.coverEditBadge}><Feather name="camera" size={10} color={colors.creme} /></View>
-          </Pressable>
-          <View style={{ flex: 1, gap: 4 }}>
-            {isWattpad ? <Text style={styles.badge}>{t('HISTOIRE WATTPAD')}</Text> : isEtude ? <Text style={styles.badge}>{t('ÉTUDES')}</Text> : null}
-            <Text style={styles.title}>{book.title}</Text>
-            {book.author ? <Text style={styles.author}>{book.author}</Text> : null}
-            {book.is_rereading ? <Text style={styles.rereadBadge}>{t('RELECTURE')}</Text> : (book.read_count || 0) > 1 ? <Text style={styles.rereadBadge}>{t('LU {n} FOIS', { n: book.read_count })}</Text> : null}
-            {book.status !== 'a_lire' && (
-              <View style={{ flexDirection: 'row', gap: 4, marginTop: 4 }}>
-                {[1,2,3,4,5].map(i => (
-                  <Pressable key={i} testID={`star-${i}`} onPress={async () => { setRating(i); await saveField({ rating: i }); }}>
-                    <Feather name="star" size={18} color={colors.chambray} style={{ opacity: i <= rating ? 1 : 0.3 }} />
-                  </Pressable>
-                ))}
-              </View>
-            )}
+      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xxl }}>
+        <BookHero
+          label={t('Fiche livre')}
+          testID="book-back"
+          right={(
+            <>
+              <InfoTooltip
+                testID="info-book"
+                title={t('Comment ça marche')}
+                text={t("Fais vivre ta lecture : mets à jour ta page pour suivre ta progression, note le livre une fois terminé, et retrouve toutes les citations que tu y as capturées. Les flashcards et la fiche de lecture t'aident à retenir l'essentiel.")}
+              />
+              <Pressable onPress={() => setShareSheet(true)} testID="book-share" style={styles.iconBtn}>
+                <Feather name="share" size={19} color={colors.espresso} />
+              </Pressable>
+              <Pressable onPress={openDelete} testID="book-delete" style={styles.iconBtn}>
+                <Feather name="trash-2" size={19} color={colors.clay} />
+              </Pressable>
+            </>
+          )}
+        >
+          <View style={styles.top}>
+            <Pressable testID="book-cover-edit" onPress={changeCover}>
+              <BookCover uri={book.cover} title={book.title} width={96} height={140} radius={10} initialSize={40} />
+              <View style={styles.coverEditBadge}><Feather name="camera" size={11} color={colors.creme} /></View>
+            </Pressable>
+            <View style={{ flex: 1, gap: 4, justifyContent: 'center' }}>
+              {isWattpad ? <Text style={styles.badge}>{t('HISTOIRE WATTPAD')}</Text> : isEtude ? <Text style={styles.badge}>{t('ÉTUDES')}</Text> : null}
+              {!!book.year && <Text style={styles.year}>{book.year}</Text>}
+              <Text style={styles.title}>{book.title}</Text>
+              {book.author ? <Text style={styles.author}>{book.author}</Text> : null}
+              <AreaLine areas={catalogMeta?.area_labels} countries={catalogMeta?.country_labels} />
+              {book.is_rereading ? <Text style={styles.rereadBadge}>{t('RELECTURE')}</Text> : (book.read_count || 0) > 1 ? <Text style={styles.rereadBadge}>{t('LU {n} FOIS', { n: book.read_count })}</Text> : null}
+              {book.status !== 'a_lire' && (
+                <View style={{ flexDirection: 'row', gap: 4, marginTop: 6 }}>
+                  {[1,2,3,4,5].map(i => (
+                    <Pressable key={i} testID={`star-${i}`} onPress={async () => { setRating(i); await saveField({ rating: i }); }} hitSlop={4}>
+                      <Feather name="star" size={20} color={colors.chambray} style={{ opacity: i <= rating ? 1 : 0.3 }} />
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+            </View>
           </View>
-        </View>
+        </BookHero>
+        <View style={{ paddingHorizontal: spacing.xl }}>
 
         <View style={styles.statusRow}>
           {([['a_lire', 'À lire'], ['en_cours', 'En cours'], ['termine', 'Terminé']] as const).map(([sid, lbl]) => (
@@ -331,9 +363,21 @@ export default function BookDetail() {
         {finishedBanner && (
           <View style={styles.finishedBox} testID="finished-banner">
             <Feather name="award" size={16} color={colors.chambray} />
-            <Text style={styles.finishedText}>{t('Bravo ! Note ta lecture avec les étoiles ci-dessus, et garde-en une trace dans ta fiche.')}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.finishedText}>{t('Bravo ! Note ta lecture avec les étoiles ci-dessus, et garde-en une trace dans ta fiche.')}</Text>
+              <Pressable testID="btn-next-reading" onPress={() => router.push('/queue')} hitSlop={6} style={{ marginTop: 6 }}>
+                <Text style={styles.nextReading}>{t('Passer à la lecture suivante')}  ›</Text>
+              </Pressable>
+            </View>
             <Pressable onPress={() => setFinishedBanner(false)} hitSlop={8}><Feather name="x" size={14} color={colors.clay} /></Pressable>
           </View>
+        )}
+
+        {!!markPage && !isWattpad && markPage !== (book.progress_page || 0) && (
+          <Pressable testID="btn-mark-quote-page" onPress={markQuotePage} style={styles.markPageBtn}>
+            <Feather name="bookmark" size={14} color={colors.chambray} />
+            <Text style={styles.markPageText}>{t('Marquer la page {n} comme ma dernière page lue', { n: markPage })}</Text>
+          </Pressable>
         )}
 
         {total ? (
@@ -347,6 +391,11 @@ export default function BookDetail() {
                 </Pressable>
               )}
             </View>
+            {quotes.length > 0 && (
+              <Pressable testID="btn-my-quotes" onPress={() => router.push({ pathname: '/quotes', params: { book_id: String(id) } })} hitSlop={6} style={{ alignSelf: 'flex-start', marginTop: 6 }}>
+                <Text style={styles.editProgress}>{t(quotes.length > 1 ? 'Voir mes {n} citations' : 'Voir ma citation', { n: quotes.length })}</Text>
+              </Pressable>
+            )}
           </View>
         ) : (
           <View style={{ marginTop: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -506,6 +555,7 @@ export default function BookDetail() {
         ) : quotes.map(q => (
           <QuoteCard key={q.quote_id} quote={q} onPress={() => router.push({ pathname: '/quote/[id]', params: { id: q.quote_id } })} />
         ))}
+        </View>
       </ScrollView>
 
       <Modal visible={confirmDelete} transparent animationType="fade" onRequestClose={() => setConfirmDelete(false)}>
@@ -526,12 +576,12 @@ export default function BookDetail() {
         </View>
       </Modal>
 
-      <Modal visible={pageModal !== null} transparent animationType="slide" onRequestClose={() => setPageModal(null)}>
-        <View style={[styles.modalOverlay, { justifyContent: 'flex-end' }]}>
-          <View style={[styles.modalBox, { borderRadius: 0, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: insets.bottom + spacing.lg }]}>
-            <Text style={styles.modalTitle}>
-              {pageModal === 'total' ? (isWattpad ? t('Nombre total de chapitres') : t('Nombre total de pages')) : (isWattpad ? t('Chapitre où tu en es') : t('Page où tu en es'))}
-            </Text>
+      <BottomSheet
+        visible={pageModal !== null}
+        onClose={() => setPageModal(null)}
+        title={pageModal === 'total' ? (isWattpad ? t('Nombre total de chapitres') : t('Nombre total de pages')) : (isWattpad ? t('Chapitre où tu en es') : t('Page où tu en es'))}
+        testID="sheet-page"
+      >
             <TextInput
               testID="page-modal-input"
               value={pageInput} onChangeText={setPageInput}
@@ -545,14 +595,11 @@ export default function BookDetail() {
             <Pressable testID="page-modal-cancel" onPress={() => setPageModal(null)} style={[styles.cancelBtn, { marginTop: spacing.sm }]}>
               <Text style={styles.cancelBtnText}>{t('Annuler')}</Text>
             </Pressable>
-          </View>
-        </View>
-      </Modal>
+      </BottomSheet>
 
-      <Modal visible={sumModal} transparent animationType="slide" onRequestClose={() => setSumModal(false)}>
-        <View style={[styles.modalOverlay, { justifyContent: 'flex-end' }]}>
-          <View style={[styles.modalBox, { borderRadius: 0, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: insets.bottom + spacing.lg }]}>
-            <Text style={styles.modalTitle}>{t('Résumé du livre')}</Text>
+      <ShareBookSheet visible={shareSheet} onClose={() => setShareSheet(false)} book={{ catalog_id: book.catalog_id, title: book.title, author: book.author }} />
+
+      <BottomSheet visible={sumModal} onClose={() => setSumModal(false)} title={t('Résumé du livre')} testID="sheet-summary">
             <TextInput
               testID="summary-modal-input"
               value={sumInput} onChangeText={setSumInput}
@@ -567,9 +614,7 @@ export default function BookDetail() {
             <Pressable testID="summary-modal-cancel" onPress={() => setSumModal(false)} style={[styles.cancelBtn, { marginTop: spacing.sm }]}>
               <Text style={styles.cancelBtnText}>{t('Annuler')}</Text>
             </Pressable>
-          </View>
-        </View>
-      </Modal>
+      </BottomSheet>
     </View>
   );
 }
@@ -593,20 +638,17 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   ficheBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md, marginTop: spacing.lg },
   ficheTitle: { fontFamily: fonts.displayMedium, fontSize: 18, color: colors.espresso },
   ficheSub: { fontFamily: fonts.body, fontSize: 12, color: colors.clay, marginTop: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSoft, backgroundColor: colors.glacier },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontFamily: fonts.displayMedium, fontSize: 18, color: colors.espresso, flex: 1, textAlign: 'center', marginHorizontal: spacing.md },
-  top: { flexDirection: 'row', gap: spacing.md },
-  cover: { width: 96, height: 144, borderRadius: radius.sm, backgroundColor: colors.bisque, alignItems: 'center', justifyContent: 'center' },
-  coverInitial: { fontFamily: fonts.displayMedium, fontSize: 54, color: colors.espresso },
+  top: { flexDirection: 'row', gap: spacing.lg },
   badge: { fontFamily: fonts.bodyMedium, fontSize: 9, color: colors.creme, backgroundColor: colors.clay, alignSelf: 'flex-start', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 3, letterSpacing: 1 },
-  title: { fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso },
-  author: { fontFamily: fonts.body, fontSize: 14, color: colors.clay },
+  year: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1.5 },
+  title: { fontFamily: fonts.displayMedium, fontSize: 26, color: colors.espresso, lineHeight: 30 },
+  author: { fontFamily: fonts.body, fontSize: 14.5, color: colors.clay },
   progressBar: { height: 4, backgroundColor: colors.borderSoft, borderRadius: 2, overflow: 'hidden' },
   progressFill: { height: 4, backgroundColor: colors.chambray },
   progressText: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.clay, letterSpacing: 1, marginTop: 4, textTransform: 'uppercase' },
   editProgress: { fontFamily: fonts.body, fontSize: 12, color: colors.chambray, textDecorationLine: 'underline', marginTop: 4 },
-  coverEditBadge: { position: 'absolute', bottom: -4, right: -4, width: 20, height: 20, borderRadius: 10, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.glacier },
+  coverEditBadge: { position: 'absolute', bottom: -6, right: -6, width: 26, height: 26, borderRadius: 13, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.creme },
   rereadBadge: { fontFamily: fonts.bodyMedium, fontSize: 9, color: colors.chambray, letterSpacing: 1.5, marginTop: 2 },
   statusRow: { flexDirection: 'row', gap: 8, marginTop: spacing.md },
   statusChip: { flex: 1, height: 36, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.creme },
@@ -614,7 +656,10 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   statusChipText: { fontFamily: fonts.body, fontSize: 13, color: colors.espresso },
   statusChipTextActive: { color: colors.creme, fontFamily: fonts.bodyMedium },
   finishedBox: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.bisque, borderRadius: radius.md, padding: spacing.md, marginTop: spacing.md },
-  finishedText: { flex: 1, fontFamily: fonts.body, fontSize: 12.5, color: colors.espresso, lineHeight: 18 },
+  finishedText: { fontFamily: fonts.body, fontSize: 12.5, color: colors.espresso, lineHeight: 18 },
+  nextReading: { fontFamily: fonts.bodyMedium, fontSize: 12.5, color: colors.chambray },
+  markPageBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: spacing.md, paddingHorizontal: spacing.md, height: 42, borderRadius: radius.md, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.chambray, backgroundColor: colors.creme },
+  markPageText: { fontFamily: fonts.bodyMedium, fontSize: 12.5, color: colors.chambray, flexShrink: 1 },
   pageInput: { height: 56, borderWidth: 1, borderColor: colors.borderSoft, borderRadius: radius.md, fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso, backgroundColor: colors.creme, marginVertical: spacing.md, textAlign: 'center' },
   photoBtn: { height: 48, borderRadius: radius.md, backgroundColor: colors.chambray, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   photoBtnText: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.creme },

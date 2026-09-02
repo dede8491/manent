@@ -15,7 +15,7 @@ type Q = {
 
 type VisFilter = 'toutes' | 'publiques' | 'privees' | 'masquees';
 
-export function QuotesManager() {
+export function QuotesManager({ initialBookId }: { initialBookId?: string | null } = {}) {
   const t = useT();
   const colors = useColors();
   const styles = useStyles(makeStyles);
@@ -23,7 +23,7 @@ export function QuotesManager() {
   const [quotes, setQuotes] = useState<Q[]>([]);
   const [search, setSearch] = useState('');
   const [vis, setVis] = useState<VisFilter>('toutes');
-  const [bookFilter, setBookFilter] = useState<string | null>(null);
+  const [bookFilter, setBookFilter] = useState<string | null>(initialBookId || null);
   const [themeFilter, setThemeFilter] = useState<string | null>(null);
   const [grid, setGrid] = useState(false);
   const [menuFor, setMenuFor] = useState<Q | null>(null);

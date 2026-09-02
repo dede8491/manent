@@ -374,6 +374,10 @@ async def _worker_loop():
             await process_author_tasks(4)
         except Exception as e:
             logger.warning("author worker error: %s", e)
+        try:
+            await process_for_you_batch(3)
+        except Exception as e:
+            logger.warning("for-you worker error: %s", e)
         await asyncio.sleep(20)
 
 
@@ -419,11 +423,13 @@ async def init(database):
 
 def _card(b: dict) -> dict:
     countries = b.get("countries") or []
+    areas = b.get("areas") or []
+    labels = {a["key"]: a["label"] for a in AREAS}
     return {"catalog_id": b["catalog_id"], "title": b["title"],
             "author": ", ".join(b.get("authors") or []), "cover": b.get("cover"),
             "year": b.get("year"), "pages": b.get("pages"), "isbn": b.get("isbn13"),
             "summary": b.get("summary"), "subjects": b.get("subjects") or [],
-            "areas": b.get("areas") or [], "countries": countries,
+            "areas": areas, "area_labels": [labels.get(a, a) for a in areas], "countries": countries,
             "country_labels": [COUNTRY_FR.get(c, c) for c in countries]}
 
 
@@ -807,3 +813,145 @@ async def process_author_tasks(limit: int = 4):
             if t.get("tries", 0) >= 3:
                 await db.catalog_tasks.delete_one({"_id": t["_id"]})
     return len(tasks)
+
+
+# ---------------------------------------------------------------- « Pour toi » (Lot C2)
+# Même esprit que le fil de citations : score par affinités, calculé en tâche de fond
+# (jamais d'appel externe, uniquement la base), stocké dans user_recos une fois par jour.
+FOR_YOU_TTL_HOURS = 24
+
+
+async def compute_for_you(user_id: str, limit: int = 40) -> list:
+    user = await db.users.find_one({"user_id": user_id}, {"_id": 0, "themes": 1})
+    my_subjects = {_norm_subject(x) for x in ((user or {}).get("themes") or []) if x}
+    my_books = await db.books.find({"user_id": user_id}, {"_id": 0, "catalog_id": 1, "rating": 1, "title": 1}).to_list(2000)
+    owned = {b["catalog_id"] for b in my_books if b.get("catalog_id")}
+    liked_cids = {b["catalog_id"] for b in my_books if b.get("catalog_id") and (b.get("rating") or 0) >= 4}
+    owned_docs = await db.catalog_books.find({"catalog_id": {"$in": list(owned)}},
+                                             {"_id": 0, "catalog_id": 1, "areas": 1, "subjects": 1, "title": 1}).to_list(2000)
+    my_areas: set = set()
+    liked_title_by_area: dict = {}
+    liked_title_by_subject: dict = {}
+    for d in owned_docs:
+        for a in d.get("areas") or []:
+            my_areas.add(a)
+            if d["catalog_id"] in liked_cids:
+                liked_title_by_area.setdefault(a, d["title"])
+        if d["catalog_id"] in liked_cids:
+            for s in d.get("subjects") or []:
+                liked_title_by_subject.setdefault(s, d["title"])
+    # Lectrices suivies : leurs livres appréciés (note ≥ 4)
+    followed = [f["followed_id"] for f in await db.follows.find({"follower_id": user_id}, {"_id": 0, "followed_id": 1}).to_list(500)]
+    liked_by_followed: dict = {}
+    if followed:
+        rows = await db.books.find({"user_id": {"$in": followed}, "rating": {"$gte": 4}, "catalog_id": {"$ne": None}},
+                                   {"_id": 0, "catalog_id": 1, "user_id": 1}).to_list(3000)
+        for r in rows:
+            liked_by_followed.setdefault(r["catalog_id"], r["user_id"])
+    handles = {}
+    if liked_by_followed:
+        for u in await db.users.find({"user_id": {"$in": list(set(liked_by_followed.values()))}}, {"_id": 0, "user_id": 1, "handle": 1}).to_list(500):
+            handles[u["user_id"]] = u.get("handle")
+    # Mes clubs : leur lecture commune
+    club_cids: dict = {}
+    for c in await db.clubs.find({"members": user_id}, {"_id": 0, "name": 1, "book": 1}).to_list(100):
+        b = c.get("book") or {}
+        cid = b.get("catalog_id")
+        if not cid and b.get("title"):
+            found = await db.catalog_books.find_one({"norm_key": _norm_key(b["title"], b.get("author"))}, {"_id": 0, "catalog_id": 1})
+            cid = (found or {}).get("catalog_id")
+        if cid:
+            club_cids.setdefault(cid, c.get("name"))
+    dismissed = {d["catalog_id"] for d in await db.reco_dismissed.find({"user_id": user_id}, {"_id": 0, "catalog_id": 1}).to_list(2000)}
+    ors = []
+    if my_subjects:
+        ors.append({"subjects": {"$in": list(my_subjects)}})
+    if my_areas:
+        ors.append({"areas": {"$in": list(my_areas)}})
+    special = list(set(liked_by_followed) | set(club_cids))
+    if special:
+        ors.append({"catalog_id": {"$in": special}})
+    if not ors:
+        ors.append({"popularity": {"$gte": 1}})
+    cands = await db.catalog_books.find({"$or": ors, "cover": {"$ne": None}},
+                                        {"_id": 0, "catalog_id": 1, "subjects": 1, "areas": 1, "popularity": 1}) \
+        .sort("popularity", -1).limit(800).to_list(800)
+    max_pop = max([c.get("popularity") or 0 for c in cands] + [1])
+    scored = []
+    for c in cands:
+        cid = c["catalog_id"]
+        if cid in owned or cid in dismissed:
+            continue
+        subj = [s for s in (c.get("subjects") or []) if s in my_subjects]
+        areas = [a for a in (c.get("areas") or []) if a in my_areas]
+        score = 3 * len(subj) + 2 * len(areas) + (c.get("popularity") or 0) / max_pop
+        reason = None
+        if cid in liked_by_followed:
+            score += 2
+            h = handles.get(liked_by_followed[cid])
+            reason = f"Aimé par @{h}" if h else "Aimé par une lectrice que tu suis"
+        elif cid in club_cids:
+            score += 1
+            reason = f"Lu dans ton club {club_cids[cid]}"
+        elif areas and liked_title_by_area.get(areas[0]):
+            reason = f"Parce que tu as aimé {liked_title_by_area[areas[0]]}"
+        elif subj and liked_title_by_subject.get(subj[0]):
+            reason = f"Parce que tu as aimé {liked_title_by_subject[subj[0]]}"
+        elif subj:
+            reason = f"Sujet {subj[0]}"
+        elif areas:
+            reason = next((a["label"] for a in AREAS if a["key"] == areas[0]), areas[0])
+        else:
+            reason = "Très lu sur Manent"
+        scored.append({"catalog_id": cid, "score": round(score, 3), "reason": reason})
+    scored.sort(key=lambda x: -x["score"])
+    items = scored[:limit]
+    await db.user_recos.update_one({"user_id": user_id}, {"$set": {"items": items, "computed_at": now_utc()}}, upsert=True)
+    return items
+
+
+async def process_for_you_batch(n: int = 3):
+    """Rafraîchit les recommandations des lectrices les plus anciennes (une fois par jour chacune)."""
+    cutoff = now_utc() - timedelta(hours=FOR_YOU_TTL_HOURS)
+    rows = await db.user_recos.find({"computed_at": {"$lt": cutoff}}, {"_id": 0, "user_id": 1}).sort("computed_at", 1).to_list(n)
+    for r in rows:
+        try:
+            await compute_for_you(r["user_id"])
+        except Exception as e:
+            logger.warning("for-you compute failed for %s: %s", r["user_id"], e)
+    return len(rows)
+
+
+async def _for_you_items(user_id: str) -> list:
+    rec = await db.user_recos.find_one({"user_id": user_id}, {"_id": 0})
+    if not rec:
+        return await compute_for_you(user_id)
+    ca = rec.get("computed_at")
+    if isinstance(ca, datetime) and ca.tzinfo is None:
+        ca = ca.replace(tzinfo=timezone.utc)
+    if not ca or (now_utc() - ca) > timedelta(hours=FOR_YOU_TTL_HOURS * 3):
+        return await compute_for_you(user_id)
+    return rec.get("items") or []
+
+
+async def for_you_cards(user_id: str, page: int = 1, size: int = 12) -> dict:
+    """Cartes « Pour toi » paginées, avec la raison affichée pour chaque proposition."""
+    items = await _for_you_items(user_id)
+    size = min(max(size, 1), 40)
+    start = max(page - 1, 0) * size
+    chunk = items[start:start + size]
+    docs = {b["catalog_id"]: b for b in await db.catalog_books.find(
+        {"catalog_id": {"$in": [i["catalog_id"] for i in chunk]}}, {"_id": 0}).to_list(size)}
+    out = []
+    for i in chunk:
+        b = docs.get(i["catalog_id"])
+        if b:
+            out.append(_card(b) | {"reason": i.get("reason")})
+    return {"books": out, "total": len(items), "page": page, "size": size}
+
+
+async def dismiss_for_you(user_id: str, catalog_id: str):
+    await db.reco_dismissed.update_one({"user_id": user_id, "catalog_id": catalog_id},
+                                       {"$setOnInsert": {"created_at": now_utc()}}, upsert=True)
+    await db.user_recos.update_one({"user_id": user_id}, {"$pull": {"items": {"catalog_id": catalog_id}}})
+    return {"ok": True}

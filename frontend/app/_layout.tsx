@@ -1,4 +1,4 @@
-import { Stack, usePathname, useRouter, useSegments } from 'expo-router';
+import { Stack, useGlobalSearchParams, usePathname, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { LogBox, View, Platform, Linking, Alert } from 'react-native';
@@ -25,6 +25,8 @@ if (Platform.OS !== 'web') {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowAlert: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
       shouldPlaySound: true,
       shouldSetBadge: false,
     }),
@@ -99,6 +101,7 @@ function NavGate() {
 
   // Lot A4 : un lien profond ouvert sans compte est mémorisé, puis appliqué après l'onboarding.
   const pathname = usePathname();
+  const gparams = useGlobalSearchParams<{ follow?: string }>();
   const isDeepLink = (p: string) => /^\/(q|b|c)\//.test(p) || p.startsWith('/@') || p.startsWith('/api/s/');
   const normalizeDeepLink = (p: string) => {
     let x = p.replace(/^\/api\/s/, '');
@@ -114,7 +117,7 @@ function NavGate() {
     const inAuth = first === '(auth)';
     if (!user) {
       if (isDeepLink(pathname)) {
-        AsyncStorage.setItem('pending_deep_link', normalizeDeepLink(pathname)).catch(() => {});
+        AsyncStorage.setItem('pending_deep_link', normalizeDeepLink(pathname) + (gparams?.follow === '1' ? '?follow=1' : '')).catch(() => {});
         router.replace('/onboarding');
       } else if (atRoot || (!inOnboarding && !inAuth)) {
         router.replace('/onboarding');
@@ -137,7 +140,7 @@ function NavGate() {
         }
       }
     }
-  }, [user, loading, segments, pathname]);
+  }, [user, loading, segments, pathname, gparams?.follow, router]);
 
   return <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.glacier } }} />;
 }

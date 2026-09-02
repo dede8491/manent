@@ -80,6 +80,7 @@ export default function Settings() {
   const { lang, setLang, t } = useI18n();
   const [defaultPublic, setDefaultPublic] = useState(false);
   const [profilePublic, setProfilePublic] = useState(true);
+  const [recosEnabled, setRecosEnabled] = useState(true);
   const [doc, setDoc] = useState<null | 'privacy' | 'terms'>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -196,6 +197,18 @@ export default function Settings() {
           }
         />
         <Text style={styles.note}>{t('Public : les lecteurs voient ta bibliothèque, tes fiches et tes citations publiques. Privé : seuls ton pseudo et ta photo restent visibles.')}</Text>
+        <Row
+          testID="settings-recos"
+          icon="gift"
+          label={t('Recevoir des recommandations')}
+          onPress={() => { const v = !recosEnabled; setRecosEnabled(v); saveSettings({ recos_enabled: v }); }}
+          right={
+            <View style={[styles.switch, recosEnabled && { backgroundColor: colors.chambray }]}>
+              <View style={[styles.knob, recosEnabled && { alignSelf: 'flex-end' }]} />
+            </View>
+          }
+        />
+        <Text style={styles.note}>{t('Les lectrices que tu suis, ou qui te suivent, peuvent te recommander un livre. Désactivé, personne ne peut t’en envoyer.')}</Text>
         <Row
           testID="settings-default-public"
           icon="eye"

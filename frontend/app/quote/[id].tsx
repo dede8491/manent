@@ -193,10 +193,18 @@ export default function QuoteDetail() {
           <Text style={[styles.mark, { color: style === 'encre' ? colors.chambray : colors.chambray }]}>&ldquo;</Text>
           <Text style={[styles.text, { color: fg }]}>{quote.text}</Text>
           <View style={[styles.divider, { backgroundColor: style === 'encre' ? colors.clay : colors.borderSoft }]} />
-          <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
+          <Pressable
+            testID="quote-book-link"
+            disabled={!(quote as any).book_id || !quote.is_owner}
+            onPress={() => router.push({ pathname: '/book/[id]', params: { id: (quote as any).book_id, page: quote.page ? String(quote.page) : '' } })}
+            style={{ flexDirection: 'row', alignItems: 'flex-end' }}
+          >
             <View style={{ flex: 1 }}>
               <Text style={[styles.source, { color: style === 'encre' ? colors.creme : colors.clay }]}>{quote.book?.title || 'SANS TITRE'}</Text>
               {!!quote.book?.author && <Text style={[styles.authorLine, { color: style === 'encre' ? colors.creme : colors.clay }]}>{quote.book.author}</Text>}
+              {!!(quote as any).book_id && quote.is_owner && (
+                <Text style={[styles.openBook, { color: style === 'encre' ? colors.creme : colors.chambray }]}>{t('Ouvrir le livre')}  ›</Text>
+              )}
             </View>
             {(quote.page || quote.chapter) ? (
               <View style={{ alignItems: 'flex-end' }}>
@@ -204,7 +212,7 @@ export default function QuoteDetail() {
                 <Text style={[styles.pageLbl, { color: style === 'encre' ? colors.creme : colors.clay }]}>{quote.book?.type === 'wattpad' ? 'CHAP.' : 'PAGE'}</Text>
               </View>
             ) : null}
-          </View>
+          </Pressable>
           <Text style={[styles.brand, { color: style === 'encre' ? colors.creme : colors.clay }]}>Manent · @{quote.author?.handle}</Text>
         </View>
 
@@ -299,6 +307,7 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   divider: { height: 1, opacity: 0.4, marginVertical: spacing.lg },
   source: { fontFamily: fonts.bodyMedium, fontSize: 11, letterSpacing: 1.6, textTransform: 'uppercase' },
   authorLine: { fontFamily: fonts.body, fontSize: 12, marginTop: 2 },
+  openBook: { fontFamily: fonts.bodyMedium, fontSize: 11, marginTop: 6, letterSpacing: 0.5 },
   pageNum: { fontFamily: fonts.displayMedium, fontSize: 44, lineHeight: 46 },
   pageLbl: { fontFamily: fonts.bodyMedium, fontSize: 10, letterSpacing: 2 },
   brand: { fontFamily: fonts.bodyMedium, fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', marginTop: spacing.md },

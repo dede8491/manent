@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { fonts, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
@@ -15,6 +15,7 @@ export default function MyQuotesScreen() {
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { book_id } = useLocalSearchParams<{ book_id?: string }>();
   return (
     <View style={{ flex: 1, backgroundColor: colors.glacier }} testID="screen-my-quotes">
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
@@ -25,12 +26,12 @@ export default function MyQuotesScreen() {
         <View style={{ width: 40, alignItems: 'center' }}>
           <InfoTooltip
             testID="info-quotes"
-            title={t('Mes citations')}
+            title={t('Comment ça marche')}
             text={t("Toutes tes citations au même endroit. Sélectionnes-en plusieurs pour changer leur visibilité ou les supprimer d'un coup. Une citation publique peut inspirer d'autres lecteurs dans le fil de découverte.")}
           />
         </View>
       </View>
-      <QuotesManager />
+      <QuotesManager initialBookId={book_id || null} />
     </View>
   );
 }
