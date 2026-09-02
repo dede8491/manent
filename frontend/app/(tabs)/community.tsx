@@ -180,9 +180,9 @@ export default function Community() {
       ) : (
       <ClubHome
         clubs={clubs}
-        onOpenCircle={(cid: string) => router.push({ pathname: '/club/[id]', params: { id: cid } })}
-        onCreateCircle={() => setClubModal(true)}
-        onJoinCircle={() => { setJoinError(''); setJoinModal(true); }}
+        onOpenClub={(cid: string) => router.push({ pathname: '/club/[id]', params: { id: cid } })}
+        onCreateClub={() => setClubModal(true)}
+        onJoinClub={() => { setJoinError(''); setJoinModal(true); }}
       />
       )}
 

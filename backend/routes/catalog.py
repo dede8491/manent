@@ -305,6 +305,15 @@ async def _fetch_summary(http: httpx.AsyncClient, title: str, author: str) -> Op
     return summary
 
 
+async def _propagate(catalog_id: str, field: str, value: str):
+    """B2 : redescend couverture/résumé du catalogue vers les exemplaires reliés (jamais sur un choix utilisateur)."""
+    flt = {"catalog_id": catalog_id, "$or": [{field: None}, {field: ""}]}
+    if field == "cover":
+        flt["cover_source"] = {"$ne": "user"}
+    for col in ["books", "club_books", "featured_books"]:
+        await db[col].update_many(flt, {"$set": {field: value}})
+
+
 async def process_tasks(limit: int = 5):
     """Traite quelques travaux d'enrichissement. Échec de couverture mémorisé 7 jours."""
     tasks = await db.catalog_tasks.find({"status": "pending"}).sort("created_at", 1).to_list(limit)
@@ -332,11 +341,14 @@ async def process_tasks(limit: int = 5):
                     await db.catalog_books.update_one({"catalog_id": book["catalog_id"]}, {"$set": {
                         "cover": cover, "cover_status": "ok" if cover else "failed",
                         "cover_checked_at": now_utc(), "updated_at": now_utc()}})
+                    if cover:
+                        await _propagate(book["catalog_id"], "cover", cover)
                 elif t["kind"] == "summary" and not book.get("summary"):
                     s = await _fetch_summary(http, book["title"], author)
                     if s:
                         await db.catalog_books.update_one({"catalog_id": book["catalog_id"]}, {"$set": {
                             "summary": s, "summary_source": "auto", "updated_at": now_utc()}})
+                        await _propagate(book["catalog_id"], "summary", s)
                 await db.catalog_tasks.delete_one({"_id": t["_id"]})
                 done += 1
             except Exception as e:

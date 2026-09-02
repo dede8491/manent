@@ -113,8 +113,13 @@ def _clean_bnf_title(title: str) -> str:
 
 
 def _norm_key(title: Optional[str], author: Optional[str]) -> str:
-    s = f"{title or ''}|{(author or '').split(',')[0].split()[-1] if author else ''}"
-    s = unicodedata.normalize('NFD', s.lower())
+    """Clé tolérante : sans mention d'édition, sous-titre ni article ; nom de famille de l'auteur."""
+    t = (title or '').lower()
+    t = re.sub(r'[\(\[][^\)\]]*[\)\]]', ' ', t)            # (French Edition), [Texte imprimé]
+    t = re.split(r'[:—–]| - ', t)[0]                        # sous-titre
+    t = re.sub(r"^(le |la |les |l'|l’|un |une |des )", '', t.strip())
+    last = (author or '').split(',')[0].split()[-1] if author else ''
+    s = unicodedata.normalize('NFD', f"{t}|{last}".lower())
     return re.sub(r'[^a-z0-9|]', '', s)
 
 

@@ -459,6 +459,7 @@ class BookCreate(BaseModel):
     title: str
     author: Optional[str] = None
     isbn: Optional[str] = None
+    catalog_id: Optional[str] = None
     wattpad_url: Optional[str] = None
     cover: Optional[str] = None
     pages: Optional[int] = None
@@ -600,9 +601,14 @@ async def create_book(body: BookCreate, user=Depends(get_current_user)):
     # Catalogue : source unique — le livre rejoint catalog_books (upsert, popularité +1)
     if body.type != "etude":
         try:
-            cb = await upsert_catalog_book({"title": doc["title"], "author": doc.get("author"),
-                                            "isbn": doc.get("isbn"), "pages": doc.get("pages"),
-                                            "year": doc.get("year"), "cover": doc.get("cover")}, source="library")
+            # B3 : lien EXACT si catalog_id transmis (recherche, découverte, scan) ; clé tolérante sinon
+            cb = None
+            if body.catalog_id:
+                cb = await db.catalog_books.find_one({"catalog_id": body.catalog_id}, {"_id": 0})
+            if not cb:
+                cb = await upsert_catalog_book({"title": doc["title"], "author": doc.get("author"),
+                                                "isbn": doc.get("isbn"), "pages": doc.get("pages"),
+                                                "year": doc.get("year"), "cover": doc.get("cover")}, source="library")
             if cb:
                 doc["catalog_id"] = cb["catalog_id"]
                 await db.books.update_one({"book_id": book_id}, {"$set": {"catalog_id": cb["catalog_id"]}})
@@ -612,9 +618,6 @@ async def create_book(body: BookCreate, user=Depends(get_current_user)):
                     await db.books.update_one({"book_id": book_id}, {"$set": {"cover": cb["cover"]}})
         except Exception as e:
             logger.warning("catalog link failed: %s", e)
-    # Récupération de couverture en arrière-plan si absente
-    if not doc.get("cover"):
-        asyncio.create_task(_backfill_cover(book_id, doc.get("title"), doc.get("author"), doc.get("isbn")))
     return clean_doc(doc)
 
 
@@ -628,22 +631,34 @@ async def list_books(status: Optional[str] = None, user=Depends(get_current_user
     # attach quote counts
     for b in books:
         b["quotes_count"] = await db.quotes.count_documents({"book_id": b["book_id"]})
-    # Couvertures manquantes : récupération en arrière-plan (max 5 par appel, réessai après 7 jours)
-    tried = 0
+    # SOURCE UNIQUE : couverture/résumé du catalogue redescendent sur l'exemplaire (persistés, aucun appel externe)
     for b in books:
-        if tried >= 5:
-            break
-        if b.get("cover"):
+        if b.get("type") == "etude":
             continue
-        last = b.get("cover_checked_at")
-        if isinstance(last, datetime):
-            if last.tzinfo is None:
-                last = last.replace(tzinfo=timezone.utc)
-            if (now_utc() - last).days < 7:
+        if not b.get("catalog_id"):
+            try:
+                cb = await upsert_catalog_book({"title": b.get("title"), "author": b.get("author"),
+                                                "isbn": b.get("isbn"), "pages": b.get("pages"),
+                                                "year": b.get("year"), "cover": b.get("cover")}, source="library")
+                if cb:
+                    b["catalog_id"] = cb["catalog_id"]
+                    await db.books.update_one({"book_id": b["book_id"]}, {"$set": {"catalog_id": cb["catalog_id"]}})
+            except Exception:
                 continue
-        await db.books.update_one({"book_id": b["book_id"]}, {"$set": {"cover_checked_at": now_utc()}})
-        asyncio.create_task(_backfill_cover(b["book_id"], b.get("title"), b.get("author"), b.get("isbn")))
-        tried += 1
+        if b.get("catalog_id") and (not b.get("cover") or not b.get("summary")):
+            cb = await db.catalog_books.find_one({"catalog_id": b["catalog_id"]}, {"_id": 0, "cover": 1, "summary": 1})
+            upd = {}
+            if cb and cb.get("cover") and not b.get("cover") and b.get("cover_source") != "user":
+                upd["cover"] = cb["cover"]
+            if cb and cb.get("summary") and not b.get("summary"):
+                upd["summary"] = cb["summary"]
+            if upd:
+                b.update(upd)
+                await db.books.update_one({"book_id": b["book_id"]}, {"$set": upd})
+            if not b.get("cover"):
+                await catalog.enqueue_task(b["catalog_id"], "cover")
+            if not b.get("summary"):
+                await catalog.enqueue_task(b["catalog_id"], "summary")
     return {"books": books}
 
 
@@ -714,7 +729,7 @@ async def patch_book(book_id: str, body: BookPatch, user=Depends(get_current_use
         upd.setdefault(prog_key, 0)
     if upd:
         await db.books.update_one({"book_id": book_id, "user_id": user["user_id"]}, {"$set": upd})
-        # Cercles : progression partagée + notifications sobres sur la lecture commune
+        # Clubs : progression partagée + notifications sobres sur la lecture commune
         if "progress_page" in upd or "progress_chapter" in upd or upd.get("status") == "termine":
             try:
                 await _notify_clubs_progress(user, book, upd)
@@ -741,7 +756,7 @@ async def delete_book(book_id: str, user=Depends(get_current_user)):
     await db.quotes.delete_many({"book_id": book_id, "user_id": user["user_id"]})
     if quote_ids:
         await db.board_quotes.delete_many({"quote_id": {"$in": quote_ids}})
-    # Retire la référence de lecture commune dans les cercles
+    # Retire la référence de lecture commune dans les clubs
     await db.clubs.update_many({"book.book_id": book_id}, {"$unset": {"book": ""}})
     return {"ok": True}
 
@@ -1439,20 +1454,7 @@ async def create_club(body: ClubCreate, user=Depends(get_current_user)):
 @api.get("/clubs")
 async def list_clubs(user=Depends(get_current_user)):
     clubs = await db.clubs.find({"members": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
-    # Club « Communauté Manent » : public, tout le monde en est membre
-    if not any(c.get("is_community") for c in clubs):
-        comm = await db.clubs.find_one({"is_community": True})
-        if not comm:
-            await db.clubs.insert_one({
-                "club_id": new_id("cl"), "name": "Communauté Manent",
-                "description": "Le grand salon de lecture — ouvert à toutes et tous.",
-                "visibility": "public", "is_community": True, "code": _club_code(),
-                "owner_id": user["user_id"], "members": [user["user_id"]],
-                "book": None, "created_at": now_utc(),
-            })
-        else:
-            await db.clubs.update_one({"club_id": comm["club_id"]}, {"$addToSet": {"members": user["user_id"]}})
-        clubs = await db.clubs.find({"members": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    # D3 : « Communauté Manent » est un club public ordinaire — plus d'adhésion automatique
     for c in clubs:
         c["members_count"] = len(c.get("members", []))
         c["messages_count"] = await db.club_messages.count_documents({"club_id": c["club_id"]})
@@ -1464,7 +1466,7 @@ async def list_clubs(user=Depends(get_current_user)):
 
 @api.get("/clubs/discover")
 async def discover_clubs(user=Depends(get_current_user)):
-    """Cercles publics que je peux rejoindre librement."""
+    """Clubs publics que je peux rejoindre librement."""
     clubs = await db.clubs.find(
         {"visibility": "public", "members": {"$ne": user["user_id"]}},
         {"_id": 0, "code": 0},
@@ -1477,7 +1479,7 @@ async def discover_clubs(user=Depends(get_current_user)):
 
 @api.post("/clubs/{club_id}/join")
 async def join_public_club(club_id: str, user=Depends(get_current_user)):
-    """Rejoindre un cercle public directement (les cercles fermés exigent le code)."""
+    """Rejoindre un club public directement (les clubs fermés exigent le code)."""
     club = await db.clubs.find_one({"club_id": club_id}, {"_id": 0, "visibility": 1, "members": 1})
     if not club:
         raise HTTPException(status_code=404, detail="not_found")
@@ -1532,7 +1534,7 @@ async def _club_member_progress(club: dict) -> list:
 
 
 async def _my_club_progress(club: dict, user_id: str) -> Optional[dict]:
-    """Ma progression sur la lecture commune du cercle (None si je n'ai pas le livre)."""
+    """Ma progression sur la lecture commune du club (None si je n'ai pas le livre)."""
     book = club.get("book") or {}
     if not book.get("title"):
         return None
@@ -1663,7 +1665,7 @@ async def set_progress_visibility(club_id: str, body: ProgressVisibility, user=D
 
 
 async def _notify_clubs_progress(user: dict, book: dict, upd: dict):
-    """Notifications sobres aux cercles quand je progresse sur la lecture commune (paliers 25/50/75 % et fin)."""
+    """Notifications sobres aux clubs quand je progresse sur la lecture commune (paliers 25/50/75 % et fin)."""
     prog_key = "progress_chapter" if book.get("type") == "wattpad" else "progress_page"
     new_prog = upd.get(prog_key)
     finished = upd.get("status") == "termine" and book.get("status") != "termine"
@@ -1689,13 +1691,13 @@ async def _notify_clubs_progress(user: dict, book: dict, upd: dict):
             fin = len([r for r in rows if r["status"] == "termine" and not r["hidden"]])
             msg = (f"{fin} membres ont terminé — prêt·e pour la discussion ?" if fin >= 3
                    else f"{user['pseudo']} a terminé la lecture commune")
-            await send_push(others, {"title": club.get("name", "Ton cercle"), "message": msg, "action_url": f"/club/{club['club_id']}"})
+            await send_push(others, {"title": club.get("name", "Ton club"), "message": msg, "action_url": f"/club/{club['club_id']}"})
         elif new_prog is not None and total:
             old_pct = (book.get(prog_key) or 0) / total * 100
             new_pct = new_prog / total * 100
             if any(o < th <= new_pct for th in (25, 50, 75) for o in [old_pct]):
                 await send_push(others, {
-                    "title": club.get("name", "Ton cercle"),
+                    "title": club.get("name", "Ton club"),
                     "message": f"{user['pseudo']} vient de dépasser la {unit} {new_prog}",
                     "action_url": f"/club/{club['club_id']}",
                 })

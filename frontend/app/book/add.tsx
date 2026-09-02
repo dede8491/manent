@@ -43,6 +43,7 @@ export default function AddBook() {
       selectedRef.current = true;
       setSelected({
         title: params.title,
+        catalog_id: (params as any).catalog_id || undefined,
         author: params.author || null,
         cover: params.cover || null,
         isbn: params.isbn || null,
@@ -173,6 +174,7 @@ export default function AddBook() {
           title: selected.title,
           author: selected.author,
           isbn: selected.isbn,
+          catalog_id: selected.catalog_id || undefined,
           wattpad_url: selected.wattpad_url,
           cover: selected.cover,
           pages: selected.pages,

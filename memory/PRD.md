@@ -318,3 +318,31 @@ Testé e2e via curl (création publique, discover, join, correspondance titre in
 - Clubs unifiés : paywall seulement sur créer (402 backend), Communauté Manent auto (is_community), polls/events PAR club (club_polls avec club_id, club_events2), ClubHome purgé du club global (sections retirées, states legacy inutilisés = warnings lint tolérés), « cercle » banni.
 - Partage : PUBLIC_BASE_URL (une variable, backend+frontend+app.config.js), src/share.ts, routes q/[id] b/[id] c/[code] [slug](@handle), pages OG /api/s/*, .well-known dans frontend/public (AASA appID TEAMID.com.manent.app et assetlinks empreinte À REMPLACER au moment du build store).
 - Restant/known : qualité variable des titres OL sur certains sujets (albums musicaux sur « amour ») — s'améliorera via popularity et relances du seed ; enrichissement (~1 600 tâches) continue en fond ; pytest legacy à moderniser.
+
+## Itération 41 — Lot correctif post-audit : PARTIE LIVRÉE + HANDOFF (contexte épuisé)
+### LIVRÉ dans cette passe
+- A1 (partiel) : PUBLIC_BASE_URL + EXPO_PUBLIC_PUBLIC_BASE_URL = https://manentlc.app ; variables F2 créées vides dans backend/.env (APPLE_TEAM_ID, IOS_BUNDLE_ID, ANDROID_PACKAGE, ANDROID_SHA256_FINGERPRINT, APP_STORE_URL, PLAY_STORE_URL). Le rattachement du domaine au déploiement se fait dans l'interface Emergent (domaine personnalisé) par l'utilisatrice.
+- B1 : GET /books lit couverture+résumé du catalogue quand copie locale vide (persisté, respect cover_source='user'), relie les exemplaires non liés (upsert sans HTTP) et met en file.
+- B2 : worker _propagate() → couverture/résumé redescendent sur books/club_books/featured_books (jamais sur cover_source='user').
+- B3 : catalog_id transmis de search.tsx → book/add → POST /books (lien EXACT, clé seulement pour saisie manuelle).
+- B4 : _norm_key tolérante (parenthèses/crochets, sous-titre :—, articles, nom de famille) + dedupe_catalog.py exécuté (12 fusions) + migrate relancé.
+- B5 : plus AUCUN _backfill_cover/_find_cover dans GET/POST /books — file catalog_tasks uniquement (délai 7 j côté catalogue).
+- B7 VÉRIFIÉ : « Les Bouts De Bois De Dieu (French Edition) » / Ousmane Sembène → relié cb_8481623f, couverture OL récupérée automatiquement en <1 min.
+- D1 : onglet Club purgé (plus de shelf ni proposer-livre) : Tes clubs / Créer (Premium) / J'ai un code / Clubs publics.
+- D3 : adhésion automatique à « Communauté Manent » retirée (club public ordinaire, visible dans /clubs/discover).
+- E2 : ZÉRO occurrence cercle/circle (code, testID onOpenClub/onCreateClub/onJoinClub/info-clubs, styles clubAvatar…, translations purgées).
+- État prod : catalogue 1409 livres, 1077 couvertures, 214 résumés, file 1267 (worker en cours, ~6 tâches/20 s ≈ 70/h).
+### RESTE À FAIRE (ordre conseillé) — spec complète dans le message utilisateur « Lot correctif après audit »
+1. A2 : servir /q /b /c /@ et /.well-known depuis le BACKEND à la racine du domaine. CONTRAINTE INFRA : l'ingress route seulement /api/* vers le backend — vérifier si le domaine personnalisé Emergent permet des règles, sinon demander au support ; en attendant les fichiers statiques frontend/public/.well-known restent (à supprimer quand A2 possible) et les pages OG sont sous /api/s/*.
+2. A3 : fusionner pages OG en page « Rejoindre l'application » complète (contenu public, boutons stores depuis APP_STORE_URL/PLAY_STORE_URL avec état « Bientôt disponible », twitter:card, manent:// bouton, charte, <200 Ko).
+3. A4 : pending_deep_link (AsyncStorage) dans app/_layout.tsx — conserver la cible après onboarding.
+4. LOT C ENTIER : catalog_authors + tâche author_origin (BnF SRU → Wikidata P27/P19 → OL birth_place → IA code ISO), table pays→aires (MQ/GP/GF = antillaise), areas[] DÉRIVÉ, supprimer area_suggestions + endpoints admin aires + AreaAdmin.tsx, écran admin « Auteurs » (modifier pays, low/INCONNU en tête), chips PAYS sur /area/[key], ligne « Littérature africaine · Sénégal » sur cartes, recherche gentilés, objectifs 50/aire (relancer seed).
+5. D2 : « Ce que la communauté lit » dans l'onglet Découvrir (popularity), migration club_books avis → collection reviews {catalog_id,…}, « Avis des lectrices » sur fiche découverte.
+6. D4 : purger routes/club.py (garder signalement/admin → /api/community), plus aucun appel frontend vers /api/club (ClubHome n'en utilise plus pour le shelf, mais club/add.tsx et club/book/[id].tsx OUI — à migrer/supprimer avec D2).
+7. E1 : /catalog/isbn/{isbn} (catalogue d'abord, upsert sinon) + bascule scan ISBN et ajout club ; supprimer GET /books/search.
+8. B6 : sélecteur de couverture (candidats catalogue ≤6 + photo + galerie, cover_source='user').
+9. F : ordre des migrations en prod + compte rendu chiffré complet (compteurs aires/pays après lot C).
+### Hypothèses prises (à lister à l'utilisatrice)
+- Domaine : rattachement manentlc.app à faire côté plateforme (bouton Publish → domaine personnalisé) ; variables déjà pointées dessus.
+- A2 non réalisable sans évolution d'ingress → statiques .well-known conservés provisoirement.
+- Le shelf « Ce que la communauté lit » est retiré du Club (D1) mais pas encore réaffiché dans Découvrir (D2 à faire) : fonctionnalité momentanément non visible.

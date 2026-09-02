@@ -226,7 +226,7 @@ export default function SearchScreen() {
                     <Pressable
                       key={b.catalog_id || `cat-${i}`}
                       testID={`search-catalog-${i}`}
-                      onPress={() => router.push({ pathname: '/book/add', params: { title: b.title || '', author: b.author || '', cover: b.cover || '', isbn: b.isbn || '', pages: b.pages ? String(b.pages) : '', year: b.year || '' } })}
+                      onPress={() => router.push({ pathname: '/book/add', params: { title: b.title || '', author: b.author || '', cover: b.cover || '', isbn: b.isbn || '', pages: b.pages ? String(b.pages) : '', year: b.year || '', catalog_id: b.catalog_id || '' } })}
                       style={styles.bookRow}
                     >
                       {b.cover ? (
