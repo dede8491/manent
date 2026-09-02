@@ -21,6 +21,7 @@ module.exports = ({ config }) => ({
           { scheme: 'https', host: PUBLIC_DOMAIN, pathPrefix: '/b' },
           { scheme: 'https', host: PUBLIC_DOMAIN, pathPrefix: '/c' },
           { scheme: 'https', host: PUBLIC_DOMAIN, pathPrefix: '/@' },
+          { scheme: 'https', host: PUBLIC_DOMAIN, pathPrefix: '/api/s' },
         ],
         category: ['BROWSABLE', 'DEFAULT'],
       },

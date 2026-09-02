@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Modal, KeyboardAvoidingView, Platform, Share, FlatList } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, KeyboardAvoidingView, Platform, Share } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -10,6 +10,7 @@ import { shareUrl } from '@/src/share';
 import { useT } from '@/src/i18n';
 import { PrimaryButton, GhostButton } from '@/src/components/Button';
 import ManentLoader from '@/src/components/ManentLoader';
+import { BottomSheet } from '@/src/components/BottomSheet';
 
 export default function ClubDetail() {
   const t = useT();
@@ -490,45 +491,25 @@ export default function ClubDetail() {
         </Pressable>
       </View>
 
-      <Modal visible={bookModal} transparent animationType="slide" onRequestClose={() => setBookModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modal, { paddingBottom: insets.bottom + spacing.lg }]}>
-            <View style={styles.grabber} />
-            <Text style={styles.modalTitle}>{t('Livre du club')}</Text>
-            <FlatList
-              data={myBooks}
-              keyExtractor={x => x.book_id}
-              style={{ maxHeight: 320 }}
-              renderItem={({ item }) => (
-                <Pressable testID={`club-book-${item.book_id}`} onPress={() => setClubBook(item)} style={styles.pickRow}>
-                  <Feather name="book" size={18} color={colors.chambray} />
-                  <Text style={styles.pickTitle} numberOfLines={1}>{item.title}</Text>
-                </Pressable>
-              )}
-              ListEmptyComponent={<Text style={styles.emptyText}>{t('Ajoute d’abord un livre à ta bibliothèque.')}</Text>}
-            />
+      <BottomSheet visible={bookModal} onClose={() => setBookModal(false)} title={t('Livre du club')} testID="sheet-club-book">
+            {myBooks.length === 0 && <Text style={styles.emptyText}>{t('Ajoute d’abord un livre à ta bibliothèque.')}</Text>}
+            {myBooks.map(item => (
+              <Pressable key={item.book_id} testID={`club-book-${item.book_id}`} onPress={() => setClubBook(item)} style={styles.pickRow}>
+                <Feather name="book" size={18} color={colors.chambray} />
+                <Text style={styles.pickTitle} numberOfLines={1}>{item.title}</Text>
+              </Pressable>
+            ))}
             <GhostButton title={t('Fermer')} onPress={() => setBookModal(false)} />
-          </View>
-        </View>
-      </Modal>
+      </BottomSheet>
 
-      <Modal visible={recoModal} transparent animationType="slide" onRequestClose={() => setRecoModal(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
-          <View style={[styles.modal, { paddingBottom: insets.bottom + spacing.lg }]}>
-            <View style={styles.grabber} />
-            <Text style={styles.modalTitle}>{t('Recommander un livre')}</Text>
-            <FlatList
-              data={myBooks}
-              keyExtractor={x => x.book_id}
-              style={{ maxHeight: 200 }}
-              renderItem={({ item }) => (
-                <Pressable testID={`reco-book-${item.book_id}`} onPress={() => setRecoBook(item)} style={[styles.pickRow, recoBook?.book_id === item.book_id && { borderColor: colors.chambray, borderWidth: 1.5 }]}>
-                  <Feather name={recoBook?.book_id === item.book_id ? 'check-circle' : 'book'} size={18} color={colors.chambray} />
-                  <Text style={styles.pickTitle} numberOfLines={1}>{item.title}</Text>
-                </Pressable>
-              )}
-              ListEmptyComponent={<Text style={styles.emptyText}>{t('Ajoute d’abord un livre à ta bibliothèque.')}</Text>}
-            />
+      <BottomSheet visible={recoModal} onClose={() => setRecoModal(false)} title={t('Recommander un livre')} testID="sheet-club-reco">
+            {myBooks.length === 0 && <Text style={styles.emptyText}>{t('Ajoute d’abord un livre à ta bibliothèque.')}</Text>}
+            {myBooks.map(item => (
+              <Pressable key={item.book_id} testID={`reco-book-${item.book_id}`} onPress={() => setRecoBook(item)} style={[styles.pickRow, recoBook?.book_id === item.book_id && { borderColor: colors.chambray, borderWidth: 1.5 }]}>
+                <Feather name={recoBook?.book_id === item.book_id ? 'check-circle' : 'book'} size={18} color={colors.chambray} />
+                <Text style={styles.pickTitle} numberOfLines={1}>{item.title}</Text>
+              </Pressable>
+            ))}
             <TextInput
               testID="reco-note"
               value={recoNote} onChangeText={setRecoNote}
@@ -540,37 +521,23 @@ export default function ClubDetail() {
             <View style={{ height: spacing.sm }} />
             <PrimaryButton testID="reco-send" title={t('Envoyer la reco')} onPress={sendReco} disabled={!recoBook || !recoNote.trim()} />
             <GhostButton title={t('Annuler')} onPress={() => setRecoModal(false)} />
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+      </BottomSheet>
 
-      <Modal visible={challengeModal} transparent animationType="slide" onRequestClose={() => setChallengeModal(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
-          <View style={[styles.modal, { paddingBottom: insets.bottom + spacing.lg }]}>
-            <View style={styles.grabber} />
-            <Text style={styles.modalTitle}>{t('Défi de lecture')}</Text>
+      <BottomSheet visible={challengeModal} onClose={() => setChallengeModal(false)} title={t('Défi de lecture')} testID="sheet-club-challenge">
             <TextInput testID="challenge-title" value={chTitle} onChangeText={setChTitle} placeholder={t('Nom du défi (ex: Finir Candide en mai)')} placeholderTextColor={colors.clay} style={styles.modalInput} />
             <TextInput testID="challenge-goal" value={chGoal} onChangeText={setChGoal} keyboardType="number-pad" placeholder={t('Objectif en pages (ex: 150)')} placeholderTextColor={colors.clay} style={styles.modalInput} />
             <View style={{ height: spacing.md }} />
             <PrimaryButton testID="challenge-save" title={t('Lancer le défi')} onPress={saveChallenge} disabled={!chTitle.trim() || !chGoal} />
             <GhostButton title={t('Annuler')} onPress={() => setChallengeModal(false)} />
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+      </BottomSheet>
 
-      <Modal visible={passageModal} transparent animationType="slide" onRequestClose={() => setPassageModal(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
-          <View style={[styles.modal, { paddingBottom: insets.bottom + spacing.lg }]}>
-            <View style={styles.grabber} />
-            <Text style={styles.modalTitle}>{t('Passage de la semaine')}</Text>
+      <BottomSheet visible={passageModal} onClose={() => setPassageModal(false)} title={t('Passage de la semaine')} testID="sheet-club-passage">
             <TextInput testID="passage-text" value={passageText} onChangeText={setPassageText} placeholder={t('Le passage à méditer ensemble…')} placeholderTextColor={colors.clay} style={[styles.modalInput, { minHeight: 100, textAlignVertical: 'top' }]} multiline />
             <TextInput testID="passage-page" value={passagePage} onChangeText={setPassagePage} keyboardType="number-pad" placeholder={t('Page (optionnel)')} placeholderTextColor={colors.clay} style={styles.modalInput} />
             <View style={{ height: spacing.md }} />
             <PrimaryButton testID="passage-save" title={t('Publier le passage')} onPress={savePassage} disabled={!passageText.trim()} />
             <GhostButton title={t('Annuler')} onPress={() => setPassageModal(false)} />
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+      </BottomSheet>
     </KeyboardAvoidingView>
   );
 }
@@ -653,10 +620,6 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   inputBar: { flexDirection: 'row', gap: 8, paddingHorizontal: spacing.xl, paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.borderSoft, backgroundColor: colors.glacier },
   input: { flex: 1, height: 46, borderWidth: 1, borderColor: colors.borderSoft, borderRadius: radius.pill, paddingHorizontal: spacing.lg, fontFamily: fonts.body, fontSize: 14, color: colors.espresso, backgroundColor: colors.creme },
   sendBtn: { width: 46, height: 46, borderRadius: 23, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(58,33,25,0.4)', justifyContent: 'flex-end' },
-  modal: { backgroundColor: colors.glacier, padding: spacing.xl, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
-  grabber: { width: 44, height: 4, backgroundColor: colors.borderSoft, borderRadius: 2, alignSelf: 'center', marginBottom: spacing.md },
-  modalTitle: { fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso, marginBottom: spacing.md },
   modalInput: { minHeight: 48, borderWidth: 1, borderColor: colors.borderSoft, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontFamily: fonts.body, fontSize: 15, color: colors.espresso, backgroundColor: colors.creme, marginBottom: spacing.sm },
   pickRow: { flexDirection: 'row', alignItems: 'center', gap: 12, height: 52, paddingHorizontal: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, marginBottom: 8 },
   pickTitle: { flex: 1, fontFamily: fonts.body, fontSize: 15, color: colors.espresso },

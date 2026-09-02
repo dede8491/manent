@@ -31,11 +31,12 @@ export default function ReaderProfile() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { width } = useWindowDimensions();
-  const { handle } = useLocalSearchParams<{ handle: string }>();
+  const { handle, follow, section } = useLocalSearchParams<{ handle: string; follow?: string; section?: string }>();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [feedback, setFeedback] = useState('');
   const [followBusy, setFollowBusy] = useState(false);
+  const autoFollowed = React.useRef(false);
 
   const toggleFollow = async () => {
     if (!profile || followBusy) return;
@@ -52,12 +53,23 @@ export default function ReaderProfile() {
     (async () => {
       try {
         const r = await api<Profile>(`/readers/${encodeURIComponent(handle)}`);
+        // Arrivée depuis un lien « Suivre » : on suit directement, une seule fois
+        if (follow === '1' && !r.is_me && !r.is_following && !autoFollowed.current) {
+          autoFollowed.current = true;
+          try {
+            const f = await api<{ following: boolean; followers: number }>(`/readers/${encodeURIComponent(handle)}/follow`, { method: 'POST' });
+            r.is_following = f.following;
+            if (r.stats) r.stats.followers = f.followers;
+            setFeedback(t('Tu suis maintenant {pseudo}.', { pseudo: r.user.pseudo }));
+          } catch {}
+        }
         setProfile(r);
       } catch {
         setNotFound(true);
       }
     })();
-  }, [handle]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handle, follow]);
 
   const shareProfile = async () => {
     if (!profile) return;
@@ -164,16 +176,27 @@ export default function ReaderProfile() {
           </View>
 
           {(profile.library || []).length > 0 && (
-            <View style={{ marginTop: spacing.xl }}>
+            <View style={{ marginTop: spacing.xl }} testID="reader-library">
               <Text style={[styles.sectionLabel, { paddingHorizontal: spacing.xl }]}>{t('Sa bibliothèque')}</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.xl, gap: spacing.sm }}>
-                {profile.library!.map(b => (
-                  <View key={b.book_id} style={{ width: 76, alignItems: 'center' }}>
-                    <BookCover uri={b.cover} title={b.title} width={72} height={100} initialSize={26} />
-                    <Text style={styles.libTitle} numberOfLines={2}>{b.title}</Text>
-                  </View>
-                ))}
-              </ScrollView>
+              {section === 'library' ? (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, paddingHorizontal: spacing.xl }}>
+                  {profile.library!.map(b => (
+                    <View key={b.book_id} style={{ width: (width - spacing.xl * 2 - spacing.sm * 3) / 4, alignItems: 'center' }}>
+                      <BookCover uri={b.cover} title={b.title} width={(width - spacing.xl * 2 - spacing.sm * 3) / 4} height={((width - spacing.xl * 2 - spacing.sm * 3) / 4) * 1.45} initialSize={24} />
+                      <Text style={styles.libTitle} numberOfLines={2}>{b.title}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.xl, gap: spacing.sm }}>
+                  {profile.library!.map(b => (
+                    <View key={b.book_id} style={{ width: 76, alignItems: 'center' }}>
+                      <BookCover uri={b.cover} title={b.title} width={72} height={100} initialSize={26} />
+                      <Text style={styles.libTitle} numberOfLines={2}>{b.title}</Text>
+                    </View>
+                  ))}
+                </ScrollView>
+              )}
             </View>
           )}
 

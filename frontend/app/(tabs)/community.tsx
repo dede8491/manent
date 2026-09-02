@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, TextInput, Modal, KeyboardAvoidingView, Platform, ScrollView, Image } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable, TextInput, ScrollView, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -9,6 +9,7 @@ import { api } from '@/src/api';
 import { PrimaryButton, GhostButton } from '@/src/components/Button';
 import { ClubHome } from '@/src/components/ClubHome';
 import { InfoTooltip } from '@/src/components/InfoTooltip';
+import { BottomSheet } from '@/src/components/BottomSheet';
 import { useT } from '@/src/i18n';
 
 type Board = {
@@ -186,11 +187,7 @@ export default function Community() {
       />
       )}
 
-      <Modal visible={modal} animationType="slide" transparent onRequestClose={() => setModal(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
-          <View style={[styles.modal, { paddingBottom: insets.bottom + spacing.lg }]}>
-            <View style={styles.grabber} />
-            <Text style={styles.modalTitle}>{t('Nouveau tableau')}</Text>
+      <BottomSheet visible={modal} onClose={() => setModal(false)} title={t('Nouveau tableau')} testID="sheet-new-board">
             <TextInput testID="new-board-name" value={name} onChangeText={setName} placeholder={t('Nom (ex: Résilience)')} placeholderTextColor={colors.clay} style={styles.input} />
             <TextInput testID="new-board-desc" value={desc} onChangeText={setDesc} placeholder={t('Description (optionnel)')} placeholderTextColor={colors.clay} style={[styles.input, { height: 80 }]} multiline />
             <View style={{ gap: spacing.sm, marginTop: spacing.md }}>
@@ -208,15 +205,9 @@ export default function Community() {
             <View style={{ height: spacing.lg }} />
             <PrimaryButton testID="btn-create-board" title={t('Créer le tableau')} onPress={create} loading={creating} disabled={!name.trim()} />
             <GhostButton title={t('Annuler')} onPress={() => setModal(false)} />
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+      </BottomSheet>
 
-      <Modal visible={clubModal} animationType="slide" transparent onRequestClose={() => setClubModal(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
-          <View style={[styles.modal, { paddingBottom: insets.bottom + spacing.lg }]}>
-            <View style={styles.grabber} />
-            <Text style={styles.modalTitle}>{t('Nouveau club')}</Text>
+      <BottomSheet visible={clubModal} onClose={() => setClubModal(false)} title={t('Nouveau club')} testID="sheet-new-club">
             <TextInput testID="new-club-name" value={clubName} onChangeText={setClubName} placeholder={t('Nom (ex: Les soirées Voltaire)')} placeholderTextColor={colors.clay} style={styles.input} />
             <TextInput testID="new-club-desc" value={clubDesc} onChangeText={setClubDesc} placeholder={t('Description (optionnel)')} placeholderTextColor={colors.clay} style={[styles.input, { height: 80 }]} multiline />
             <View style={{ gap: spacing.sm }}>
@@ -237,23 +228,15 @@ export default function Community() {
             <View style={{ height: spacing.md }} />
             <PrimaryButton testID="btn-create-club" title={t('Créer le club')} onPress={createClub} loading={creating} disabled={!clubName.trim()} />
             <GhostButton title={t('Annuler')} onPress={() => setClubModal(false)} />
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+      </BottomSheet>
 
-      <Modal visible={joinModal} animationType="slide" transparent onRequestClose={() => setJoinModal(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
-          <View style={[styles.modal, { paddingBottom: insets.bottom + spacing.lg }]}>
-            <View style={styles.grabber} />
-            <Text style={styles.modalTitle}>{t('Rejoindre un club')}</Text>
+      <BottomSheet visible={joinModal} onClose={() => setJoinModal(false)} title={t('Rejoindre un club')} subtitle={t('Le code à six caractères transmis par le club.')} testID="sheet-join-club">
             <TextInput testID="join-club-code" value={joinCode} onChangeText={t => setJoinCode(t.toUpperCase())} placeholder={t('Code (ex: A7K2PX)')} autoCapitalize="characters" placeholderTextColor={colors.clay} style={[styles.input, styles.codeInput]} maxLength={6} />
             {joinError ? <Text style={styles.joinError} testID="join-club-error">{joinError}</Text> : null}
             <View style={{ height: spacing.md }} />
             <PrimaryButton testID="btn-join-club-confirm" title={t('Rejoindre')} onPress={joinClub} loading={creating} disabled={joinCode.trim().length < 4} />
             <GhostButton title={t('Annuler')} onPress={() => setJoinModal(false)} />
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+      </BottomSheet>
     </View>
   );
 }
@@ -289,10 +272,6 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   meta: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase' },
   emptyTitle: { fontFamily: fonts.displayMedium, fontSize: 22, color: colors.espresso, textAlign: 'center' },
   emptySub: { fontFamily: fonts.body, fontSize: 14, color: colors.clay, textAlign: 'center', marginTop: spacing.sm },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(58,33,25,0.35)', justifyContent: 'flex-end' },
-  modal: { backgroundColor: colors.glacier, padding: spacing.xl, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
-  grabber: { width: 44, height: 4, backgroundColor: colors.borderSoft, borderRadius: 2, alignSelf: 'center', marginBottom: spacing.md },
-  modalTitle: { fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso, marginBottom: spacing.md },
   input: { height: 52, borderWidth: 1, borderColor: colors.borderSoft, borderRadius: radius.md, paddingHorizontal: spacing.md, fontFamily: fonts.body, fontSize: 15, color: colors.espresso, backgroundColor: colors.creme, marginBottom: spacing.sm },
   visCard: { padding: spacing.md, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, backgroundColor: colors.creme },
   visCardActive: { backgroundColor: colors.chambray, borderColor: colors.chambray },

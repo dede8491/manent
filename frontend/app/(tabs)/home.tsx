@@ -10,10 +10,12 @@ import { QuoteCard, Quote } from '@/src/components/QuoteCard';
 import { api } from '@/src/api';
 import { useAuth } from '@/src/auth';
 import { Wordmark } from '@/src/components/Wordmark';
-import { BookCardFeed, AwardCard, CollectionCard, ResumeCard } from '@/src/components/FeedCards';
+import { BookCardFeed, AwardCard, CollectionCard, ResumeCard, NextUpCard } from '@/src/components/FeedCards';
 import ManentLoader from '@/src/components/ManentLoader';
 import { InfoTooltip } from '@/src/components/InfoTooltip';
 import { WelcomeTour } from '@/src/components/WelcomeTour';
+import { AreaCard } from '@/src/components/AreaCard';
+import { ClubCard } from '@/src/components/ClubCard';
 import { useT } from '@/src/i18n';
 
 const BIRTH_PROMPT_KEY = 'manent_birth_prompted';
@@ -30,6 +32,10 @@ export default function Home() {
   const [themes, setThemes] = useState<string[]>([]);
   const [trending, setTrending] = useState<string[]>([]);
   const [areas, setAreas] = useState<any[]>([]);
+  const [pubClubs, setPubClubs] = useState<any[]>([]);
+  const [joiningClub, setJoiningClub] = useState<string | null>(null);
+  const [forYou, setForYou] = useState<any[]>([]);
+  const [forYouTotal, setForYouTotal] = useState(0);
   const [daily, setDaily] = useState<Quote | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -92,7 +98,32 @@ export default function Home() {
     try {
       setDiscover(await api<any>('/home/discover'));
     } catch {}
+    try {
+      const pc = await api<{ clubs: any[] }>('/clubs/discover');
+      setPubClubs(pc.clubs || []);
+    } catch {}
+    try {
+      const fy = await api<{ books: any[]; total: number }>('/catalog/for-you?page=1&size=10');
+      setForYou(fy.books || []);
+      setForYouTotal(fy.total || 0);
+    } catch {}
   }, []);
+
+  const dismissForYou = async (catalogId: string) => {
+    setForYou(prev => prev.filter(b => b.catalog_id !== catalogId));
+    try { await api('/catalog/for-you/dismiss', { method: 'POST', body: JSON.stringify({ catalog_id: catalogId }) }); } catch {}
+  };
+
+  const joinPublicClub = async (cid: string) => {
+    if (joiningClub) return;
+    setJoiningClub(cid);
+    try {
+      await api(`/clubs/${cid}/join`, { method: 'POST' });
+      setPubClubs(prev => prev.filter(c => c.club_id !== cid));
+      router.push({ pathname: '/club/[id]', params: { id: cid } });
+    } catch {}
+    finally { setJoiningClub(null); }
+  };
 
   useEffect(() => {
     (async () => {
@@ -185,23 +216,68 @@ export default function Home() {
             <Text style={styles.areasLabel}>{t('Littératures')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>
               {areas.map((a: any) => (
-                <Pressable key={a.key} testID={`area-card-${a.key}`} onPress={() => router.push({ pathname: '/area/[key]', params: { key: a.key } })} style={styles.areaCard}>
-                  <Text style={styles.areaName}>{a.label}</Text>
-                  <Text style={styles.areaCount}>{a.count} {t(a.count > 1 ? 'livres' : 'livre')}</Text>
-                </Pressable>
+                <AreaCard key={a.key} testID={`area-card-${a.key}`} label={a.label} count={a.count} onPress={() => router.push({ pathname: '/area/[key]', params: { key: a.key } })} />
               ))}
             </ScrollView>
           </View>
         )}
-        {discover?.resume && (
+        {pubClubs.length > 0 && (
+          <View style={{ marginBottom: spacing.lg }} testID="home-public-clubs">
+            <Text style={styles.areasLabel}>{t('Clubs publics à rejoindre')}</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>
+              {pubClubs.slice(0, 8).map((c: any) => (
+                <ClubCard key={c.club_id} testID={`home-club-${c.club_id}`} club={c} joining={joiningClub === c.club_id} onJoin={() => joinPublicClub(c.club_id)} />
+              ))}
+            </ScrollView>
+          </View>
+        )}
+        {discover?.resume ? (
           <View style={{ marginBottom: spacing.lg }}>
             <ResumeCard
               testID="resume-card"
               book={discover.resume}
               t={t}
+              nextTitle={discover.next_up?.title}
+              onNext={() => router.push('/queue')}
               onPress={() => router.push({ pathname: '/book/[id]', params: { id: discover.resume.book_id } })}
               onPhoto={() => router.push({ pathname: '/book/[id]', params: { id: discover.resume.book_id } })}
             />
+          </View>
+        ) : discover?.next_up ? (
+          <View style={{ marginBottom: spacing.lg }}>
+            <NextUpCard
+              testID="next-up-card"
+              book={discover.next_up}
+              t={t}
+              onStart={() => router.push({ pathname: '/book/[id]', params: { id: discover.next_up.book_id } })}
+              onOpenQueue={() => router.push('/queue')}
+            />
+          </View>
+        ) : null}
+        {forYou.length > 0 && (
+          <View style={{ marginBottom: spacing.lg }} testID="home-for-you">
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
+              <Text style={styles.areasLabel}>{t('Pour toi')}</Text>
+              {forYouTotal > forYou.length && (
+                <Pressable testID="home-for-you-more" onPress={() => router.push('/for-you')} hitSlop={8}>
+                  <Text style={styles.seeAll}>{t('Voir plus')}</Text>
+                </Pressable>
+              )}
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.md }}>
+              {forYou.map((b: any) => (
+                <View key={b.catalog_id} style={{ width: 130 }}>
+                  <BookCardFeed
+                    testID={`for-you-${b.catalog_id}`} title={b.title} author={b.author} cover={b.cover} width={130}
+                    onPress={() => router.push({ pathname: '/discover/book', params: { title: b.title, author: b.author || '', cover: b.cover || '', year: b.year || '', summary: b.summary || '', catalog_id: b.catalog_id } })}
+                  />
+                  {!!b.reason && <Text style={styles.reason} numberOfLines={2}>{b.reason}</Text>}
+                  <Pressable testID={`for-you-dismiss-${b.catalog_id}`} onPress={() => dismissForYou(b.catalog_id)} hitSlop={6} style={{ marginTop: 4 }}>
+                    <Text style={styles.dismiss}>{t('Pas pour moi')}</Text>
+                  </Pressable>
+                </View>
+              ))}
+            </ScrollView>
           </View>
         )}
         {daily && (
@@ -325,9 +401,9 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   chipRow: { height: 44 },
   trendLabel: { fontFamily: fonts.bodyMedium, fontSize: 10.5, color: colors.clay, letterSpacing: 1.2, textTransform: 'uppercase' },
   areasLabel: { fontFamily: fonts.displayMedium, fontSize: 21, color: colors.espresso, marginBottom: spacing.md },
-  areaCard: { backgroundColor: colors.bisque, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.md, minWidth: 150 },
-  areaName: { fontFamily: fonts.displayMedium, fontSize: 16.5, color: colors.espresso },
-  areaCount: { fontFamily: fonts.bodyMedium, fontSize: 10.5, color: colors.clay, letterSpacing: 0.8, marginTop: 3, textTransform: 'uppercase' },
+  seeAll: { fontFamily: fonts.bodyMedium, fontSize: 12.5, color: colors.chambray },
+  reason: { fontFamily: fonts.body, fontSize: 10.5, color: colors.chambray, marginTop: 3, lineHeight: 14 },
+  dismiss: { fontFamily: fonts.body, fontSize: 10.5, color: colors.clay, textDecorationLine: 'underline' },
   chip: { height: 36, paddingHorizontal: 14, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   chipActive: { backgroundColor: colors.chambray, borderColor: colors.chambray },
   chipText: { fontFamily: fonts.body, fontSize: 13, color: colors.espresso },

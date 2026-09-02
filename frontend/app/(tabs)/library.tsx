@@ -9,6 +9,7 @@ import { api } from '@/src/api';
 import { BookCover } from '@/src/components/BookCover';
 import { QuotesManager } from '@/src/components/QuotesManager';
 import { InfoTooltip } from '@/src/components/InfoTooltip';
+import { AddReadingSheet } from '@/src/components/AddReadingSheet';
 import { useT } from '@/src/i18n';
 
 type Book = {
@@ -31,7 +32,7 @@ const FILTERS = [
   { id: null as any, label: 'Tous' },
   { id: 'en_cours', label: 'En cours' },
   { id: 'termine', label: 'Terminés' },
-  { id: 'a_lire', label: 'À lire' },
+  { id: 'a_lire', label: 'Liste de lecture' },
 ];
 
 function BookCard({ b, onPress }: { b: Book; onPress: () => void }) {
@@ -77,6 +78,7 @@ export default function Library() {
   const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
   const [seg, setSeg] = useState<'livres' | 'citations'>('livres');
+  const [addSheet, setAddSheet] = useState(false);
 
   useFocusEffect(useCallback(() => {
     (async () => {
@@ -98,7 +100,7 @@ export default function Library() {
               text={t("Range tes lectures en trois étapes : À lire, En cours, Terminés. Ta progression se met à jour à mesure que tu avances dans les pages. L'onglet Citations rassemble tous les passages que tu as capturés, pour les retoucher ou changer leur visibilité en un geste.")}
             />
           </View>
-          <Pressable testID="btn-library-add" onPress={() => router.push('/book/add')} style={styles.addBtn}>
+          <Pressable testID="btn-library-add" onPress={() => (seg === 'citations' ? router.push('/capture') : setAddSheet(true))} style={styles.addBtn}>
             <Feather name="plus" size={22} color={colors.creme} />
           </Pressable>
         </View>
@@ -129,18 +131,29 @@ export default function Library() {
         keyExtractor={x => x.book_id}
         renderItem={({ item }) => <BookCard b={item} onPress={() => router.push({ pathname: '/book/[id]', params: { id: item.book_id } })} />}
         contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + 80 }}
+        ListHeaderComponent={filter === 'a_lire' && books.length > 0 ? (
+          <Pressable testID="btn-open-queue" onPress={() => router.push('/queue')} style={styles.queueBtn}>
+            <Feather name="list" size={16} color={colors.chambray} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.queueTitle}>{t('Lecture suivante')}</Text>
+              <Text style={styles.queueSub}>{t('Ordonne ta file : le prochain livre en tête.')}</Text>
+            </View>
+            <Feather name="chevron-right" size={18} color={colors.clay} />
+          </Pressable>
+        ) : null}
         ItemSeparatorComponent={() => <View style={{ height: spacing.md }} />}
         ListEmptyComponent={loading ? null : (
           <View style={{ alignItems: 'center', paddingVertical: spacing.xxxl }}>
             <Text style={styles.emptyTitle}>{t("Ta bibliothèque t'attend.")}</Text>
             <Text style={styles.emptySub}>{t('Ajoute ton premier livre ou une histoire Wattpad.')}</Text>
-            <Pressable testID="empty-add-book" onPress={() => router.push('/book/add')} style={[styles.addBtn, { marginTop: spacing.lg }]}>
+            <Pressable testID="empty-add-book" onPress={() => setAddSheet(true)} style={[styles.addBtn, { marginTop: spacing.lg }]}>
               <Feather name="plus" size={22} color={colors.creme} />
             </Pressable>
           </View>
         )}
       />
       )}
+      <AddReadingSheet visible={addSheet} onClose={() => setAddSheet(false)} />
     </View>
   );
 }
@@ -173,4 +186,7 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   footer: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.clay, letterSpacing: 1.5, marginTop: spacing.sm, textTransform: 'uppercase' },
   emptyTitle: { fontFamily: fonts.displayMedium, fontSize: 22, color: colors.espresso, textAlign: 'center' },
   emptySub: { fontFamily: fonts.body, fontSize: 14, color: colors.clay, textAlign: 'center', marginTop: spacing.sm },
+  queueBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, backgroundColor: colors.bisque, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.md },
+  queueTitle: { fontFamily: fonts.displayMedium, fontSize: 17, color: colors.espresso },
+  queueSub: { fontFamily: fonts.body, fontSize: 12, color: colors.clay, marginTop: 1 },
 });

@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useMemo, useState, useCall
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors as lightColors } from '@/src/theme';
 
-export type Palette = typeof lightColors;
+export type Palette = { [K in keyof typeof lightColors]: string };
 export type Scheme = 'light' | 'dark';
 
 // Mode sombre Manent : fond Espresso, texte Crème, cartes espresso éclairci, accent Chambray inchangé.

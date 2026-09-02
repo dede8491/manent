@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Modal, TextInput, KeyboardAvoidingView, Platform, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Platform, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -9,6 +9,7 @@ import { useAuth } from '@/src/auth';
 import { api, getCachedToken } from '@/src/api';
 import * as ImagePicker from 'expo-image-picker';
 import { InfoTooltip } from '@/src/components/InfoTooltip';
+import { BottomSheet } from '@/src/components/BottomSheet';
 import { useT } from '@/src/i18n';
 
 export default function Profile() {
@@ -48,10 +49,16 @@ export default function Profile() {
   const [badges, setBadges] = useState<{ id: string; title: string; desc: string; icon: string; earned: boolean }[]>([]);
   const [goalModal, setGoalModal] = useState(false);
   const [goalInput, setGoalInput] = useState('');
+  const [adminBadge, setAdminBadge] = useState(0);
+  const [recoBadge, setRecoBadge] = useState(0);
 
   useFocusEffect(React.useCallback(() => {
     (async () => {
       try { setPremium(await api('/premium/status')); } catch {}
+      if ((user as any)?.is_admin) {
+        try { const b = await api<{ total: number }>('/admin/badge'); setAdminBadge(b.total || 0); } catch {}
+      }
+      try { const r = await api<{ unread: number }>('/recommendations/badge'); setRecoBadge(r.unread || 0); } catch {}
       try { setClubSummary(await api('/club/me/summary')); } catch {}
       try { setReading(await api('/stats/reading')); } catch {}
       try { const b = await api<{ badges: any[] }>('/badges'); setBadges(b.badges); } catch {}
@@ -120,8 +127,8 @@ export default function Profile() {
             </View>
           </View>
           <View style={styles.weekRow}>
-            {reading.week.map((d, i) => {
-              const max = Math.max(1, ...reading.week.map(x => x.pages));
+            {reading.week.map((d: any, i: number) => {
+              const max = Math.max(1, ...reading.week.map((x: any) => x.pages));
               const h = d.pages > 0 ? Math.max(8, Math.round((d.pages / max) * 44)) : (d.active ? 8 : 3);
               return (
                 <View key={i} style={styles.dayCol}>
@@ -196,20 +203,23 @@ export default function Profile() {
 
       <View style={{ paddingHorizontal: spacing.xl, gap: spacing.sm, marginTop: spacing.lg }}>
         <Pressable testID="row-quotes" onPress={() => router.push('/quotes')} style={styles.row}><Feather name="feather" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Mes citations')}</Text></Pressable>
+        <Pressable testID="row-recommendations" onPress={() => router.push('/recommendations')} style={styles.row}>
+          <Feather name="gift" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Recommandations')}</Text>
+          {recoBadge > 0 && <View style={styles.badgeDot} testID="reco-badge"><Text style={styles.badgeDotText}>{recoBadge > 99 ? '99+' : recoBadge}</Text></View>}
+        </Pressable>
+        <Pressable testID="row-share-library" onPress={() => router.push('/share-library')} style={styles.row}><Feather name="share-2" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Partager ma bibliothèque')}</Text></Pressable>
         {(user as any)?.is_admin && (
-          <Pressable testID="row-admin" onPress={() => router.push('/admin')} style={styles.row}><Feather name="shield" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Dashboard admin')}</Text></Pressable>
+          <Pressable testID="row-admin" onPress={() => router.push('/admin')} style={styles.row}>
+            <Feather name="shield" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Dashboard admin')}</Text>
+            {adminBadge > 0 && <View style={styles.badgeDot} testID="admin-badge"><Text style={styles.badgeDotText}>{adminBadge > 99 ? '99+' : adminBadge}</Text></View>}
+          </Pressable>
         )}
         <Pressable testID="row-carnet" onPress={() => router.push('/carnet')} style={styles.row}><Feather name="book-open" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Carnet de lecture')}</Text><View style={styles.premiumTag}><Text style={styles.premiumTagText}>PREMIUM</Text></View></Pressable>
         <Pressable testID="row-settings" onPress={() => router.push('/settings')} style={styles.row}><Feather name="settings" size={18} color={colors.espresso} /><Text style={styles.rowLabel}>{t('Paramètres')}</Text></Pressable>
         <Pressable testID="row-signout" onPress={signOut} style={styles.row}><Feather name="log-out" size={18} color={colors.espresso} /><Text style={styles.rowLabel}>{t('Se déconnecter')}</Text></Pressable>
       </View>
 
-      <Modal visible={goalModal} transparent animationType="slide" onRequestClose={() => setGoalModal(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
-          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }}>
-            <View style={styles.modal}>
-            <Text style={styles.modalTitle}>{t('Objectif de l’année')}</Text>
-            <Text style={styles.readingSub}>{t('Un cap réaliste vaut mieux qu’un record : combien de livres cette année ?')}</Text>
+      <BottomSheet visible={goalModal} onClose={() => setGoalModal(false)} title={t('Objectif de l’année')} subtitle={t('Un cap réaliste vaut mieux qu’un record : combien de livres cette année ?')} testID="sheet-goal">
             <TextInput
               testID="goal-input"
               value={goalInput} onChangeText={setGoalInput}
@@ -236,10 +246,7 @@ export default function Profile() {
             <Pressable testID="goal-cancel" onPress={() => setGoalModal(false)} style={{ alignSelf: 'center', padding: spacing.sm }}>
               <Text style={styles.goalEdit}>{t('Annuler')}</Text>
             </Pressable>
-          </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </Modal>
+      </BottomSheet>
     </ScrollView>
   );
 }
@@ -279,9 +286,6 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   goalBar: { height: 8, backgroundColor: colors.glacier, borderRadius: 4, overflow: 'hidden', marginTop: spacing.sm },
   goalFill: { height: 8, backgroundColor: colors.chambray },
   goalText: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1, textTransform: 'uppercase', marginTop: 6 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(58,33,25,0.4)', justifyContent: 'flex-end' },
-  modal: { backgroundColor: colors.glacier, padding: spacing.xl, paddingBottom: spacing.xxl, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
-  modalTitle: { fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso, marginBottom: spacing.xs },
   goalInput: { height: 56, borderWidth: 1, borderColor: colors.borderSoft, borderRadius: radius.md, paddingHorizontal: spacing.md, fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso, backgroundColor: colors.creme, marginTop: spacing.md, textAlign: 'center' },
   goalSaveBtn: { height: 52, borderRadius: radius.md, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center', marginTop: spacing.md },
   goalSaveText: { fontFamily: fonts.bodyMedium, fontSize: 15, color: colors.creme },
@@ -296,4 +300,6 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   premiumTag: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.bisque },
   premiumTagText: { fontFamily: fonts.bodyMedium, fontSize: 9, color: colors.espresso, letterSpacing: 1.5 },
   rowLabel: { fontFamily: fonts.body, fontSize: 15, color: colors.espresso },
+  badgeDot: { minWidth: 22, height: 22, borderRadius: 11, paddingHorizontal: 6, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },
+  badgeDotText: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.creme },
 });

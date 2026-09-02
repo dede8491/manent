@@ -1,4 +1,4 @@
-import { Stack, usePathname, useRouter, useSegments } from 'expo-router';
+import { Stack, useGlobalSearchParams, usePathname, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useRef } from 'react';
 import { LogBox, View, Platform, Linking, Alert } from 'react-native';
@@ -12,6 +12,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // URL initiale du web, lue avant tout rendu (les redirections d'alias /q → /quote ne l'écrasent pas)
 const INITIAL_WEB_PATH: string | null =
   Platform.OS === 'web' && typeof window !== 'undefined' ? window.location.pathname : null;
+const INITIAL_WEB_SEARCH: string =
+  Platform.OS === 'web' && typeof window !== 'undefined' ? window.location.search : '';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useIconFonts } from '@/src/hooks/use-icon-fonts';
@@ -29,6 +31,8 @@ if (Platform.OS !== 'web') {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowAlert: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
       shouldPlaySound: true,
       shouldSetBadge: false,
     }),
@@ -106,6 +110,7 @@ function NavGate() {
   // Chemin capturé au chargement (avant les redirections des routes alias /q → /quote)
   const initialPath = useRef<string | null>(null);
   if (initialPath.current === null) initialPath.current = INITIAL_WEB_PATH ?? pathname;
+  const gparams = useGlobalSearchParams<{ follow?: string }>();
   const isDeepLink = (p: string) => /^\/(q|b|c|quote|book)\//.test(p) || p.startsWith('/@') || p.startsWith('/api/s/');
   const normalizeDeepLink = (p: string) => {
     let x = p.replace(/^\/api\/s/, '');
@@ -124,8 +129,9 @@ function NavGate() {
         : (initialPath.current && isDeepLink(initialPath.current) ? initialPath.current : null);
       if (target) {
         initialPath.current = '';
+        const suffix = gparams?.follow === '1' || INITIAL_WEB_SEARCH.includes('follow=1') ? '?follow=1' : '';
         (async () => {
-          try { await AsyncStorage.setItem('pending_deep_link', normalizeDeepLink(target)); } catch {}
+          try { await AsyncStorage.setItem('pending_deep_link', normalizeDeepLink(target) + suffix); } catch {}
           router.replace('/onboarding');
         })();
       } else if (atRoot || (!inOnboarding && !inAuth)) {
@@ -149,7 +155,7 @@ function NavGate() {
         }
       }
     }
-  }, [user, loading, segments, pathname]);
+  }, [user, loading, segments, pathname, gparams?.follow, router]);
 
   return <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.glacier } }} />;
 }
