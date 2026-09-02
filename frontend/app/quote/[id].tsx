@@ -1,3 +1,4 @@
+import { useAuth } from '@/src/auth';
 import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Modal, FlatList, Platform, Alert, Linking } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,6 +24,7 @@ export default function QuoteDetail() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { user } = useAuth();
   const [quote, setQuote] = useState<Quote | null>(null);
   const [style, setStyle] = useState<'papier'|'encre'|'glacier'>('papier');
   const [pinning, setPinning] = useState(false);
@@ -32,10 +34,11 @@ export default function QuoteDetail() {
   const [feedback, setFeedback] = useState('');
 
   useEffect(() => {
+    if (!user) return; // NavGate redirige (deep link mémorisé) — pas de fetch sans session
     (async () => {
       const q = await api<Quote>(`/quotes/${id}`); setQuote(q);
     })();
-  }, [id]);
+  }, [id, user]);
 
   const openPin = async () => {
     const r = await api<{ boards: any[] }>('/boards'); setBoards(r.boards); setPinning(true);

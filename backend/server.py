@@ -2,8 +2,8 @@
 Manent — backend
 FastAPI + MongoDB + Emergent LLM (Claude Sonnet 4.6 vision) + Emergent Google Auth
 """
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, UploadFile, File, Form
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, UploadFile, File, Form, Request
+from fastapi.responses import JSONResponse, Response
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -20,11 +20,8 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 MONGO_URL = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
-DB_NAME = os.environ.get('DB_NAME', 'manent_db')
+DB_NAME = os.environ['DB_NAME']
 EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY', '')
-SUPABASE_URL = os.environ.get('SUPABASE_URL', '')
-SUPABASE_KEY = os.environ.get('SUPABASE_KEY', '')
-SUPABASE_BUCKET = os.environ.get('SUPABASE_BUCKET', 'manent-photos')
 
 from routes.book_search import _search_google, _search_openlibrary
 from routes.push import router as push_router, send_push
@@ -37,6 +34,13 @@ client = AsyncIOMotorClient(MONGO_URL)
 db = client[DB_NAME]
 
 app = FastAPI(title="Manent API")
+
+
+@app.get("/health")
+@app.get("/api/health")
+async def health():
+    """Sonde de santé Kubernetes (liveness/readiness)."""
+    return {"status": "ok"}
 api = APIRouter(prefix="/api")
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -199,7 +203,7 @@ async def emergent_session(body: SessionExchange):
     try:
         async with httpx.AsyncClient(timeout=15) as http:
             r = await http.get(
-                "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
+                os.environ["AUTH_SESSION_URL"],
                 headers={"X-Session-ID": body.session_id},
             )
         if r.status_code != 200:
@@ -291,11 +295,19 @@ async def get_my_themes(user=Depends(get_current_user)):
 
 
 async def _attach_public_meta(quotes: list):
+    # Chargement groupé (évite le N+1 : une requête livres + une requête lecteurs)
+    book_ids = list({qd["book_id"] for qd in quotes if qd.get("book_id")})
+    user_ids = list({qd["user_id"] for qd in quotes})
+    books = {b["book_id"]: b for b in await db.books.find(
+        {"book_id": {"$in": book_ids}}, {"_id": 0, "book_id": 1, "title": 1, "author": 1, "type": 1}).to_list(len(book_ids) or 1)} if book_ids else {}
+    users = {u["user_id"]: u for u in await db.users.find(
+        {"user_id": {"$in": user_ids}}, {"_id": 0, "user_id": 1, "pseudo": 1, "handle": 1, "picture": 1}).to_list(len(user_ids) or 1)} if user_ids else {}
     for qd in quotes:
-        if qd.get("book_id"):
-            qd["book"] = await db.books.find_one({"book_id": qd["book_id"]}, {"_id": 0, "title": 1, "author": 1, "type": 1})
-        u = await db.users.find_one({"user_id": qd["user_id"]}, {"_id": 0, "pseudo": 1, "handle": 1, "picture": 1})
-        qd["author"] = u
+        b = books.get(qd.get("book_id"))
+        if b:
+            qd["book"] = {k: b.get(k) for k in ("title", "author", "type")}
+        u = users.get(qd["user_id"])
+        qd["author"] = {k: u.get(k) for k in ("pseudo", "handle", "picture")} if u else None
 
 
 @api.get("/themes/{theme}/page")
@@ -2566,36 +2578,85 @@ async def feed(theme: Optional[str] = None, user=Depends(get_current_user)):
     return {"quotes": quotes}
 
 
-# ============ Upload (Supabase Storage) ============
+# ============ Upload (Emergent Object Storage) ============
+STORAGE_BASE = (os.environ.get("INTEGRATION_PROXY_URL") or "").strip() or "https://integrations.emergentagent.com"
+STORAGE_URL = STORAGE_BASE.rstrip("/") + "/objstore/api/v1/storage"
+_storage_key: Optional[str] = None
+
+
+async def _storage_init() -> str:
+    global _storage_key
+    if _storage_key:
+        return _storage_key
+    async with httpx.AsyncClient(timeout=30) as http:
+        r = await http.post(f"{STORAGE_URL}/init", json={"emergent_key": os.environ.get("EMERGENT_LLM_KEY")})
+    r.raise_for_status()
+    _storage_key = r.json()["storage_key"]
+    return _storage_key
+
+
+async def _storage_put(path: str, data: bytes, content_type: str):
+    global _storage_key
+    key = await _storage_init()
+    async with httpx.AsyncClient(timeout=120) as http:
+        r = await http.put(f"{STORAGE_URL}/objects/{path}",
+                           headers={"X-Storage-Key": key, "Content-Type": content_type}, content=data)
+        if r.status_code == 503:  # clé de stockage périmée → ré-init une fois
+            _storage_key = None
+            key = await _storage_init()
+            r = await http.put(f"{STORAGE_URL}/objects/{path}",
+                               headers={"X-Storage-Key": key, "Content-Type": content_type}, content=data)
+    r.raise_for_status()
+    return r.json()
+
+
+async def _storage_get(path: str) -> tuple[bytes, str]:
+    global _storage_key
+    key = await _storage_init()
+    async with httpx.AsyncClient(timeout=60) as http:
+        r = await http.get(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key})
+        if r.status_code == 503:
+            _storage_key = None
+            key = await _storage_init()
+            r = await http.get(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key})
+    r.raise_for_status()
+    return r.content, r.headers.get("Content-Type", "image/jpeg")
+
+
 @api.post("/upload")
-async def upload(file: UploadFile = File(...), user=Depends(get_current_user)):
+async def upload(request: Request, file: UploadFile = File(...), user=Depends(get_current_user)):
     data = await file.read()
     if len(data) > 10 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="file_too_large")
     ext = (file.filename or "img.jpg").split(".")[-1].lower()
     if ext not in ("jpg", "jpeg", "png", "webp"):
         ext = "jpg"
-    key = f"{user['user_id']}/{uuid.uuid4().hex}.{ext}"
-    if not SUPABASE_URL or not SUPABASE_KEY:
-        # Fallback: store as data URL locally in DB (dev only)
+    path = f"manent/uploads/{user['user_id']}/{uuid.uuid4().hex}.{ext}"
+    try:
+        await _storage_put(path, data, file.content_type or "image/jpeg")
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 402:
+            raise HTTPException(status_code=402, detail="storage_quota")
+        logger.error("object storage upload failed: %s %s", e.response.status_code, e.response.text[:300])
+        # Repli : data URL (dev uniquement)
         b64 = base64.b64encode(data).decode()
-        return {"url": f"data:{file.content_type or 'image/jpeg'};base64,{b64}", "key": key}
-    upload_url = f"{SUPABASE_URL}/storage/v1/object/{SUPABASE_BUCKET}/{key}"
-    headers = {
-        "apikey": SUPABASE_KEY,
-        "Authorization": f"Bearer {SUPABASE_KEY}",
-        "Content-Type": file.content_type or "image/jpeg",
-        "x-upsert": "true",
-    }
-    async with httpx.AsyncClient(timeout=30) as http:
-        r = await http.post(upload_url, headers=headers, content=data)
-    if r.status_code not in (200, 201):
-        logger.error("supabase upload failed: %s %s", r.status_code, r.text[:500])
-        # fallback data URL
-        b64 = base64.b64encode(data).decode()
-        return {"url": f"data:{file.content_type or 'image/jpeg'};base64,{b64}", "key": key, "supabase_failed": True}
-    public_url = f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET}/{key}"
-    return {"url": public_url, "key": key}
+        return {"url": f"data:{file.content_type or 'image/jpeg'};base64,{b64}", "key": path, "storage_failed": True}
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
+    url = f"https://{host}/api/files/{path}" if host else f"/api/files/{path}"
+    return {"url": url, "key": path}
+
+
+@api.get("/files/{path:path}")
+async def get_file(path: str):
+    """Lecture publique des images téléversées (chemins UUID non devinables)."""
+    if not re.fullmatch(r"manent/uploads/[A-Za-z0-9_\-]+/[a-f0-9]{32}\.(jpg|jpeg|png|webp)", path):
+        raise HTTPException(status_code=404, detail="not_found")
+    try:
+        content, ctype = await _storage_get(path)
+    except Exception:
+        raise HTTPException(status_code=404, detail="not_found")
+    return Response(content=content, media_type=ctype,
+                    headers={"Cache-Control": "public, max-age=31536000, immutable"})
 
 
 # ============ Seed demo data ============

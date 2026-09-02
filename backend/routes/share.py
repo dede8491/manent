@@ -8,7 +8,7 @@ d'environnement. Seul le contenu PUBLIC est montré. Aucune URL en dur.
 """
 import os
 import html
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 router = APIRouter(prefix="/api/s")
@@ -32,12 +32,13 @@ def _store_buttons() -> str:
     return ios + android
 
 
-def _page(title: str, desc: str, image: str | None, target: str) -> str:
+def _page(title: str, desc: str, image: str | None, target: str, base: str = "") -> str:
+    base = base or PUBLIC_BASE_URL
     t, d = html.escape(title[:120]), html.escape((desc or "")[:220])
     img_meta = (f'<meta property="og:image" content="{html.escape(image)}"/>'
                 f'<meta name="twitter:image" content="{html.escape(image)}"/>') if image else ""
     card = "summary_large_image" if image else "summary"
-    url = f"{PUBLIC_BASE_URL}{target}"
+    url = f"{base}{target}"
     scheme = f"manent://{html.escape(target.lstrip('/'))}"
     return f"""<!doctype html><html lang="fr"><head><meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
@@ -71,44 +72,54 @@ a.alt{{display:block;color:#957662;font-family:Helvetica,Arial,sans-serif;font-s
 </div></body></html>"""
 
 
-async def _quote_page(quote_id: str):
+def _base(request: Request) -> str:
+    """URL publique dérivée de la requête (préview et prod, sans rien en dur)."""
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
+    return f"https://{host}" if host else PUBLIC_BASE_URL
+
+
+async def _quote_page(request: Request, quote_id: str):
+    base = _base(request)
     q = await db.quotes.find_one({"quote_id": quote_id, "is_public": True, "is_hidden": {"$ne": True}}, {"_id": 0})
     if not q:
-        return HTMLResponse(_page("Manent", "Ce que tes lectures te laissent.", None, "/"))
+        return HTMLResponse(_page("Manent", "Ce que tes lectures te laissent.", None, "/", base))
     u = await db.users.find_one({"user_id": q["user_id"]}, {"_id": 0, "pseudo": 1})
     b = await db.books.find_one({"book_id": q.get("book_id")}, {"_id": 0, "title": 1, "cover": 1}) if q.get("book_id") else None
     title = f"« {q['text'][:80]}… »" if len(q["text"]) > 80 else f"« {q['text']} »"
     desc = " — ".join(x for x in [(b or {}).get("title"), f"partagé par {(u or {}).get('pseudo', 'une lectrice')}"] if x)
-    return HTMLResponse(_page(title, desc, (b or {}).get("cover"), f"/q/{quote_id}"))
+    return HTMLResponse(_page(title, desc, (b or {}).get("cover"), f"/q/{quote_id}", base))
 
 
-async def _book_page(catalog_id: str):
+async def _book_page(request: Request, catalog_id: str):
+    base = _base(request)
     b = await db.catalog_books.find_one({"catalog_id": catalog_id}, {"_id": 0})
     if not b:
-        return HTMLResponse(_page("Manent", "Ce que tes lectures te laissent.", None, "/"))
-    return HTMLResponse(_page(b["title"], b.get("summary") or ", ".join(b.get("authors") or []), b.get("cover"), f"/b/{catalog_id}"))
+        return HTMLResponse(_page("Manent", "Ce que tes lectures te laissent.", None, "/", base))
+    return HTMLResponse(_page(b["title"], b.get("summary") or ", ".join(b.get("authors") or []), b.get("cover"), f"/b/{catalog_id}", base))
 
 
-async def _profile_page(handle: str):
+async def _profile_page(request: Request, handle: str):
+    base = _base(request)
     handle = handle.lstrip("@")
     u = await db.users.find_one({"handle": handle}, {"_id": 0, "pseudo": 1, "picture": 1, "user_id": 1, "profile_public": 1})
     if not u or u.get("profile_public") is False:
-        return HTMLResponse(_page("Manent", "Ce que tes lectures te laissent.", None, "/"))
+        return HTMLResponse(_page("Manent", "Ce que tes lectures te laissent.", None, "/", base))
     quotes = await db.quotes.find({"user_id": u["user_id"], "is_public": True, "is_hidden": {"$ne": True}},
                                   {"_id": 0, "text": 1}).sort("created_at", -1).to_list(3)
     desc = "  ·  ".join(f"« {q['text'][:60]} »" for q in quotes) or "Lectrice sur Manent."
     pic = u.get("picture")
     if pic and pic.startswith("data:"):
         pic = None
-    return HTMLResponse(_page(f"@{handle} — {u.get('pseudo', '')}", desc, pic, f"/@{handle}"))
+    return HTMLResponse(_page(f"@{handle} — {u.get('pseudo', '')}", desc, pic, f"/@{handle}", base))
 
 
-async def _club_page(code: str):
+async def _club_page(request: Request, code: str):
+    base = _base(request)
     c = await db.clubs.find_one({"code": code.upper()}, {"_id": 0, "name": 1, "members": 1})
     if not c:
-        return HTMLResponse(_page("Manent", "Ce que tes lectures te laissent.", None, "/"))
+        return HTMLResponse(_page("Manent", "Ce que tes lectures te laissent.", None, "/", base))
     n = len(c.get("members", []))
-    return HTMLResponse(_page(c["name"], f"{n} membre{'s' if n > 1 else ''} — on t'attend pour la prochaine lecture.", None, f"/c/{code.upper()}"))
+    return HTMLResponse(_page(c["name"], f"{n} membre{'s' if n > 1 else ''} — on t'attend pour la prochaine lecture.", None, f"/c/{code.upper()}", base))
 
 
 router.add_api_route("/q/{quote_id}", _quote_page, response_class=HTMLResponse)

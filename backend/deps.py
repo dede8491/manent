@@ -12,7 +12,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 load_dotenv(Path(__file__).parent / '.env')
 
 MONGO_URL = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
-DB_NAME = os.environ.get('DB_NAME', 'manent_db')
+DB_NAME = os.environ['DB_NAME']
 
 _client = AsyncIOMotorClient(MONGO_URL)
 db = _client[DB_NAME]

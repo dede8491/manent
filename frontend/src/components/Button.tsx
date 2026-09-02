@@ -13,7 +13,7 @@ export function PrimaryButton({ title, onPress, loading, disabled, testID, style
     <Pressable
       testID={testID}
       onPress={onPress}
-      disabled={loading || disabled}
+      disabled={!!(loading || disabled)}
       style={({ pressed }) => [
         styles.btn,
         { backgroundColor: colors.chambray, opacity: disabled ? 0.5 : pressed ? 0.85 : 1 },

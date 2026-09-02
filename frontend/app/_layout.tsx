@@ -1,6 +1,6 @@
 import { Stack, usePathname, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { LogBox, View, Platform, Linking, Alert } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -8,6 +8,10 @@ import { useFonts } from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// URL initiale du web, lue avant tout rendu (les redirections d'alias /q → /quote ne l'écrasent pas)
+const INITIAL_WEB_PATH: string | null =
+  Platform.OS === 'web' && typeof window !== 'undefined' ? window.location.pathname : null;
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useIconFonts } from '@/src/hooks/use-icon-fonts';
@@ -99,7 +103,10 @@ function NavGate() {
 
   // Lot A4 : un lien profond ouvert sans compte est mémorisé, puis appliqué après l'onboarding.
   const pathname = usePathname();
-  const isDeepLink = (p: string) => /^\/(q|b|c)\//.test(p) || p.startsWith('/@') || p.startsWith('/api/s/');
+  // Chemin capturé au chargement (avant les redirections des routes alias /q → /quote)
+  const initialPath = useRef<string | null>(null);
+  if (initialPath.current === null) initialPath.current = INITIAL_WEB_PATH ?? pathname;
+  const isDeepLink = (p: string) => /^\/(q|b|c|quote|book)\//.test(p) || p.startsWith('/@') || p.startsWith('/api/s/');
   const normalizeDeepLink = (p: string) => {
     let x = p.replace(/^\/api\/s/, '');
     if (x.startsWith('/u/')) x = '/@' + x.slice(3);
@@ -113,9 +120,14 @@ function NavGate() {
     const inOnboarding = first === 'onboarding';
     const inAuth = first === '(auth)';
     if (!user) {
-      if (isDeepLink(pathname)) {
-        AsyncStorage.setItem('pending_deep_link', normalizeDeepLink(pathname)).catch(() => {});
-        router.replace('/onboarding');
+      const target = isDeepLink(pathname) ? pathname
+        : (initialPath.current && isDeepLink(initialPath.current) ? initialPath.current : null);
+      if (target) {
+        initialPath.current = '';
+        (async () => {
+          try { await AsyncStorage.setItem('pending_deep_link', normalizeDeepLink(target)); } catch {}
+          router.replace('/onboarding');
+        })();
       } else if (atRoot || (!inOnboarding && !inAuth)) {
         router.replace('/onboarding');
       }

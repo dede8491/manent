@@ -1,6 +1,6 @@
 // Étend app.json : liens universels pilotés par UNE variable (PUBLIC_DOMAIN).
 // Le jour où manent.app arrive : changer PUBLIC_DOMAIN (ou la variable d'env EXPO_PUBLIC_PUBLIC_BASE_URL), rien d'autre.
-const PUBLIC_DOMAIN = (process.env.EXPO_PUBLIC_PUBLIC_BASE_URL || 'https://lecture-capture-24.preview.emergentagent.com')
+const PUBLIC_DOMAIN = (process.env.EXPO_PUBLIC_PUBLIC_BASE_URL || process.env.EXPO_PUBLIC_BACKEND_URL || 'https://lecture-capture-24.preview.emergentagent.com')
   .replace(/^https?:\/\//, '')
   .replace(/\/$/, '');
 
