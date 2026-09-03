@@ -416,7 +416,7 @@ export default function BookDetail() {
               )}
             </View>
             {quotes.length > 0 && (
-              <Pressable testID="btn-my-quotes" onPress={() => router.push({ pathname: '/quotes', params: { book_id: String(id) } })} hitSlop={6} style={{ alignSelf: 'flex-start', marginTop: 6 }}>
+              <Pressable testID="btn-my-quotes" onPress={() => router.push({ pathname: '/(tabs)/quotes', params: { book_id: String(id) } })} hitSlop={6} style={{ alignSelf: 'flex-start', marginTop: 6 }}>
                 <Text style={styles.editProgress}>{t(quotes.length > 1 ? 'Voir mes {n} citations' : 'Voir ma citation', { n: quotes.length })}</Text>
               </Pressable>
             )}

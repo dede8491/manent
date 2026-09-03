@@ -250,8 +250,8 @@ async def me(user=Depends(get_current_user)):
 async def admin_badge(user=Depends(require_admin)):
     """Pastille du Dashboard admin : ce qui attend une action."""
     reports = await db.reports.count_documents({"status": "open"})
-    authors = await db.catalog_authors.count_documents({"$or": [{"country": None}, {"origin_confidence": "low"}]})
-    return {"reports": reports, "authors": authors, "total": reports + authors}
+    # l'origine des auteurs est désormais entièrement automatique (Wikidata, Open Library, IA) : plus de file à vérifier
+    return {"reports": reports, "authors": 0, "total": reports}
 
 
 @api.post("/auth/logout")
