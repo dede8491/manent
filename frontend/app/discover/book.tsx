@@ -8,6 +8,7 @@ import { api } from '@/src/api';
 import { BookCover } from '@/src/components/BookCover';
 import { PrimaryButton } from '@/src/components/Button';
 import { BookHero, AreaLine } from '@/src/components/BookHero';
+import { ClassificationLines } from '@/src/components/ClassificationLines';
 import { ShareBookSheet } from '@/src/components/ShareBookSheet';
 import { Feather } from '@expo/vector-icons';
 import { useT, useI18n } from '@/src/i18n';
@@ -29,30 +30,31 @@ export default function DiscoverBook() {
   const [meta, setMeta] = useState<any>(null);
   const [shareSheet, setShareSheet] = useState(false);
 
-  // Fiche catalogue (aire, pays, résumé) si le livre est connu du catalogue
+  // Résumé : catalogue d'abord (aire, pays, résumé), puis repli sur la recherche en ligne
+  // s'il manque encore — pour ne jamais afficher une fiche sans quatrième de couverture.
   useEffect(() => {
-    if (!catalog_id) return;
+    if (!title) return;
+    let alive = true;
     (async () => {
-      try {
-        const m = await api<any>(`/catalog/book/${catalog_id}`);
-        setMeta(m);
-        if (!desc && m.summary) setDesc(m.summary);
-      } catch {}
+      let found: string | null = summary || null;
+      if (catalog_id) {
+        try {
+          const m = await api<any>(`/catalog/book/${catalog_id}`);
+          if (!alive) return;
+          setMeta(m);
+          if (!found && m.summary) { found = m.summary; setDesc(m.summary); }
+        } catch {}
+      }
+      if (!found) {
+        try {
+          const r = await api<{ summary: string | null }>(`/books-summary?title=${encodeURIComponent(title)}&author=${encodeURIComponent(author || '')}&lang=${lang}`);
+          if (alive && r.summary) setDesc(r.summary);
+        } catch {}
+      }
     })();
+    return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [catalog_id]);
-
-  // Synopsis (4e de couverture) récupéré automatiquement si absent
-  useEffect(() => {
-    if (summary || !title || catalog_id) return;
-    (async () => {
-      try {
-        const r = await api<{ summary: string | null }>(`/books-summary?title=${encodeURIComponent(title)}&author=${encodeURIComponent(author || '')}&lang=${lang}`);
-        if (r.summary) setDesc(r.summary);
-      } catch {}
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [catalog_id, title]);
 
   const add = async () => {
     setAdding(true);
@@ -83,6 +85,7 @@ export default function DiscoverBook() {
             <Text style={styles.title}>{title}</Text>
             {!!author && <Text style={styles.author}>{author}{year ? `  ·  ${year}` : ''}</Text>}
             <AreaLine areas={meta?.area_labels} countries={meta?.country_labels} style={{ marginTop: 6 }} />
+            <ClassificationLines lines={meta?.lines} style={{ marginTop: 8, alignItems: 'center' }} testID="discover-classification" />
           </View>
         </BookHero>
 
@@ -109,7 +112,7 @@ export default function DiscoverBook() {
           <PrimaryButton testID="discover-add" title={t('Ajouter à ma bibliothèque')} onPress={add} loading={adding} style={{ alignSelf: 'stretch' }} />
         </View>
       </ScrollView>
-      <ShareBookSheet visible={shareSheet} onClose={() => setShareSheet(false)} book={{ catalog_id: catalog_id || meta?.catalog_id, title: title || '', author: author || '' }} />
+      <ShareBookSheet visible={shareSheet} onClose={() => setShareSheet(false)} book={{ catalog_id: catalog_id || meta?.catalog_id, title: title || '', author: author || '', cover: cover || meta?.cover }} />
     </View>
   );
 }

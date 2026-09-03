@@ -110,7 +110,7 @@ function NavGate() {
   // Chemin capturé au chargement (avant les redirections des routes alias /q → /quote)
   const initialPath = useRef<string | null>(null);
   if (initialPath.current === null) initialPath.current = INITIAL_WEB_PATH ?? pathname;
-  const gparams = useGlobalSearchParams<{ follow?: string }>();
+  const gparams = useGlobalSearchParams<{ follow?: string; edit?: string }>();
   const isDeepLink = (p: string) => /^\/(q|b|c|quote|book)\//.test(p) || p.startsWith('/@') || p.startsWith('/api/s/');
   const normalizeDeepLink = (p: string) => {
     let x = p.replace(/^\/api\/s/, '');
@@ -138,7 +138,9 @@ function NavGate() {
         router.replace('/onboarding');
       }
     } else {
-      if (atRoot || inOnboarding || inAuth) {
+      // Modifier ses sujets depuis l'accueil (/onboarding/themes?edit=1) : pas de renvoi vers l'accueil
+      const editingThemes = inOnboarding && gparams?.edit === '1';
+      if ((atRoot || inOnboarding || inAuth) && !editingThemes) {
         if (!user.reading_mode) router.replace('/onboarding/themes');
         else {
           (async () => {
@@ -155,7 +157,7 @@ function NavGate() {
         }
       }
     }
-  }, [user, loading, segments, pathname, gparams?.follow, router]);
+  }, [user, loading, segments, pathname, gparams?.follow, gparams?.edit, router]);
 
   return <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.glacier } }} />;
 }

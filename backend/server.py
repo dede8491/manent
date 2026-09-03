@@ -319,7 +319,7 @@ async def _attach_public_meta(quotes: list):
 
 
 @api.get("/themes/{theme}/page")
-async def theme_page(theme: str, area: Optional[str] = None, page: int = 1, size: int = 12, user=Depends(get_current_user)):
+async def theme_page(theme: str, area: Optional[str] = None, genre: Optional[str] = None, page: int = 1, size: int = 12, user=Depends(get_current_user)):
     q = {"is_public": True, "themes": theme, "is_hidden": {"$ne": True}, **sensitive_filter(user)}
     total = await db.quotes.count_documents(q)
     readers = len(await db.quotes.distinct("user_id", q))
@@ -354,7 +354,9 @@ async def theme_page(theme: str, area: Optional[str] = None, page: int = 1, size
     subj = catalog._norm_subject(theme)
     cflt: dict = {"subjects": subj}
     if area:
-        cflt["areas"] = area
+        cflt |= catalog._area_filter(area)
+    if genre:
+        cflt["genre"] = genre
     discover_total = await db.catalog_books.count_documents(cflt)
     cdocs = await db.catalog_books.find(cflt, {"_id": 0}).sort([("popularity", -1), ("year", -1)]) \
         .skip(skip).limit(size).to_list(size)
@@ -515,6 +517,7 @@ class BookPatch(BaseModel):
     chapters: Optional[int] = None
     status: Optional[Literal['a_lire', 'en_cours', 'termine']] = None
     rating: Optional[int] = None
+    review: Optional[str] = Field(None, max_length=600)
     recap: Optional[str] = Field(None, max_length=4000)
     summary: Optional[str] = Field(None, max_length=3000)
     lessons: Optional[List[str]] = None
@@ -801,6 +804,7 @@ async def patch_book(book_id: str, body: BookPatch, user=Depends(get_current_use
         upd["is_rereading"] = True
         upd.setdefault(prog_key, 0)
     if upd:
+        upd["updated_at"] = now_utc()
         await db.books.update_one({"book_id": book_id, "user_id": user["user_id"]}, {"$set": upd})
         # Clubs : progression partagée + notifications sobres sur la lecture commune
         if "progress_page" in upd or "progress_chapter" in upd or upd.get("status") == "termine":
@@ -2584,15 +2588,24 @@ async def home_discover(user=Depends(get_current_user)):
     )
     # Livres primés
     awarded = await db.featured_books.find({"cover": {"$ne": None}}, {"_id": 0}).to_list(20)
-    # Les plus lus (agrégés sur toutes les bibliothèques + citations)
-    pipeline = [
+    # Les plus lus cette semaine : livres ajoutés, avancés ou terminés au cours des 7 derniers
+    # jours, comptés en lectrices distinctes. Repli sur l'ensemble des bibliothèques si la
+    # semaine est trop calme (moins de 4 titres), avec popular_scope = "all".
+    week_ago = now_utc() - timedelta(days=7)
+    group_stage = [
         {"$group": {"_id": {"$toLower": "$title"}, "title": {"$first": "$title"}, "author": {"$first": "$author"},
-                    "cover": {"$max": "$cover"}, "readers": {"$addToSet": "$user_id"}}},
-        {"$project": {"_id": 0, "title": 1, "author": 1, "cover": 1, "readers_count": {"$size": "$readers"}}},
+                    "cover": {"$max": "$cover"}, "catalog_id": {"$max": "$catalog_id"}, "readers": {"$addToSet": "$user_id"}}},
+        {"$project": {"_id": 0, "title": 1, "author": 1, "cover": 1, "catalog_id": 1, "readers_count": {"$size": "$readers"}}},
         {"$sort": {"readers_count": -1}},
         {"$limit": 8},
     ]
-    popular = await db.books.aggregate(pipeline).to_list(8)
+    week_match = {"$match": {"type": {"$ne": "etude"}, "$or": [
+        {"created_at": {"$gte": week_ago}}, {"finished_at": {"$gte": week_ago}}, {"updated_at": {"$gte": week_ago}}]}}
+    popular = await db.books.aggregate([week_match] + group_stage).to_list(8)
+    popular_scope = "week"
+    if len(popular) < 4:
+        popular = await db.books.aggregate([{"$match": {"type": {"$ne": "etude"}}}] + group_stage).to_list(8)
+        popular_scope = "all"
     # Couvertures manquantes : jamais résolues pendant la requête (repli affiché, enrichissement en fond)
     # Collections thématiques : thèmes les plus épinglés + couvertures associées
     collections = []
@@ -2619,6 +2632,7 @@ async def home_discover(user=Depends(get_current_user)):
         "resume": resume,
         "awarded": awarded,
         "popular": popular,
+        "popular_scope": popular_scope,
         "new_books": await _cached_new_books(),
         "collections": collections,
         "boards": boards,
@@ -2977,6 +2991,9 @@ async def shutdown_db_client():
 
 app.include_router(catalog_router, dependencies=[Depends(get_current_user)])
 app.include_router(catalog_admin_router, dependencies=[Depends(require_admin)])
+app.include_router(catalog.classification.router, dependencies=[Depends(get_current_user)])
+app.include_router(catalog.classification.admin_router, dependencies=[Depends(require_admin)])
+catalog.classification.resolve_user = get_current_user  # identifiant de l'admin dans classification_feedback
 share_pages.db = db
 app.include_router(share_pages.router)
 app.include_router(share_pages.root_router)

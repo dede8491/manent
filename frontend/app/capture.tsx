@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, ScrollView, Pressable, Image, KeyboardAvoidingView, Platform, Modal, FlatList } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { fonts, radius, spacing } from '@/src/theme';
@@ -19,6 +19,10 @@ export default function CaptureModal() {
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  // mode=camera : la caméra s'ouvre tout de suite (bouton central) ; mode=write : on écrit ou colle (« + » des citations)
+  const { mode } = useLocalSearchParams<{ mode?: string }>();
+  const writeMode = mode === 'write';
+  const autoCamera = React.useRef(false);
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [transcribing, setTranscribing] = useState(false);
   const [text, setText] = useState('');
@@ -38,6 +42,14 @@ export default function CaptureModal() {
   const [showCustom, setShowCustom] = useState(false);
   const [premium, setPremium] = useState<{ is_premium: boolean; captures_used: number; captures_limit: number } | null>(null);
   const [limitReached, setLimitReached] = useState(false);
+
+  React.useEffect(() => {
+    if (mode === 'camera' && !autoCamera.current) {
+      autoCamera.current = true;
+      setTimeout(() => pickImage(true), 250);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
 
   React.useEffect(() => {
     (async () => {
@@ -133,12 +145,12 @@ export default function CaptureModal() {
         <Pressable onPress={() => router.back()} testID="capture-close" style={styles.iconBtn}>
           <Feather name="x" size={22} color={colors.espresso} />
         </Pressable>
-        <Text style={styles.h1}>{t('Capturer un passage')}</Text>
+        <Text style={styles.h1}>{imageUri ? t('Ta photo') : writeMode ? t('Nouvelle citation') : t('Capturer un passage')}</Text>
         <View style={{ width: 40, alignItems: 'center' }}>
           <InfoTooltip
             testID="info-capture"
-            title={t('Capturer un passage')}
-            text={t("Photographie une page ou choisis une image : l'IA transcrit le texte pour toi. Relie la citation à un livre de ta bibliothèque, choisis sa visibilité (privée, abonnés ou publique) et garde-la pour toujours.")}
+            title={t('Comment ça marche')}
+            text={t("Photographie une page ou choisis une image : l'IA transcrit le texte pour toi. Tu peux aussi l'écrire ou le coller. Relie la citation à un livre et à sa page, choisis sa visibilité (privée, abonnés ou publique) et garde-la pour toujours. Depuis la citation, tu retrouveras le livre et pourras marquer cette page comme lue.")}
           />
         </View>
       </View>
@@ -164,7 +176,7 @@ export default function CaptureModal() {
               </View>
             )}
           </View>
-        ) : (
+        ) : writeMode ? null : (
           <View style={styles.pickRow}>
             <Pressable testID="btn-camera" onPress={() => pickImage(true)} style={styles.pickBtn}>
               <Feather name="camera" size={26} color={colors.chambray} />
@@ -181,11 +193,22 @@ export default function CaptureModal() {
         <TextInput
           testID="capture-text"
           value={text} onChangeText={setText}
-          placeholder={t('Transcris ou colle ton passage…')}
+          placeholder={writeMode ? t('Écris ou colle ton passage…') : t('Transcris ou colle ton passage…')}
           placeholderTextColor={colors.clay}
-          style={[styles.input, { minHeight: 120, textAlignVertical: 'top' }]}
+          style={[styles.input, { minHeight: writeMode ? 160 : 120, textAlignVertical: 'top' }]}
           multiline
+          autoFocus={writeMode && Platform.OS !== 'web'}
         />
+        {writeMode && !imageUri && (
+          <View style={{ flexDirection: 'row', gap: spacing.lg, marginTop: spacing.sm }}>
+            <Pressable testID="btn-camera" onPress={() => pickImage(true)} hitSlop={6} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Feather name="camera" size={14} color={colors.chambray} /><Text style={styles.altLink}>{t('Photographier plutôt')}</Text>
+            </Pressable>
+            <Pressable testID="btn-gallery" onPress={() => pickImage(false)} hitSlop={6} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Feather name="image" size={14} color={colors.chambray} /><Text style={styles.altLink}>{t('Depuis la galerie')}</Text>
+            </Pressable>
+          </View>
+        )}
 
         <Text style={styles.label}>{t('Livre de rattachement')}</Text>
         <Pressable testID="cap-book-picker" onPress={() => { setBookQuery(''); setBookModal(true); }} style={styles.pickerBtn}>
@@ -367,6 +390,7 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   pickRow: { flexDirection: 'row', gap: spacing.md },
   pickBtn: { flex: 1, height: 120, backgroundColor: colors.creme, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1, borderColor: colors.borderSoft },
   pickLabel: { fontFamily: fonts.bodyMedium, fontSize: 12, color: colors.espresso, letterSpacing: 0.5 },
+  altLink: { fontFamily: fonts.bodyMedium, fontSize: 12.5, color: colors.chambray },
   imgWrap: { position: 'relative', height: 220, borderRadius: radius.md, overflow: 'hidden', backgroundColor: colors.bisque },
   img: { width: '100%', height: '100%' },
   transcribing: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(58,33,25,0.72)', flexDirection: 'row', alignItems: 'center', gap: 8, padding: spacing.md },

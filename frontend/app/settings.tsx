@@ -25,7 +25,7 @@ Your rights (GDPR articles 15 to 21): access, rectification, portability ("Downl
 
 Hosting: your data is stored securely; page photos only pass through for transcription and are not kept by the AI model.
 
-Contact: bonjour@manent.app`;
+Contact: bonjour@manentlc.app`;
 
 const TERMS_EN = `Terms of use — the essentials, no jargon.
 
@@ -53,7 +53,7 @@ Tes droits (articles 15 à 21 du RGPD) : accès, rectification, portabilité (bo
 
 Hébergement : tes données sont stockées de manière sécurisée, les photos de pages transitent uniquement pour la transcription et ne sont pas conservées par le modèle d'IA.
 
-Contact : bonjour@manent.app`;
+Contact : bonjour@manentlc.app`;
 
 const TERMS = `Conditions d'utilisation — l'essentiel, sans jargon.
 

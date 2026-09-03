@@ -8,6 +8,8 @@ import { useColors, useStyles } from '@/src/themeCtx';
 import { api } from '@/src/api';
 import ManentLoader from '@/src/components/ManentLoader';
 import { AuthorAdmin } from '@/src/components/AuthorAdmin';
+import { ClassificationAdmin } from '@/src/components/ClassificationAdmin';
+import { ClassificationDashboard } from '@/src/components/ClassificationDashboard';
 import { timeAgo } from '@/src/timeago';
 import { useT, useLang } from '@/src/i18n';
 
@@ -21,6 +23,7 @@ export default function AdminDashboard() {
   const [data, setData] = useState<any>(null);
   const [denied, setDenied] = useState(false);
   const [badge, setBadge] = useState<{ reports: number; authors: number } | null>(null);
+  const [openBook, setOpenBook] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try { setData(await api('/club/admin/overview')); }
@@ -101,6 +104,8 @@ export default function AdminDashboard() {
             </View>
           ))}
           <AuthorAdmin />
+          <ClassificationDashboard onOpenBook={setOpenBook} />
+          <ClassificationAdmin openId={openBook} onOpened={() => setOpenBook(null)} />
         </ScrollView>
       )}
     </View>

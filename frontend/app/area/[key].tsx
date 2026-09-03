@@ -21,13 +21,20 @@ export default function AreaPage() {
   const [books, setBooks] = useState<any[]>([]);
   const [page, setPage] = useState(1);
   const [country, setCountry] = useState<string | null>(null);
+  const [genre, setGenre] = useState<string | null>(null);
+  const [genres, setGenres] = useState<any[]>([]);
   const [loadingMore, setLoadingMore] = useState(false);
   const gridCardW = (width - spacing.xl * 2 - spacing.sm * 2) / 3;
 
   const fetchPage = async (pg: number, ctry: string | null) => {
     const cq = ctry ? `&country=${encodeURIComponent(ctry)}` : '';
-    return api<any>(`/catalog/areas/${encodeURIComponent(key)}?page=${pg}&size=12${cq}`);
+    const gq = genre ? `&genre=${encodeURIComponent(genre)}` : '';
+    return api<any>(`/catalog/areas/${encodeURIComponent(key)}?page=${pg}&size=12${cq}${gq}`);
   };
+
+  useEffect(() => {
+    api<{ genres: any[] }>('/catalog/genres').then(r => setGenres((r.genres || []).filter((g: any) => g.count > 0))).catch(() => {});
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -39,7 +46,7 @@ export default function AreaPage() {
       } catch {}
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, country]);
+  }, [key, country, genre]);
 
   const loadMore = async () => {
     if (loadingMore) return;
@@ -69,6 +76,18 @@ export default function AreaPage() {
             <Text style={styles.title} testID="area-title">{data.label}</Text>
             <Text style={styles.baseline}>{data.total} {t(data.total > 1 ? 'livres' : 'livre')}</Text>
           </View>
+          {genres.length > 0 && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: spacing.xl, marginBottom: spacing.sm }}>
+              <Pressable testID="area-genre-all" onPress={() => setGenre(null)} style={[styles.chip, !genre && styles.chipActive]}>
+                <Text style={[styles.chipText, !genre && { color: colors.creme }]}>{t('Tous les genres')}</Text>
+              </Pressable>
+              {genres.map((g: any) => (
+                <Pressable key={g.key} testID={`area-genre-${g.key}`} onPress={() => setGenre(genre === g.key ? null : g.key)} style={[styles.chip, genre === g.key && styles.chipActive]}>
+                  <Text style={[styles.chipText, genre === g.key && { color: colors.creme }]}>{g.label}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          )}
           {(data.countries || []).length > 0 && (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: spacing.xl, marginBottom: spacing.sm }}>
               {data.countries.map((c: any) => (

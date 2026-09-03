@@ -166,8 +166,8 @@ export default function Home() {
           <Wordmark size={19} variant="horizontal" />
           <InfoTooltip
             testID="info-home"
-            title={t('Ton fil de lecture')}
-            text={t("C'est ici que Manent respire : ta citation du matin, les passages des lecteurs que tu suis, les livres primés et les plus lus de la semaine. Tape un thème en haut pour explorer, ou l'icône de scan pour identifier un livre par sa couverture ou son code-barres.")}
+            title={t('Comment ça marche')}
+            text={t("Reprends ta lecture en cours, ou commence la suivante. « Pour toi » te propose des livres d'après tes sujets, tes littératures, tes clubs et les lectrices que tu suis : « Pas pour moi » affine les prochaines propositions. Plus bas, les littératures, les clubs publics, ta citation du matin et le fil des lectrices. L'icône de scan identifie un livre par son code-barres.")}
           />
         </View>
         <View style={[styles.searchRow, { flexDirection: 'row', gap: 8, alignItems: 'center' }]}>
@@ -177,6 +177,15 @@ export default function Home() {
           </Pressable>
           <Pressable testID="home-scan" onPress={() => router.push('/discover/scan')} style={styles.scanBtn}>
             <Feather name="maximize" size={17} color={colors.espresso} />
+          </Pressable>
+        </View>
+        <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: spacing.xl, marginTop: 8 }}>
+          <Pressable testID="home-intent" onPress={() => router.push('/intent')} style={[styles.chip, { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.bisque, borderColor: colors.bisque }]}>
+            <Text style={styles.chipText} numberOfLines={1}>✨ {t('Je cherche un livre qui…')}</Text>
+          </Pressable>
+          <Pressable testID="home-filters" onPress={() => router.push('/filters')} style={[styles.chip, { flexDirection: 'row', alignItems: 'center', gap: 6 }]}>
+            <Feather name="sliders" size={13} color={colors.espresso} />
+            <Text style={styles.chipText}>{t('Filtres')}</Text>
           </Pressable>
         </View>
         <View style={styles.chipRow}>
@@ -327,11 +336,11 @@ export default function Home() {
 
         {discover?.popular?.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>{t('Les plus lus cette semaine')}</Text>
+            <Text style={styles.sectionTitle}>{discover.popular_scope === 'all' ? t('Les plus lus sur Manent') : t('Les plus lus cette semaine')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.md }}>
               {discover.popular.map((b: any, i: number) => (
                 <BookCardFeed key={i} testID={`popular-${i}`} {...b}
-                  onPress={() => router.push({ pathname: '/discover/book', params: { title: b.title, author: b.author || '', cover: b.cover || '' } })} />
+                  onPress={() => router.push({ pathname: '/discover/book', params: { title: b.title, author: b.author || '', cover: b.cover || '', catalog_id: b.catalog_id || '' } })} />
               ))}
             </ScrollView>
           </View>
