@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, KeyboardAvoidingView, Platform, Share } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -7,6 +7,7 @@ import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
 import { api } from '@/src/api';
 import { shareUrl } from '@/src/share';
+import { InviteSheet } from '@/src/components/InviteSheet';
 import { useT } from '@/src/i18n';
 import { PrimaryButton, GhostButton } from '@/src/components/Button';
 import ManentLoader from '@/src/components/ManentLoader';
@@ -114,18 +115,8 @@ export default function ClubDetail() {
     } finally { setSending(false); }
   };
 
-  const shareCode = async () => {
-    const message = `${t('Rejoins mon club de lecture « {name} » sur Manent avec le code {code}', { name: club.name, code: club.code })} — ${shareUrl.club(club.code)}`;
-    try {
-      if (Platform.OS === 'web') {
-        const nav: any = navigator;
-        if (nav.share) await nav.share({ text: message });
-        else if (nav.clipboard) await nav.clipboard.writeText(message);
-      } else {
-        await Share.share({ message });
-      }
-    } catch {}
-  };
+  const [inviteSheet, setInviteSheet] = useState(false);
+  const shareCode = () => setInviteSheet(true);
 
   const openBookPicker = async () => {
     const r = await api<{ books: any[] }>('/books');
@@ -215,6 +206,8 @@ export default function ClubDetail() {
           <Feather name="share" size={19} color={colors.espresso} />
         </Pressable>
       </View>
+      <InviteSheet visible={inviteSheet} onClose={() => setInviteSheet(false)} kind="club" targetId={club.club_id} name={club.name}
+        link={shareUrl.club(club.code)} code={club.code} members={club.members} isOwner={!!club.is_owner} testID="club-invite" />
 
       <ScrollView ref={scrollRef} contentContainerStyle={{ padding: spacing.xl, paddingBottom: spacing.md }}>
         {!!club.description && <Text style={styles.desc}>{club.description}</Text>}

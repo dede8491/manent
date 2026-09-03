@@ -176,18 +176,8 @@ export function QuotesManager({ initialBookId }: { initialBookId?: string | null
       <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingTop: spacing.md, paddingBottom: 140 }}>
         {shown.length === 0 ? (
           <View style={{ alignItems: 'center', paddingVertical: spacing.xxl }}>
-            <Text style={styles.emptyTitle}>{quotes.length === 0 ? t('Photographie ta première citation.') : t('Rien ne correspond à ces filtres.')}</Text>
-            {quotes.length === 0 && (
-              <>
-                <Pressable testID="mq-empty-capture" onPress={() => router.push('/capture?mode=camera' as any)} style={styles.captureBtn}>
-                  <Feather name="camera" size={15} color={colors.creme} />
-                  <Text style={styles.captureBtnText}>{t('Photographier')}</Text>
-                </Pressable>
-                <Pressable testID="mq-empty-write" onPress={() => router.push('/capture?mode=write' as any)} hitSlop={8} style={{ marginTop: spacing.sm }}>
-                  <Text style={styles.writeLink}>{t('ou écris-la')}</Text>
-                </Pressable>
-              </>
-            )}
+            <Text style={styles.emptyTitle}>{quotes.length === 0 ? t('Aucune citation pour l’instant.') : t('Rien ne correspond à ces filtres.')}</Text>
+            {quotes.length === 0 && <Text style={styles.writeLink}>{t('Le « + » en haut photographie une page ou te laisse écrire un passage.')}</Text>}
           </View>
         ) : grid ? (
           <View style={{ flexDirection: 'row', gap: spacing.md }}>

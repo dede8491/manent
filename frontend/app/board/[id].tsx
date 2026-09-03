@@ -3,11 +3,13 @@ import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useFocusEffect, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
-import { fonts, radius, spacing } from '@/src/theme';
+import { fonts, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
 import { QuoteCard, Quote } from '@/src/components/QuoteCard';
 import { api } from '@/src/api';
 import { useT } from '@/src/i18n';
+import { InviteSheet } from '@/src/components/InviteSheet';
+import { shareUrl } from '@/src/share';
 
 export default function BoardDetail() {
   const t = useT();
@@ -17,6 +19,7 @@ export default function BoardDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const [board, setBoard] = useState<any>(null);
+  const [invite, setInvite] = useState(false);
 
   useFocusEffect(useCallback(() => {
     (async () => { const b = await api<any>(`/boards/${id}`); setBoard(b); })();
@@ -29,10 +32,10 @@ export default function BoardDetail() {
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
         <Pressable onPress={() => router.back()} testID="board-back" style={styles.iconBtn}><Feather name="chevron-left" size={22} color={colors.espresso} /></Pressable>
         <Text style={styles.h1} numberOfLines={1}>{board.name}</Text>
-        <View style={{ width: 40 }} />
+        <Pressable onPress={() => setInvite(true)} testID="board-share" style={styles.iconBtn}><Feather name="share" size={19} color={colors.espresso} /></Pressable>
       </View>
       <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + spacing.xxl }}>
-        <Text style={styles.meta}>{board.visibility === 'private' ? t('PRIVÉ') : board.visibility === 'public' ? t('PUBLIC') : t('COLLABORATIF')}  ·  {t('{n} épingles', { n: board.quotes?.length || 0 })}</Text>
+        <Text style={styles.meta}>{board.visibility === 'private' ? t('PRIVÉ') : board.visibility === 'public' ? t('PUBLIC') : t('COLLABORATIF')}  ·  {t('{n} épingles', { n: board.quotes?.length || 0 })}  ·  {t('{n} membres', { n: board.members_count || 1 })}</Text>
         {board.description ? <Text style={styles.desc}>{board.description}</Text> : null}
         <View style={{ height: spacing.lg }} />
         {(!board.quotes || board.quotes.length === 0) ? (
@@ -44,6 +47,20 @@ export default function BoardDetail() {
           <QuoteCard key={q.quote_id} quote={q} onPress={() => router.push({ pathname: '/quote/[id]', params: { id: q.quote_id } })} />
         ))}
       </ScrollView>
+      <InviteSheet
+        visible={invite}
+        onClose={() => setInvite(false)}
+        kind="board"
+        targetId={board.board_id}
+        name={board.name}
+        link={shareUrl.board(board.share_slug, board.invite_code)}
+        code={board.invite_code}
+        members={board.members_info}
+        isOwner={!!board.is_owner}
+        testID="board-invite"
+        onRegenerate={async () => { const r = await api<{ invite_code: string }>(`/boards/${id}/invite-code`, { method: 'POST' }); setBoard((b: any) => ({ ...b, invite_code: r.invite_code })); }}
+        onLeft={async () => { try { await api(`/boards/${id}/leave`, { method: 'POST' }); setInvite(false); router.back(); } catch {} }}
+      />
     </View>
   );
 }

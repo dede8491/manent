@@ -10,4 +10,5 @@ export const shareUrl = {
   quote: (quoteId: string) => `${BASE}/api/s/q/${quoteId}`,
   book: (catalogId: string) => `${BASE}/api/s/b/${catalogId}`,
   club: (code: string) => `${BASE}/api/s/c/${code}`,
+  board: (slug: string, code?: string) => `${BASE}/api/s/t/${slug}${code ? `?code=${code}` : ''}`,
 };

@@ -110,8 +110,8 @@ function NavGate() {
   // Chemin capturé au chargement (avant les redirections des routes alias /q → /quote)
   const initialPath = useRef<string | null>(null);
   if (initialPath.current === null) initialPath.current = INITIAL_WEB_PATH ?? pathname;
-  const gparams = useGlobalSearchParams<{ follow?: string; edit?: string }>();
-  const isDeepLink = (p: string) => /^\/(q|b|c|quote|book)\//.test(p) || p.startsWith('/@') || p.startsWith('/api/s/');
+  const gparams = useGlobalSearchParams<{ follow?: string; edit?: string; code?: string }>();
+  const isDeepLink = (p: string) => /^\/(q|b|c|t|quote|book)\//.test(p) || p.startsWith('/@') || p.startsWith('/api/s/');
   const normalizeDeepLink = (p: string) => {
     let x = p.replace(/^\/api\/s/, '');
     if (x.startsWith('/u/')) x = '/@' + x.slice(3);
@@ -129,7 +129,9 @@ function NavGate() {
         : (initialPath.current && isDeepLink(initialPath.current) ? initialPath.current : null);
       if (target) {
         initialPath.current = '';
-        const suffix = gparams?.follow === '1' || INITIAL_WEB_SEARCH.includes('follow=1') ? '?follow=1' : '';
+        const suffix = (gparams?.follow === '1' || INITIAL_WEB_SEARCH.includes('follow=1')) ? '?follow=1'
+          : (gparams?.code ? `?code=${gparams.code}`
+            : (INITIAL_WEB_SEARCH.includes('code=') ? INITIAL_WEB_SEARCH : ''));
         (async () => {
           try { await AsyncStorage.setItem('pending_deep_link', normalizeDeepLink(target) + suffix); } catch {}
           router.replace('/onboarding');
@@ -157,7 +159,7 @@ function NavGate() {
         }
       }
     }
-  }, [user, loading, segments, pathname, gparams?.follow, gparams?.edit, router]);
+  }, [user, loading, segments, pathname, gparams?.follow, gparams?.edit, gparams?.code, router]);
 
   return <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.glacier } }} />;
 }
