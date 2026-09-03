@@ -18,7 +18,7 @@ export default function ThemePage() {
   const router = useRouter();
   const { width } = useWindowDimensions();
   const { name } = useLocalSearchParams<{ name: string }>();
-  const [data, setData] = useState<{ stats: { quotes: number; readers: number; books: number }; quotes: Quote[]; suggested_books?: any[]; discover_books?: any[]; discover_total?: number } | null>(null);
+  const [data, setData] = useState<{ theme?: string; stats: { quotes: number; readers: number; books: number }; quotes: Quote[]; suggested_books?: any[]; discover_books?: any[]; discover_total?: number } | null>(null);
   const [books, setBooks] = useState<any[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -75,7 +75,7 @@ export default function ThemePage() {
       </View>
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xxl }}>
         <View style={styles.hero}>
-          <Text style={styles.title} testID="theme-title">{name}</Text>
+          <Text style={styles.title} testID="theme-title">{data?.theme || (() => { try { return decodeURIComponent(String(name || '')); } catch { return String(name || ''); } })() || t('Sujet')}</Text>
           <Text style={styles.baseline}>{t('Ce que les lecteurs en retiennent.')}</Text>
         </View>
 
