@@ -1066,4 +1066,6 @@ export const EN: Record<string, string> = {
   'Le scan du code-barres fonctionne dans l’app installée (TestFlight ou store). Dans cet aperçu web, saisis l’ISBN ci-dessous.': 'Barcode scanning works in the installed app (TestFlight or store). In this web preview, type the ISBN below.',
   'Caméra refusée : autorise Manent dans les réglages de ton téléphone, ou saisis l’ISBN.': 'Camera denied: allow Manent in your phone settings, or type the ISBN.',
   'Manent a besoin de la caméra pour lire le code-barres.': 'Manent needs the camera to read the barcode.',
+  'Aucune citation pour l’instant.': 'No quotes yet.',
+  'Le « + » en haut photographie une page ou te laisse écrire un passage.': 'The “+” at the top photographs a page or lets you write a passage.',
 };
