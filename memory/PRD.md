@@ -371,3 +371,9 @@ Testé e2e via curl (création publique, discover, join, correspondance titre in
 - Fusion Git : onglet Citations (plume au centre, plus de bouton caméra), bibliothèque livres uniquement, origines pilotées par le moteur de classification (section Auteurs admin supprimée, area/[key] = redirection), recherche « Voir toutes les œuvres liées à … », cartes « Par origine » et filtres sans émojis, scan avec messages explicites (aperçu web / permission).
 - Conflits résolus : app.config.js (iOS applinks conditionné à EXPO_PUBLIC_IOS_APPLINKS=1 — version branche, rejoint mon correctif), classification.py (version branche, inclut mes fixes d'ordre de routes + relâchement cumulatif amélioré), translations.ts (clés combinées, ETA conservée).
 - Vérifié (10/10) : barre du bas, onglet Citations + feuille +, bibliothèque, profil/fiche livre → citations filtrées, Par origine (accueil+recherche), bouton œuvres liées (Adichie), filtres sans émoji + bascule origine, admin sans Auteurs + Moteur IA, scan web explicite, 13 tests unitaires verts + tsc clean.
+
+## Fusion c3f00c7 (sept. 2026) — Partage tableaux/clubs, invitations, réactions
+- Fusion Git : feuille « Partager et inviter » (tableaux + clubs : lien /t/{slug}?code, code, invitations directes), section Invitations au profil (pastille, Rejoindre), cœurs/commentaires/épingler sur citations + notifications, page sujet avec titre, état vide Citations épuré.
+- Conflits résolus : share.py (_board_page avec base dynamique + Request), _layout.tsx (deep link fiable + suffixe ?code=), app.config.js (intentFilters conditionnels + /t).
+- Vérifié : testing agent 16/16 backend + 7 points UI verts ; compléments main agent : invitation club envoyée→pastille→accept→membre (API), admin sans Auteurs + Moteur IA (1452/1458 classés). 13 tests unitaires + tsc clean.
+- Note : test_admin@manent.app passé premium (is_premium) pour tester la création de club.
