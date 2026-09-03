@@ -1091,8 +1091,11 @@ async def create_quote(body: QuoteCreate, user=Depends(get_current_user)):
         if book and (book.get("progress_page") or 0) < body.page:
             await db.books.update_one(
                 {"book_id": body.book_id, "user_id": user["user_id"]},
-                {"$set": {"progress_page": body.page, "status": "en_cours" if book.get("status") == "a_lire" else book.get("status")}},
+                {"$set": {"progress_page": body.page, "status": "en_cours" if book.get("status") == "a_lire" else book.get("status"), "updated_at": now_utc()}},
             )
+    if body.book_id:
+        # une citation compte comme une activité de lecture : ce livre remonte dans « Reprendre ta lecture »
+        await db.books.update_one({"book_id": body.book_id, "user_id": user["user_id"]}, {"$set": {"updated_at": now_utc()}})
     return clean_doc(doc)
 
 
@@ -2703,9 +2706,10 @@ async def _cached_new_books() -> list:
 async def home_discover(user=Depends(get_current_user)):
     uid = user["user_id"]
     # Reprendre ta lecture
+    # le livre EN COURS le plus récemment touché (page avancée, citation ajoutée, statut changé), pas le plus récemment ajouté
     resume = await db.books.find_one(
         {"user_id": uid, "status": "en_cours"}, {"_id": 0},
-        sort=[("created_at", -1)],
+        sort=[("updated_at", -1), ("created_at", -1)],
     )
     # Livres primés
     awarded = await db.featured_books.find({"cover": {"$ne": None}}, {"_id": 0}).to_list(20)

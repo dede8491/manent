@@ -283,8 +283,26 @@ async def enqueue_task(catalog_id: str, kind: str):
 
 
 # ---------------------------------------------------------------- Enrichissement (fond)
+def _title_variants(title: str) -> list[str]:
+    """Variantes d'un titre pour la recherche de couverture : sans mention d'édition, sans sous-titre,
+    chaque partie d'un double titre (« Le tremblement / Lundi de la semaine dernière »)."""
+    t = re.sub(r"\s*[\(\[][^\)\]]*[\)\]]", "", title or "").strip()   # (French Edition), [Texte imprimé]
+    out = [t]
+    for sep in (" / ", "/", " : ", ": ", " — ", " - "):
+        if sep in t:
+            parts = [x.strip() for x in t.split(sep) if len(x.strip()) > 3 and x.strip().lower() not in ("roman", "poche", "tome", "nouvelles", "essai", "récit", "recit")]
+            out += parts
+            break
+    seen, res = set(), []
+    for x in out:
+        k = x.lower()
+        if x and k not in seen:
+            seen.add(k); res.append(x)
+    return res
+
+
 async def _find_cover_chain(http: httpx.AsyncClient, title: str, author: str, isbn: Optional[str]) -> Optional[str]:
-    """OL isbn → Google → OL recherche → leslibraires. https + zoom=2."""
+    """OL isbn → Google (avec puis sans auteur, chaque variante du titre) → OL recherche → leslibraires."""
     if isbn:
         u = f"https://covers.openlibrary.org/b/isbn/{isbn}-L.jpg?default=false"
         try:
@@ -293,21 +311,27 @@ async def _find_cover_chain(http: httpx.AsyncClient, title: str, author: str, is
                 return u
         except Exception:
             pass
-    try:
-        g = await _search_google(http, f"intitle:{title} inauthor:{author}".strip(), 3)
-        for b in g:
-            if b.get("cover"):
-                return clean_cover_url(b["cover"])
-    except Exception:
-        pass
-    try:
-        ol = await _search_openlibrary(http, f"{title} {author}".strip(), 3)
-        for b in ol:
-            if b.get("cover"):
-                return clean_cover_url(b["cover"])
-    except Exception:
-        pass
-    return await _libraires_cover(http, title, author or "")
+    variants = _title_variants(title)
+    for v in variants:
+        for q in ([f"intitle:{v} inauthor:{author}"] if author else []) + [f"intitle:{v}"]:
+            try:
+                for b in await _search_google(http, q, 3):
+                    if b.get("cover"):
+                        return clean_cover_url(b["cover"])
+            except Exception:
+                pass
+    for v in variants:
+        try:
+            for b in await _search_openlibrary(http, f"{v} {author}".strip(), 3):
+                if b.get("cover"):
+                    return clean_cover_url(b["cover"])
+        except Exception:
+            pass
+    for v in variants:
+        c = await _libraires_cover(http, v, author or "")
+        if c:
+            return c
+    return None
 
 
 def _looks_french(text: str) -> bool:
@@ -429,7 +453,7 @@ async def process_tasks(limit: int = 5):
                     if isinstance(last, datetime):
                         if last.tzinfo is None:
                             last = last.replace(tzinfo=timezone.utc)
-                        if book.get("cover_status") == "failed" and (now_utc() - last) < timedelta(days=7):
+                        if book.get("cover_status") == "failed" and (now_utc() - last) < timedelta(days=2):
                             await db.catalog_tasks.delete_one({"_id": t["_id"]})
                             continue
                     cover = await _find_cover_chain(http, book["title"], author, book.get("isbn13") or book.get("isbn10"))
@@ -517,6 +541,19 @@ async def _backfill_authors():
     logger.info("authors backfill: %s livres reliés", n)
 
 
+async def _retry_missing_covers():
+    """One-shot (v2 de la recherche de couvertures) : les échecs mémorisés sont oubliés et remis en file."""
+    if await db.meta.find_one({"key": "covers_retry_v2"}):
+        return
+    await db.meta.update_one({"key": "covers_retry_v2"}, {"$set": {"at": now_utc()}}, upsert=True)
+    n = 0
+    async for b in db.catalog_books.find({"$or": [{"cover": None}, {"cover": ""}]}, {"_id": 0, "catalog_id": 1}).sort("popularity", -1).limit(2000):
+        await db.catalog_books.update_one({"catalog_id": b["catalog_id"]}, {"$set": {"cover_status": "missing", "cover_checked_at": None}})
+        await enqueue_task(b["catalog_id"], "cover")
+        n += 1
+    logger.info("covers retry: %s livres remis en file", n)
+
+
 async def _backfill_continents():
     """One-shot : genre d'après les sujets connus, continents d'après les pays déjà trouvés."""
     if await db.meta.find_one({"key": "continents_backfill_v2"}):
@@ -565,6 +602,7 @@ async def init(database):
         asyncio.create_task(_backfill_authors())
         asyncio.create_task(_backfill_continents())
         asyncio.create_task(classification.backfill())
+        asyncio.create_task(_retry_missing_covers())
 
 
 def _card(b: dict) -> dict:
