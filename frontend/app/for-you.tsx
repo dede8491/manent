@@ -61,7 +61,7 @@ export default function ForYou() {
       ) : (
         <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + spacing.xxl }}>
           <Text style={styles.title}>{t('Pour toi')}</Text>
-          <Text style={styles.sub}>{t('Choisis d’après tes sujets, tes littératures, tes clubs et les lectrices que tu suis. Renouvelé chaque jour.')}</Text>
+          <Text style={styles.sub}>{t('Choisis d’après tes sujets, les origines de tes auteurs, tes clubs et les lectrices que tu suis. Renouvelé chaque jour.')}</Text>
           {books.length === 0 ? (
             <View style={{ paddingVertical: spacing.xxl, alignItems: 'center' }}>
               <Text style={styles.emptyTitle}>{t('Rien à proposer pour l’instant.')}</Text>

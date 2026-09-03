@@ -15,7 +15,7 @@ type Step = { icon: React.ComponentProps<typeof Feather>['name'] | null; title: 
 
 const STEPS: Step[] = [
   { icon: null, title: 'Bienvenue sur Manent', text: 'Lis. Retiens. Partage. Voici un tour des lieux — une minute, promis.' },
-  { icon: 'grid', title: "L'accueil", text: "Reprends ta lecture en cours, découvre « Pour toi », des livres choisis d'après tes sujets, tes littératures et les lectrices que tu suis, puis les clubs publics à rejoindre et le fil des citations." },
+  { icon: 'grid', title: "L'accueil", text: "Reprends ta lecture en cours, découvre « Pour toi », des livres choisis d'après tes sujets, les origines de tes auteurs et les lectrices que tu suis, puis les clubs publics à rejoindre et le fil des citations." },
   { icon: 'book-open', title: 'La bibliothèque', text: "Le « + » ouvre l'ajout d'une lecture par titre, ISBN ou Wattpad. Ta liste de lecture s'ordonne dans « Lecture suivante » : le prochain livre en tête, comme une file d'attente." },
   { icon: 'maximize', title: 'En librairie', text: "Un livre te plaît ? Scanne son code-barres depuis l'accueil : un seul bouton l'ajoute à ta liste de lecture, avec sa couverture et son résumé." },
   { icon: 'camera', title: 'La capture', text: "Le bouton central photographie une page : l'IA transcrit le passage. Sur l'onglet Citations, le « + » sert à écrire ou coller un passage. Depuis une citation, tu retrouves le livre et sa page." },

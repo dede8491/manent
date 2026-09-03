@@ -1048,4 +1048,10 @@ export const EN: Record<string, string> = {
   'IA — lieu de l’histoire': 'AI — story setting',
   'IA — origine de l’auteur (faible)': 'AI — author’s origin (weak)',
   'validation humaine': 'human validation',
+  'Par origine': 'By origin',
+  'Reprends ta lecture en cours, ou commence la suivante. « Pour toi » te propose des livres d\'après tes sujets, les origines de tes auteurs, tes clubs et les lectrices que tu suis : « Pas pour moi » affine les prochaines propositions. Plus bas, les origines, les clubs publics, ta citation du matin et le fil des lectrices. L\'icône de scan identifie un livre par son code-barres.': 'Resume your current read, or start the next one. “For you” suggests books based on your subjects, your authors’ origins, your clubs and the readers you follow: “Not for me” refines the next suggestions. Below, origins, public clubs, your morning quote and the readers’ feed. The scan icon identifies a book by its barcode.',
+  'Toutes les origines': 'All origins',
+  'Le pays d’un auteur fixe l’origine de tous ses livres et prime sur l’IA. Les pays inconnus ou incertains sont en tête, les auteurs les plus présents d’abord.': 'An author’s country sets the origin of all their books and overrides AI. Unknown or uncertain countries come first, most present authors first.',
+  'Choisis d’après tes sujets, les origines de tes auteurs, tes clubs et les lectrices que tu suis. Renouvelé chaque jour.': 'Picked from your subjects, your authors’ origins, your clubs and the readers you follow. Refreshed daily.',
+  'Reprends ta lecture en cours, découvre « Pour toi », des livres choisis d\'après tes sujets, les origines de tes auteurs et les lectrices que tu suis, puis les clubs publics à rejoindre et le fil des citations.': 'Resume your current read, discover “For you”, books picked from your subjects, your authors’ origins and the readers you follow, then public clubs to join and the quotes feed.',
 };

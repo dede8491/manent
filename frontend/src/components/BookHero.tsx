@@ -30,10 +30,11 @@ export function BookHero({ label, right, children, testID, onBack }: {
   );
 }
 
-// Ligne « Littérature africaine · Sénégal » sous l'auteur.
+// Ligne « Sénégal » (pays d'origine de l'auteur) sous l'auteur ; les aires littéraires ont été retirées.
 export function AreaLine({ areas, countries, style }: { areas?: string[]; countries?: string[]; style?: any }) {
   const styles = useStyles(makeStyles);
-  const parts = [...(areas || []).slice(0, 1), ...(countries || []).slice(0, 2)].filter(Boolean);
+  void areas;
+  const parts = (countries || []).slice(0, 2).filter(Boolean);
   if (!parts.length) return null;
   return <Text style={[styles.areaLine, style]} numberOfLines={1} testID="book-area-line">{parts.join('  ·  ')}</Text>;
 }

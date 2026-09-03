@@ -167,7 +167,7 @@ export default function Home() {
           <InfoTooltip
             testID="info-home"
             title={t('Comment ça marche')}
-            text={t("Reprends ta lecture en cours, ou commence la suivante. « Pour toi » te propose des livres d'après tes sujets, tes littératures, tes clubs et les lectrices que tu suis : « Pas pour moi » affine les prochaines propositions. Plus bas, les littératures, les clubs publics, ta citation du matin et le fil des lectrices. L'icône de scan identifie un livre par son code-barres.")}
+            text={t("Reprends ta lecture en cours, ou commence la suivante. « Pour toi » te propose des livres d'après tes sujets, les origines de tes auteurs, tes clubs et les lectrices que tu suis : « Pas pour moi » affine les prochaines propositions. Plus bas, les origines, les clubs publics, ta citation du matin et le fil des lectrices. L'icône de scan identifie un livre par son code-barres.")}
           />
         </View>
         <View style={[styles.searchRow, { flexDirection: 'row', gap: 8, alignItems: 'center' }]}>
@@ -222,10 +222,10 @@ export default function Home() {
       >
         {areas.length > 0 && (
           <View style={{ marginBottom: spacing.lg }} testID="home-areas">
-            <Text style={styles.areasLabel}>{t('Littératures')}</Text>
+            <Text style={styles.areasLabel}>{t('Par origine')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>
               {areas.map((a: any) => (
-                <AreaCard key={a.key} testID={`area-card-${a.key}`} label={a.label} count={a.count} onPress={() => router.push({ pathname: '/area/[key]', params: { key: a.key } })} />
+                <AreaCard key={a.key} testID={`area-card-${a.key}`} label={`${a.emoji ? a.emoji + ' ' : ''}${a.label}`} count={a.count} onPress={() => router.push({ pathname: '/browse', params: { f: JSON.stringify({ continent: [a.key] }), title: a.label } })} />
               ))}
             </ScrollView>
           </View>

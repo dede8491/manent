@@ -677,21 +677,31 @@ async def subject_books(subject: str, area: Optional[str] = None, genre: Optiona
 
 @router.get("/areas")
 async def list_areas():
-    """Littératures : les continents d'abord (filtre large), puis les aires francophones fines."""
+    """Origines : les continents, d'après l'origine des auteurs telle que classée par le moteur (f_continents)."""
+    import taxonomy as tx
     out = []
-    for c in CONTINENTS:
-        count = await db.catalog_books.count_documents({"continents": c["key"]})
+    for c in tx.GEO:
+        if c["key"] == "international":
+            continue
+        count = await db.catalog_books.count_documents({"f_continents": c["key"]})
         if count > 0:
-            out.append({"key": c["key"], "label": c["label"], "count": count, "level": "continent"})
-    for a in AREAS:
-        count = await db.catalog_books.count_documents({"areas": a["key"]})
-        if count > 0:
-            out.append({**a, "count": count, "level": "area"})
+            out.append({"key": c["key"], "label": c["label"], "emoji": c.get("emoji"), "count": count, "level": "continent"})
     return {"areas": out}
 
 
 def _area_filter(key: str) -> dict:
-    return {"continents": key} if key.startswith("c-") else {"areas": key}
+    """Clé d'origine → filtre : continent (clé taxonomie ou ancien `c-…`), pays ISO2, ou ancienne aire."""
+    import taxonomy as tx
+    k = (key or "").strip()
+    if k.startswith("c-"):
+        k = k[2:]
+    if k in tx.CONTINENT_LABEL:
+        return {"f_continents": k}
+    if k in tx.REGION_LABEL:
+        return {"f_regions": k}
+    if re.fullmatch(r"[A-Za-z]{2}", k) and k.upper() in tx.COUNTRY_FR:
+        return {"f_countries": k.upper()}
+    return {"areas": k}
 
 
 @router.get("/areas/{area}")
@@ -716,7 +726,9 @@ async def area_books(area: str, subject: Optional[str] = None, country: Optional
     pipec = [{"$match": _area_filter(area)}, {"$unwind": "$countries"},
              {"$group": {"_id": "$countries", "n": {"$sum": 1}}}, {"$sort": {"n": -1}}, {"$limit": 14}]
     cn = await db.catalog_books.aggregate(pipec).to_list(14)
-    label = next((a["label"] for a in AREAS + CONTINENTS if a["key"] == area), area)
+    import taxonomy as tx
+    label = tx.CONTINENT_LABEL.get(area[2:] if area.startswith("c-") else area) or tx.REGION_LABEL.get(area) \
+        or tx.COUNTRY_FR.get(area.upper()) or next((a["label"] for a in AREAS + CONTINENTS if a["key"] == area), area)
     return {"label": label, "books": [_card(b) for b in docs], "top_subjects": [x["_id"] for x in tops],
             "countries": [{"code": x["_id"], "label": COUNTRY_FR.get(x["_id"], x["_id"]), "count": x["n"]} for x in cn],
             "total": total, "page": page, "size": size}
@@ -790,17 +802,19 @@ async def admin_authors(q: str = "", page: int = 1, size: int = 30):
     flt: dict = {}
     if q.strip():
         flt["norm_name"] = {"$regex": re.escape(_norm_name(q))}
+    # bruit : pseudos (@…), sigles, noms d'un seul caractère — pas des auteurs
+    flt["name"] = {"$not": {"$regex": r"^(@|[A-Z0-9.&-]{1,4}$|.$)"}}
     total = await db.catalog_authors.count_documents(flt)
     pipe = [{"$match": flt},
-            {"$addFields": {"rank": {"$switch": {"branches": [
+            {"$lookup": {"from": "catalog_books", "localField": "author_id", "foreignField": "author_ids", "as": "_b", "pipeline": [{"$project": {"_id": 1}}]}},
+            {"$addFields": {"book_count": {"$size": "$_b"}, "rank": {"$switch": {"branches": [
                 {"case": {"$not": ["$country"]}, "then": 0},
                 {"case": {"$eq": ["$origin_confidence", "low"]}, "then": 1}], "default": 2}}}},
-            {"$sort": {"rank": 1, "name": 1}}, {"$skip": skip}, {"$limit": size},
-            {"$project": {"_id": 0, "rank": 0}}]
+            {"$sort": {"rank": 1, "book_count": -1, "name": 1}}, {"$skip": skip}, {"$limit": size},
+            {"$project": {"_id": 0, "rank": 0, "_b": 0}}]
     rows = await db.catalog_authors.aggregate(pipe).to_list(size)
     for r in rows:
         r["country_label"] = COUNTRY_FR.get(r.get("country"), r.get("country"))
-        r["book_count"] = await db.catalog_books.count_documents({"author_ids": r["author_id"]})
     return {"authors": rows, "total": total, "page": page, "size": size}
 
 
