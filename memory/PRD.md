@@ -354,3 +354,11 @@ Testé e2e via curl (création publique, discover, join, correspondance titre in
 - Déploiement : /health ajouté, DB_NAME/AUTH_SESSION_URL depuis env, httpx+bs4 dans requirements, .gitignore corrigé, Supabase → Emergent Object Storage (upload + /api/files publics), _attach_public_meta batché. Health check: PASS (warns: plist push iOS, URL politique de confidentialité).
 - Domaine : rattachement custom non supporté pour déploiements mobiles (réponse support) ; PUBLIC_BASE_URL vidé, URLs dérivées dynamiquement.
 - Fusion branche claude/sillage-mobile-app-4hvnle : BottomSheet/BookHero/AreaCard/ClubCard partagés, liste de lecture (queue + réordonnancement), écran Lecture suivante, Pour toi (moteur + worker), Recommandations entre lectrices (+badge), Partager ma bibliothèque, pages publiques profil (Suivre) et bibliothèque, refonte onboarding/accueil/bibliothèque/fiches. Conflits résolus : share.py (fusion base dynamique + extra/open_label), _layout.tsx (deep link fiable + follow=1). Fix post-fusion : /readers/contacts déclaré avant /readers/{handle}.
+
+## Fusion 3e0c3e3 — Moteur IA de classification (sept. 2026)
+- Fusion Git de claude/sillage-mobile-app-4hvnle (4 commits) : taxonomy.py, ai_provider.py, routes/classification.py, filters.tsx, browse.tsx, intent.tsx, Classification*.tsx + notation, visite guidée, pages légales, genres Babelio.
+- Conflit unique (_layout.tsx) : deep link fiable conservé + paramètre edit=1 de la branche.
+- Corrections post-fusion (ordre des routes FastAPI, statique avant dynamique) : /classification/review et /classification/settings interceptés par /classification/{catalog_id}.
+- Amélioration : relâchement cumulatif des filtres dans /catalog/intent (0 résultat → progressif en gardant thèmes/émotions).
+- Vérifié : backfill 1457 livres en file, 13 tests unitaires verts, stats admin (classés ↑, erreurs 0, quota ↑), filtres cumulables + bascule auteur/histoire, intention (chips+résultats stables), corrections manuelles conservées après reclassification, taxonomie extensible (theme « exil »), quota modifiable (300→250).
+- Comptes : test_admin@manent.app / Admin1234! (admin).

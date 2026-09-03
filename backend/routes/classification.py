@@ -854,16 +854,17 @@ async def intent_search(body: IntentBody):
     if flt:
         total = await db.catalog_books.count_documents(flt)
         docs = await db.catalog_books.find(flt, {"_id": 0}).sort(SORTS["pertinence"]).limit(20).to_list(20)
-        # trop peu de résultats : relâchement progressif (on garde thèmes/émotions en priorité)
+        # trop peu de résultats : relâchement progressif et cumulatif (on garde thèmes/émotions en priorité)
         if total < 3 and len(sel) > 1:
             for drop in ("lang", "audience", "story_country", "story_continent", "country", "continent", "region", "genre", "type", "domain", "mood", "emotion"):
                 if drop in sel and len(sel) > 1:
                     relaxed = {k: v for k, v in sel.items() if k != drop}
                     f2 = build_filter(relaxed)
                     t2 = await db.catalog_books.count_documents(f2)
-                    if t2 >= 3:
+                    if t2 > total:
                         sel, flt, total = relaxed, f2, t2
                         docs = await db.catalog_books.find(f2, {"_id": 0}).sort(SORTS["pertinence"]).limit(20).to_list(20)
+                    if total >= 3:
                         break
     return {"filters": sel, "chips": selected_chips(sel), "interpretation": parsed["interpretation"], "source": parsed["source"],
             "search_mode": "semantic", "results": [_card(b) for b in docs], "total": total}
@@ -894,6 +895,49 @@ def _admin_view(b: dict) -> dict:
     from routes.catalog import _card
     return {**_card(b), "classification": b.get("classification") or {}, "overrides": b.get("overrides") or {"add": [], "remove": []},
             "raw_subjects": b.get("raw_subjects") or [], "lines": lines(b), "thresholds": {"strong": S()["strong"], "proposed": S()["proposed"]}}
+
+
+class SettingsBody(BaseModel):
+    strong: Optional[float] = Field(default=None, ge=0.5, le=1.0)
+    proposed: Optional[float] = Field(default=None, ge=0.3, le=1.0)
+    ai_enabled: Optional[bool] = None
+    daily_limit: Optional[int] = Field(default=None, ge=0, le=100000)
+    weights: Optional[dict[str, float]] = None
+
+
+@admin_router.get("/classification/settings")
+async def admin_get_settings():
+    return {"settings": S(), "defaults": DEFAULT_SETTINGS, "engine_version": ENGINE_VERSION, "prompt_version": PROMPT_VERSION}
+
+
+@admin_router.patch("/classification/settings")
+async def admin_patch_settings(body: SettingsBody):
+    doc = await db.meta.find_one({"key": "classification_settings"}, {"_id": 0, "values": 1})
+    vals = dict((doc or {}).get("values") or {})
+    for k in ("strong", "proposed", "ai_enabled", "daily_limit"):
+        v = getattr(body, k)
+        if v is not None:
+            vals[k] = v
+    for k, v in (body.weights or {}).items():
+        if k in DEFAULT_SETTINGS and k.startswith("w_"):
+            vals[k] = float(min(max(v, 0.0), 1.0))
+    if vals.get("proposed", DEFAULT_SETTINGS["proposed"]) > vals.get("strong", DEFAULT_SETTINGS["strong"]):
+        raise HTTPException(status_code=422, detail="proposed_above_strong")
+    await db.meta.update_one({"key": "classification_settings"}, {"$set": {"values": vals, "at": now_utc()}}, upsert=True)
+    await load_settings()
+    return {"settings": S()}
+
+
+@admin_router.get("/classification/review")
+async def admin_review_list(page: int = 1, size: int = 20):
+    """Livres à vérifier : conflits ou faible confiance, les plus populaires d'abord."""
+    from routes.catalog import _card
+    size = min(max(size, 1), 50)
+    flt = {"classification.needs_review": True}
+    total = await db.catalog_books.count_documents(flt)
+    docs = await db.catalog_books.find(flt, {"_id": 0}).sort("popularity", -1).skip((max(page, 1) - 1) * size).limit(size).to_list(size)
+    return {"books": [_card(b) | {"conflicts": (b.get("classification") or {}).get("conflicts", []), "score": (b.get("classification") or {}).get("score")} for b in docs],
+            "total": total, "page": page, "size": size}
 
 
 @admin_router.get("/classification/{catalog_id}")
@@ -1009,49 +1053,6 @@ async def admin_classification_stats():
             "runs": {"n": (logs[0]["n"] if logs else 0), "avg_ms": int((logs[0]["avg_ms"] or 0) if logs else 0)},
             "top_themes": top_themes, "top_types": top_types, "top_countries": top_countries,
             "corrections": corrections, "frequent_errors": frequent_errors, "thresholds": {"strong": s["strong"], "proposed": s["proposed"]}}
-
-
-@admin_router.get("/classification/review")
-async def admin_review_list(page: int = 1, size: int = 20):
-    """Livres à vérifier : conflits ou faible confiance, les plus populaires d'abord."""
-    from routes.catalog import _card
-    size = min(max(size, 1), 50)
-    flt = {"classification.needs_review": True}
-    total = await db.catalog_books.count_documents(flt)
-    docs = await db.catalog_books.find(flt, {"_id": 0}).sort("popularity", -1).skip((max(page, 1) - 1) * size).limit(size).to_list(size)
-    return {"books": [_card(b) | {"conflicts": (b.get("classification") or {}).get("conflicts", []), "score": (b.get("classification") or {}).get("score")} for b in docs],
-            "total": total, "page": page, "size": size}
-
-
-class SettingsBody(BaseModel):
-    strong: Optional[float] = Field(default=None, ge=0.5, le=1.0)
-    proposed: Optional[float] = Field(default=None, ge=0.3, le=1.0)
-    ai_enabled: Optional[bool] = None
-    daily_limit: Optional[int] = Field(default=None, ge=0, le=100000)
-    weights: Optional[dict[str, float]] = None
-
-
-@admin_router.get("/classification/settings")
-async def admin_get_settings():
-    return {"settings": S(), "defaults": DEFAULT_SETTINGS, "engine_version": ENGINE_VERSION, "prompt_version": PROMPT_VERSION}
-
-
-@admin_router.patch("/classification/settings")
-async def admin_patch_settings(body: SettingsBody):
-    doc = await db.meta.find_one({"key": "classification_settings"}, {"_id": 0, "values": 1})
-    vals = dict((doc or {}).get("values") or {})
-    for k in ("strong", "proposed", "ai_enabled", "daily_limit"):
-        v = getattr(body, k)
-        if v is not None:
-            vals[k] = v
-    for k, v in (body.weights or {}).items():
-        if k in DEFAULT_SETTINGS and k.startswith("w_"):
-            vals[k] = float(min(max(v, 0.0), 1.0))
-    if vals.get("proposed", DEFAULT_SETTINGS["proposed"]) > vals.get("strong", DEFAULT_SETTINGS["strong"]):
-        raise HTTPException(status_code=422, detail="proposed_above_strong")
-    await db.meta.update_one({"key": "classification_settings"}, {"$set": {"values": vals, "at": now_utc()}}, upsert=True)
-    await load_settings()
-    return {"settings": S()}
 
 
 class TaxonomyEntry(BaseModel):
