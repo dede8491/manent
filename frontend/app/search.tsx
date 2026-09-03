@@ -313,9 +313,9 @@ export default function SearchScreen() {
                     </Pressable>
                   )}
                   {q.trim().length >= 2 && (
-                    <Pressable testID="open-subject-page" onPress={() => router.push({ pathname: '/theme/[name]', params: { name: q.trim().toLowerCase() } })} style={[styles.moreBtn, { marginTop: spacing.sm }]}>
-                      <Feather name="hash" size={13} color={colors.chambray} />
-                      <Text style={styles.moreBtnText}>{t('Ouvrir le sujet « {s} »', { s: q.trim().toLowerCase() })}</Text>
+                    <Pressable testID="open-all-results" onPress={() => router.push({ pathname: '/browse', params: { q: q.trim(), title: q.trim() } })} style={[styles.moreBtn, { marginTop: spacing.sm }]}>
+                      <Feather name="arrow-right" size={13} color={colors.chambray} />
+                      <Text style={styles.moreBtnText}>{t('Voir toutes les œuvres liées à « {s} »', { s: q.trim() })}</Text>
                     </Pressable>
                   )}
                 </>

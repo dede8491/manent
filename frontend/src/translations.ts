@@ -1062,4 +1062,5 @@ export const EN: Record<string, string> = {
   'Le « + » ajoute une lecture par titre, ISBN ou Wattpad. Tes livres se rangent en trois étapes : Liste de lecture, En cours, Terminés. La liste de lecture s\'ordonne dans « Lecture suivante », le prochain livre en tête. Tes citations ont leur propre onglet, la plume en bas.': 'The “+” adds a read by title, ISBN or Wattpad. Your books sort into three stages: Reading list, In progress, Finished. The reading list is ordered in “Next read”, the next book first. Your quotes have their own tab, the feather at the bottom.',
   'L\'onglet plume rassemble tes citations. Son « + » photographie une page (l\'IA transcrit le passage) ou te laisse écrire. Depuis une citation, tu retrouves le livre et sa page.': 'The feather tab gathers your quotes. Its “+” photographs a page (AI transcribes the passage) or lets you write. From a quote, you find the book and its page.',
   'Les citations': 'Quotes',
+  'Voir toutes les œuvres liées à « {s} »': 'See every work linked to “{s}”',
 };
