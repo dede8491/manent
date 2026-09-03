@@ -362,3 +362,7 @@ Testé e2e via curl (création publique, discover, join, correspondance titre in
 - Amélioration : relâchement cumulatif des filtres dans /catalog/intent (0 résultat → progressif en gardant thèmes/émotions).
 - Vérifié : backfill 1457 livres en file, 13 tests unitaires verts, stats admin (classés ↑, erreurs 0, quota ↑), filtres cumulables + bascule auteur/histoire, intention (chips+résultats stables), corrections manuelles conservées après reclassification, taxonomie extensible (theme « exil »), quota modifiable (300→250).
 - Comptes : test_admin@manent.app / Admin1234! (admin).
+
+## Correctif build iOS + estimation backfill (sept. 2026)
+- Build iOS App Store : retrait de ios.associatedDomains dans app.config.js (le profil de provisionnement Emergent n'inclut pas l'entitlement Associated Domains → ARCHIVE FAILED). Partage inchangé via /api/s/* + scheme manent://. Intent filters Android conservés.
+- Admin Moteur IA : ligne « Temps restant estimé » (testID admin-ia-eta) calculée depuis unclassified / quota_limit / quota_used (fin aujourd'hui, ≈ N jours, ou terminé).

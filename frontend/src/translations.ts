@@ -1048,4 +1048,7 @@ export const EN: Record<string, string> = {
   'IA — lieu de l’histoire': 'AI — story setting',
   'IA — origine de l’auteur (faible)': 'AI — author’s origin (weak)',
   'validation humaine': 'human validation',
+  'Classification terminée : tout le catalogue est classé.': 'Classification complete: the whole catalog is classified.',
+  'Temps restant estimé : fin aujourd’hui ({n} livres, quota restant {q}).': 'Estimated time left: done today ({n} books, {q} quota remaining).',
+  'Temps restant estimé : ≈ {d} jours pour {n} livres (quota {l}/jour, {q} restants aujourd’hui).': 'Estimated time left: ≈ {d} days for {n} books ({l}/day quota, {q} left today).',
 };
