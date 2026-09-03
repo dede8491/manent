@@ -366,3 +366,8 @@ Testé e2e via curl (création publique, discover, join, correspondance titre in
 ## Correctif build iOS + estimation backfill (sept. 2026)
 - Build iOS App Store : retrait de ios.associatedDomains dans app.config.js (le profil de provisionnement Emergent n'inclut pas l'entitlement Associated Domains → ARCHIVE FAILED). Partage inchangé via /api/s/* + scheme manent://. Intent filters Android conservés.
 - Admin Moteur IA : ligne « Temps restant estimé » (testID admin-ia-eta) calculée depuis unclassified / quota_limit / quota_used (fin aujourd'hui, ≈ N jours, ou terminé).
+
+## Fusion e334fcc (sept. 2026) — Onglet Citations + origines automatiques
+- Fusion Git : onglet Citations (plume au centre, plus de bouton caméra), bibliothèque livres uniquement, origines pilotées par le moteur de classification (section Auteurs admin supprimée, area/[key] = redirection), recherche « Voir toutes les œuvres liées à … », cartes « Par origine » et filtres sans émojis, scan avec messages explicites (aperçu web / permission).
+- Conflits résolus : app.config.js (iOS applinks conditionné à EXPO_PUBLIC_IOS_APPLINKS=1 — version branche, rejoint mon correctif), classification.py (version branche, inclut mes fixes d'ordre de routes + relâchement cumulatif amélioré), translations.ts (clés combinées, ETA conservée).
+- Vérifié (10/10) : barre du bas, onglet Citations + feuille +, bibliothèque, profil/fiche livre → citations filtrées, Par origine (accueil+recherche), bouton œuvres liées (Adichie), filtres sans émoji + bascule origine, admin sans Auteurs + Moteur IA, scan web explicite, 13 tests unitaires verts + tsc clean.
