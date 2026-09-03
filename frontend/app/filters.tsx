@@ -57,11 +57,11 @@ export default function FiltersScreen() {
   };
 
   // Chip sans état : peut être définie ici sans risque (aucun focus à conserver).
-  const Chip =({ dim, k, label, emoji }: { dim: string; k: string; label: string; emoji?: string }) => {
+  const Chip = ({ dim, k, label }: { dim: string; k: string; label: string }) => {
     const on = has(dim, k);
     return (
       <Pressable key={`${dim}:${k}`} testID={`filter-${dim}-${k}`} onPress={() => toggle(dim, k)} style={[styles.chip, on && styles.chipOn]}>
-        <Text style={[styles.chipText, on && styles.chipTextOn]} numberOfLines={1}>{emoji ? `${emoji} ` : ''}{label}</Text>
+        <Text style={[styles.chipText, on && styles.chipTextOn]} numberOfLines={1}>{label}</Text>
       </Pressable>
     );
   };
@@ -99,7 +99,7 @@ export default function FiltersScreen() {
         <ScrollView contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: 140 }} keyboardShouldPersistTaps="handled">
           <Text style={styles.intro}>{t('Combine autant de filtres que tu veux : un livre peut être africain, un roman, sur le deuil et réconfortant à la fois.')}</Text>
 
-          <Section k="geo" open={!!open.geo} onFlip={flip} title={t('Origine')} emoji="🌍" hint={geoCount}>
+          <Section k="geo" open={!!open.geo} onFlip={flip} title={t('Origine')} hint={geoCount}>
             <View style={styles.segment}>
               {(['author', 'story'] as const).map(m => (
                 <Pressable key={m} testID={`filters-geo-${m}`} onPress={() => setGeoMode(m)} style={[styles.segBtn, geoMode === m && styles.segBtnOn]}>
@@ -109,7 +109,7 @@ export default function FiltersScreen() {
             </View>
             <Text style={styles.hint}>{geoMode === 'author' ? t('D’où vient l’auteur ou l’autrice.') : t('Où se déroule le livre — un auteur français peut situer son roman au Sénégal.')}</Text>
             <View style={styles.wrap}>
-              {tax.geo.map(c => <Chip key={c.key} dim={`${gp}continent`} k={c.key} label={c.label} emoji={c.emoji} />)}
+              {tax.geo.map(c => <Chip key={c.key} dim={`${gp}continent`} k={c.key} label={c.label} />)}
             </View>
             {regions.length > 0 && (
               <>
@@ -126,9 +126,9 @@ export default function FiltersScreen() {
             {regions.length === 0 && <Text style={styles.hint}>{t('Choisis un continent pour affiner par région, puis par pays.')}</Text>}
           </Section>
 
-          <Section k="type" open={!!open.type} onFlip={flip} title={t('Type de livre')} emoji="📖" hint={(sel.type?.length || 0) + (sel.genre?.length || 0)}>
+          <Section k="type" open={!!open.type} onFlip={flip} title={t('Type de livre')} hint={(sel.type?.length || 0) + (sel.genre?.length || 0)}>
             <View style={styles.wrap}>
-              {tax.types.map(f => <Chip key={f.key} dim="type" k={f.key} label={f.label} emoji={f.emoji} />)}
+              {tax.types.map(f => <Chip key={f.key} dim="type" k={f.key} label={f.label} />)}
             </View>
             {selFamilies.map(f => (
               <View key={f.key}>
@@ -144,16 +144,16 @@ export default function FiltersScreen() {
             ))}
           </Section>
 
-          <Section k="domain" open={!!open.domain} onFlip={flip} title={t('Domaines')} emoji="🧭" hint={sel.domain?.length}>
+          <Section k="domain" open={!!open.domain} onFlip={flip} title={t('Domaines')} hint={sel.domain?.length}>
             {tax.domains.map(g => (
               <View key={g.key}>
-                <Text style={styles.subLabel}>{g.emoji} {g.label}</Text>
+                <Text style={styles.subLabel}>{g.label}</Text>
                 <View style={styles.wrap}>{g.items.map(i => <Chip key={i.key} dim="domain" k={i.key} label={i.label} />)}</View>
               </View>
             ))}
           </Section>
 
-          <Section k="theme" open={!!open.theme} onFlip={flip} title={t('Thèmes')} emoji="🧵" hint={sel.theme?.length}>
+          <Section k="theme" open={!!open.theme} onFlip={flip} title={t('Thèmes')} hint={sel.theme?.length}>
             <View style={styles.searchBox}>
               <Feather name="search" size={15} color={colors.clay} />
               <TextInput testID="filters-theme-search" value={themeQuery} onChangeText={setThemeQuery} placeholder={t('Chercher un thème (deuil, rupture, foi…)')} placeholderTextColor={colors.clay} style={styles.searchInput} />
@@ -164,7 +164,7 @@ export default function FiltersScreen() {
             {!themeQuery.trim() && (
               <>
                 <Text style={styles.subLabel}>{t('Thèmes populaires')}</Text>
-                <View style={styles.wrap}>{tax.popular_themes.map(i => <Chip key={i.key} dim="theme" k={i.key} label={i.label} emoji={i.emoji} />)}</View>
+                <View style={styles.wrap}>{tax.popular_themes.map(i => <Chip key={i.key} dim="theme" k={i.key} label={i.label} />)}</View>
                 {!allThemes ? (
                   <Pressable testID="filters-all-themes" onPress={() => setAllThemes(true)} style={styles.linkBtn}>
                     <Text style={styles.linkText}>{t('Voir tous les thèmes')}</Text>
@@ -172,7 +172,7 @@ export default function FiltersScreen() {
                   </Pressable>
                 ) : tax.themes.map(g => (
                   <View key={g.key}>
-                    <Text style={styles.subLabel}>{g.emoji} {g.label}</Text>
+                    <Text style={styles.subLabel}>{g.label}</Text>
                     <View style={styles.wrap}>{g.items.map(i => <Chip key={i.key} dim="theme" k={i.key} label={i.label} />)}</View>
                   </View>
                 ))}
@@ -180,17 +180,17 @@ export default function FiltersScreen() {
             )}
           </Section>
 
-          <Section k="emotion" open={!!open.emotion} onFlip={flip} title={t('Émotions')} emoji="💫" hint={sel.emotion?.length}>
+          <Section k="emotion" open={!!open.emotion} onFlip={flip} title={t('Émotions')} hint={sel.emotion?.length}>
             <Text style={styles.hint}>{t('Ce que le livre te fait ressentir.')}</Text>
-            <View style={styles.wrap}>{tax.emotions.map(e => <Chip key={e.key} dim="emotion" k={e.key} label={e.label} emoji={e.emoji} />)}</View>
+            <View style={styles.wrap}>{tax.emotions.map(e => <Chip key={e.key} dim="emotion" k={e.key} label={e.label} />)}</View>
           </Section>
 
-          <Section k="mood" open={!!open.mood} onFlip={flip} title={t('Ambiance')} emoji="🌙" hint={sel.mood?.length}>
+          <Section k="mood" open={!!open.mood} onFlip={flip} title={t('Ambiance')} hint={sel.mood?.length}>
             <Text style={styles.hint}>{t('Le ton du livre.')}</Text>
-            <View style={styles.wrap}>{tax.moods.map(m => <Chip key={m.key} dim="mood" k={m.key} label={m.label} emoji={m.emoji} />)}</View>
+            <View style={styles.wrap}>{tax.moods.map(m => <Chip key={m.key} dim="mood" k={m.key} label={m.label} />)}</View>
           </Section>
 
-          <Section k="audience" open={!!open.audience} onFlip={flip} title={t('Public')} emoji="👥" hint={sel.audience?.length}>
+          <Section k="audience" open={!!open.audience} onFlip={flip} title={t('Public')} hint={sel.audience?.length}>
             <View style={styles.wrap}>{tax.audiences.map(a => <Chip key={a.key} dim="audience" k={a.key} label={a.label} />)}</View>
             {(tax.levels || []).length > 0 && (
               <>
@@ -200,7 +200,7 @@ export default function FiltersScreen() {
             )}
           </Section>
 
-          <Section k="lang" open={!!open.lang} onFlip={flip} title={t('Langue')} emoji="🗣️" hint={sel.lang?.length}>
+          <Section k="lang" open={!!open.lang} onFlip={flip} title={t('Langue')} hint={sel.lang?.length}>
             <View style={styles.wrap}>{tax.languages.map(l => <Chip key={l.key} dim="lang" k={l.key} label={l.label} />)}</View>
           </Section>
         </ScrollView>
@@ -229,13 +229,13 @@ export default function FiltersScreen() {
 
 // Section repliable, définie hors de l'écran pour garder une identité stable (le champ de
 // recherche des thèmes conserve le focus pendant la saisie).
-function Section({ k, title, emoji, children, hint, open, onFlip }: { k: string; title: string; emoji: string; children: React.ReactNode; hint?: number; open: boolean; onFlip: (k: string) => void }) {
+function Section({ k, title, children, hint, open, onFlip }: { k: string; title: string; children: React.ReactNode; hint?: number; open: boolean; onFlip: (k: string) => void }) {
   const colors = useColors();
   const styles = useStyles(makeStyles);
   return (
     <View style={styles.section}>
       <Pressable testID={`filters-section-${k}`} onPress={() => onFlip(k)} style={styles.sectionHead}>
-        <Text style={styles.sectionTitle}>{emoji}  {title}</Text>
+        <Text style={styles.sectionTitle}>{title}</Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           {!!hint && <View style={styles.countPill}><Text style={styles.countText}>{hint}</Text></View>}
           <Feather name={open ? 'chevron-up' : 'chevron-down'} size={18} color={colors.clay} />

@@ -221,7 +221,7 @@ export default function SearchScreen() {
             <Text style={styles.filterLabel}>{t('Par origine')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipScroll}>
               {areas.map((a: any) => (
-                <AreaCard key={a.key} testID={`search-area-${a.key}`} label={`${a.emoji ? a.emoji + ' ' : ''}${a.label}`} count={a.count} onPress={() => router.push({ pathname: '/browse', params: { f: JSON.stringify({ continent: [a.key] }), title: a.label } })} />
+                <AreaCard key={a.key} testID={`search-area-${a.key}`} label={a.label} count={a.count} onPress={() => router.push({ pathname: '/browse', params: { f: JSON.stringify({ continent: [a.key] }), title: a.label } })} />
               ))}
             </ScrollView>
           </>

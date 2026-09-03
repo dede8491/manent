@@ -225,7 +225,7 @@ export default function Home() {
             <Text style={styles.areasLabel}>{t('Par origine')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>
               {areas.map((a: any) => (
-                <AreaCard key={a.key} testID={`area-card-${a.key}`} label={`${a.emoji ? a.emoji + ' ' : ''}${a.label}`} count={a.count} onPress={() => router.push({ pathname: '/browse', params: { f: JSON.stringify({ continent: [a.key] }), title: a.label } })} />
+                <AreaCard key={a.key} testID={`area-card-${a.key}`} label={a.label} count={a.count} onPress={() => router.push({ pathname: '/browse', params: { f: JSON.stringify({ continent: [a.key] }), title: a.label } })} />
               ))}
             </ScrollView>
           </View>
