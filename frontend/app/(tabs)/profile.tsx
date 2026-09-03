@@ -202,7 +202,6 @@ export default function Profile() {
       </View>
 
       <View style={{ paddingHorizontal: spacing.xl, gap: spacing.sm, marginTop: spacing.lg }}>
-        <Pressable testID="row-quotes" onPress={() => router.push('/quotes')} style={styles.row}><Feather name="feather" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Mes citations')}</Text></Pressable>
         <Pressable testID="row-recommendations" onPress={() => router.push('/recommendations')} style={styles.row}>
           <Feather name="gift" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Recommandations')}</Text>
           {recoBadge > 0 && <View style={styles.badgeDot} testID="reco-badge"><Text style={styles.badgeDotText}>{recoBadge > 99 ? '99+' : recoBadge}</Text></View>}

@@ -7,7 +7,6 @@ import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
 import { api } from '@/src/api';
 import ManentLoader from '@/src/components/ManentLoader';
-import { AuthorAdmin } from '@/src/components/AuthorAdmin';
 import { ClassificationAdmin } from '@/src/components/ClassificationAdmin';
 import { ClassificationDashboard } from '@/src/components/ClassificationDashboard';
 import { timeAgo } from '@/src/timeago';
@@ -70,12 +69,11 @@ export default function AdminDashboard() {
             ))}
           </View>
 
-          {badge && (badge.reports > 0 || badge.authors > 0) && (
+          {badge && badge.reports > 0 && (
             <View style={styles.todoBox} testID="admin-todo">
               <Feather name="bell" size={14} color={colors.chambray} />
               <Text style={styles.todoText}>
-                {[badge.reports > 0 ? t(badge.reports > 1 ? '{n} signalements' : '{n} signalement', { n: badge.reports }) : null,
-                  badge.authors > 0 ? t(badge.authors > 1 ? '{n} auteurs à vérifier' : '{n} auteur à vérifier', { n: badge.authors }) : null].filter(Boolean).join('  ·  ')}
+                {t(badge.reports > 1 ? '{n} signalements' : '{n} signalement', { n: badge.reports })}
               </Text>
             </View>
           )}
@@ -103,7 +101,6 @@ export default function AdminDashboard() {
               </View>
             </View>
           ))}
-          <AuthorAdmin />
           <ClassificationDashboard onOpenBook={setOpenBook} />
           <ClassificationAdmin openId={openBook} onOpened={() => setOpenBook(null)} />
         </ScrollView>

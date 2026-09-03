@@ -145,11 +145,11 @@ export default function ThemePage() {
             {areas.length > 0 && (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: spacing.xl, marginBottom: spacing.md }}>
                 <Pressable testID="area-filter-all" onPress={() => setAreaFilter(null)} style={[styles.areaChip, !areaFilter && styles.areaChipActive]}>
-                  <Text style={[styles.areaChipText, !areaFilter && styles.areaChipTextActive]}>{t('Toutes les littératures')}</Text>
+                  <Text style={[styles.areaChipText, !areaFilter && styles.areaChipTextActive]}>{t('Toutes les origines')}</Text>
                 </Pressable>
                 {areas.map((a: any) => (
                   <Pressable key={a.key} testID={`area-filter-${a.key}`} onPress={() => setAreaFilter(areaFilter === a.key ? null : a.key)} style={[styles.areaChip, areaFilter === a.key && styles.areaChipActive]}>
-                    <Text style={[styles.areaChipText, areaFilter === a.key && styles.areaChipTextActive]}>{a.label.replace(/^(Autres littératures |Littératures |Littérature )/, '')}</Text>
+                    <Text style={[styles.areaChipText, areaFilter === a.key && styles.areaChipTextActive]}>{a.label}</Text>
                   </Pressable>
                 ))}
               </ScrollView>

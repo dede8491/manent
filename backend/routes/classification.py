@@ -585,7 +585,7 @@ async def process_tasks(limit: int = 4) -> int:
         try:
             book = await db.catalog_books.find_one({"catalog_id": t["catalog_id"]}, {"_id": 0, "summary": 1})
             if not book:
-                await db.catalog_tasks.update_one({"_id": t["_id"]}, {"$set": {"status": "done", "finished_at": now_utc()}})
+                await db.catalog_tasks.delete_one({"_id": t["_id"]})
                 continue
             if not book.get("summary") and t.get("tries", 0) < 2:
                 # le résumé arrive en général quelques secondes plus tard : l'IA classera mieux avec.
@@ -594,7 +594,7 @@ async def process_tasks(limit: int = 4) -> int:
                     await db.catalog_tasks.update_one({"_id": t["_id"]}, {"$set": {"status": "pending", "created_at": now_utc()}, "$inc": {"tries": 1}})
                     continue
             await classify_book(t["catalog_id"], use_ai=True, force_ai=t.get("reason") == "reclassify", reason=t.get("reason", "task"))
-            await db.catalog_tasks.update_one({"_id": t["_id"]}, {"$set": {"status": "done", "finished_at": now_utc()}})
+            await db.catalog_tasks.delete_one({"_id": t["_id"]})
         except Exception as e:
             logger.warning("classify task failed (%s): %s", t.get("catalog_id"), e)
             try:
@@ -854,17 +854,19 @@ async def intent_search(body: IntentBody):
     if flt:
         total = await db.catalog_books.count_documents(flt)
         docs = await db.catalog_books.find(flt, {"_id": 0}).sort(SORTS["pertinence"]).limit(20).to_list(20)
-        # trop peu de résultats : relâchement progressif et cumulatif (on garde thèmes/émotions en priorité)
+        # trop peu de résultats : relâchement CUMULATIF (on retire une dimension après l'autre,
+        # thèmes et émotions en dernier) jusqu'à obtenir au moins 3 livres
         if total < 3 and len(sel) > 1:
-            for drop in ("lang", "audience", "story_country", "story_continent", "country", "continent", "region", "genre", "type", "domain", "mood", "emotion"):
-                if drop in sel and len(sel) > 1:
-                    relaxed = {k: v for k, v in sel.items() if k != drop}
+            relaxed = dict(sel)
+            for drop in ("lang", "audience", "story_country", "story_region", "story_continent", "country", "region", "continent",
+                         "genre", "type", "domain", "mood", "emotion"):
+                if drop in relaxed and len(relaxed) > 1:
+                    relaxed = {k: v for k, v in relaxed.items() if k != drop}
                     f2 = build_filter(relaxed)
                     t2 = await db.catalog_books.count_documents(f2)
-                    if t2 > total:
+                    if t2 >= 3:
                         sel, flt, total = relaxed, f2, t2
                         docs = await db.catalog_books.find(f2, {"_id": 0}).sort(SORTS["pertinence"]).limit(20).to_list(20)
-                    if total >= 3:
                         break
     return {"filters": sel, "chips": selected_chips(sel), "interpretation": parsed["interpretation"], "source": parsed["source"],
             "search_mode": "semantic", "results": [_card(b) for b in docs], "total": total}
@@ -895,106 +897,6 @@ def _admin_view(b: dict) -> dict:
     from routes.catalog import _card
     return {**_card(b), "classification": b.get("classification") or {}, "overrides": b.get("overrides") or {"add": [], "remove": []},
             "raw_subjects": b.get("raw_subjects") or [], "lines": lines(b), "thresholds": {"strong": S()["strong"], "proposed": S()["proposed"]}}
-
-
-class SettingsBody(BaseModel):
-    strong: Optional[float] = Field(default=None, ge=0.5, le=1.0)
-    proposed: Optional[float] = Field(default=None, ge=0.3, le=1.0)
-    ai_enabled: Optional[bool] = None
-    daily_limit: Optional[int] = Field(default=None, ge=0, le=100000)
-    weights: Optional[dict[str, float]] = None
-
-
-@admin_router.get("/classification/settings")
-async def admin_get_settings():
-    return {"settings": S(), "defaults": DEFAULT_SETTINGS, "engine_version": ENGINE_VERSION, "prompt_version": PROMPT_VERSION}
-
-
-@admin_router.patch("/classification/settings")
-async def admin_patch_settings(body: SettingsBody):
-    doc = await db.meta.find_one({"key": "classification_settings"}, {"_id": 0, "values": 1})
-    vals = dict((doc or {}).get("values") or {})
-    for k in ("strong", "proposed", "ai_enabled", "daily_limit"):
-        v = getattr(body, k)
-        if v is not None:
-            vals[k] = v
-    for k, v in (body.weights or {}).items():
-        if k in DEFAULT_SETTINGS and k.startswith("w_"):
-            vals[k] = float(min(max(v, 0.0), 1.0))
-    if vals.get("proposed", DEFAULT_SETTINGS["proposed"]) > vals.get("strong", DEFAULT_SETTINGS["strong"]):
-        raise HTTPException(status_code=422, detail="proposed_above_strong")
-    await db.meta.update_one({"key": "classification_settings"}, {"$set": {"values": vals, "at": now_utc()}}, upsert=True)
-    await load_settings()
-    return {"settings": S()}
-
-
-@admin_router.get("/classification/review")
-async def admin_review_list(page: int = 1, size: int = 20):
-    """Livres à vérifier : conflits ou faible confiance, les plus populaires d'abord."""
-    from routes.catalog import _card
-    size = min(max(size, 1), 50)
-    flt = {"classification.needs_review": True}
-    total = await db.catalog_books.count_documents(flt)
-    docs = await db.catalog_books.find(flt, {"_id": 0}).sort("popularity", -1).skip((max(page, 1) - 1) * size).limit(size).to_list(size)
-    return {"books": [_card(b) | {"conflicts": (b.get("classification") or {}).get("conflicts", []), "score": (b.get("classification") or {}).get("score")} for b in docs],
-            "total": total, "page": page, "size": size}
-
-
-@admin_router.get("/classification/{catalog_id}")
-async def admin_get_classification(catalog_id: str):
-    b = await db.catalog_books.find_one({"catalog_id": catalog_id}, {"_id": 0})
-    if not b:
-        raise HTTPException(status_code=404, detail="not_found")
-    if not b.get("classification"):
-        await classify_book(catalog_id, use_ai=False, reason="admin_view")
-        await enqueue(catalog_id, "admin_view")
-        b = await db.catalog_books.find_one({"catalog_id": catalog_id}, {"_id": 0})
-    return _admin_view(b)
-
-
-@admin_router.patch("/classification/{catalog_id}")
-async def admin_patch_classification(catalog_id: str, body: OverrideBody, authorization: Optional[str] = Header(None)):
-    b = await db.catalog_books.find_one({"catalog_id": catalog_id}, {"_id": 0, "overrides": 1, "classification": 1})
-    if not b:
-        raise HTTPException(status_code=404, detail="not_found")
-    admin = await _admin_user(authorization)
-    prev = {f"{x['dim']}:{x['key']}": x for x in (b.get("classification") or {}).get("labels", [])}
-    ov = b.get("overrides") or {"add": [], "remove": []}
-    add, remove = set(ov.get("add") or []), set(ov.get("remove") or [])
-    feedback = []
-    for k in list(body.add) + list(body.confirm):
-        dim, _, key = k.partition(":")
-        if key not in tx.valid_keys(dim):
-            raise HTTPException(status_code=422, detail=f"invalid_label:{k}")
-        add.add(k); remove.discard(k)
-        p = prev.get(k)
-        feedback.append({"label": k, "action": "confirm" if p else "add", "previous_value": (p or {}).get("confidence"),
-                         "previous_source": (p or {}).get("source"), "corrected_value": 1.0})
-    for k in body.remove:
-        remove.add(k); add.discard(k)
-        p = prev.get(k)
-        feedback.append({"label": k, "action": "remove", "previous_value": (p or {}).get("confidence"),
-                         "previous_source": (p or {}).get("source"), "corrected_value": None})
-    await db.catalog_books.update_one({"catalog_id": catalog_id}, {"$set": {
-        "overrides": {"add": sorted(add), "remove": sorted(remove), "updated_at": now_utc()}}})
-    if feedback:
-        # jeu de données de corrections humaines (amélioration future des règles/prompts ; pas d'entraînement automatique)
-        await db.classification_feedback.insert_many([{**f, "catalog_id": catalog_id, "admin_id": admin.get("user_id"),
-                                                       "engine_version": ENGINE_VERSION, "prompt_version": PROMPT_VERSION,
-                                                       "created_at": now_utc()} for f in feedback])
-    await classify_book(catalog_id, use_ai=False, reason="admin_override")
-    return _admin_view(await db.catalog_books.find_one({"catalog_id": catalog_id}, {"_id": 0}))
-
-
-@admin_router.post("/classification/{catalog_id}/reclassify")
-async def admin_reclassify(catalog_id: str):
-    b = await db.catalog_books.find_one({"catalog_id": catalog_id}, {"_id": 0, "catalog_id": 1})
-    if not b:
-        raise HTTPException(status_code=404, detail="not_found")
-    if not await _ai_quota_ok():
-        raise HTTPException(status_code=429, detail="classify_quota_reached")
-    cls = await classify_book(catalog_id, use_ai=True, force_ai=True, reason="admin_reclassify")
-    return _admin_view(await db.catalog_books.find_one({"catalog_id": catalog_id}, {"_id": 0})) | {"ai_ok": bool(cls and cls.get("ai_reason") in ("forced",) and cls.get("ai_version"))}
 
 
 # ---------------------------------------------------------------- Admin : lots, tableau de bord, réglages, taxonomie
@@ -1053,6 +955,107 @@ async def admin_classification_stats():
             "runs": {"n": (logs[0]["n"] if logs else 0), "avg_ms": int((logs[0]["avg_ms"] or 0) if logs else 0)},
             "top_themes": top_themes, "top_types": top_types, "top_countries": top_countries,
             "corrections": corrections, "frequent_errors": frequent_errors, "thresholds": {"strong": s["strong"], "proposed": s["proposed"]}}
+
+
+@admin_router.get("/classification/review")
+async def admin_review_list(page: int = 1, size: int = 20):
+    """Livres à vérifier : conflits ou faible confiance, les plus populaires d'abord."""
+    from routes.catalog import _card
+    size = min(max(size, 1), 50)
+    flt = {"classification.needs_review": True}
+    total = await db.catalog_books.count_documents(flt)
+    docs = await db.catalog_books.find(flt, {"_id": 0}).sort("popularity", -1).skip((max(page, 1) - 1) * size).limit(size).to_list(size)
+    return {"books": [_card(b) | {"conflicts": (b.get("classification") or {}).get("conflicts", []), "score": (b.get("classification") or {}).get("score")} for b in docs],
+            "total": total, "page": page, "size": size}
+
+
+class SettingsBody(BaseModel):
+    strong: Optional[float] = Field(default=None, ge=0.5, le=1.0)
+    proposed: Optional[float] = Field(default=None, ge=0.3, le=1.0)
+    ai_enabled: Optional[bool] = None
+    daily_limit: Optional[int] = Field(default=None, ge=0, le=100000)
+    weights: Optional[dict[str, float]] = None
+
+
+@admin_router.get("/classification/settings")
+async def admin_get_settings():
+    return {"settings": S(), "defaults": DEFAULT_SETTINGS, "engine_version": ENGINE_VERSION, "prompt_version": PROMPT_VERSION}
+
+
+@admin_router.patch("/classification/settings")
+async def admin_patch_settings(body: SettingsBody):
+    doc = await db.meta.find_one({"key": "classification_settings"}, {"_id": 0, "values": 1})
+    vals = dict((doc or {}).get("values") or {})
+    for k in ("strong", "proposed", "ai_enabled", "daily_limit"):
+        v = getattr(body, k)
+        if v is not None:
+            vals[k] = v
+    for k, v in (body.weights or {}).items():
+        if k in DEFAULT_SETTINGS and k.startswith("w_"):
+            vals[k] = float(min(max(v, 0.0), 1.0))
+    if vals.get("proposed", DEFAULT_SETTINGS["proposed"]) > vals.get("strong", DEFAULT_SETTINGS["strong"]):
+        raise HTTPException(status_code=422, detail="proposed_above_strong")
+    await db.meta.update_one({"key": "classification_settings"}, {"$set": {"values": vals, "at": now_utc()}}, upsert=True)
+    await load_settings()
+    return {"settings": S()}
+
+
+# ---------------------------------------------------------------- Admin : livre (routes dynamiques, déclarées après les statiques)
+@admin_router.get("/classification/{catalog_id}")
+async def admin_get_classification(catalog_id: str):
+    b = await db.catalog_books.find_one({"catalog_id": catalog_id}, {"_id": 0})
+    if not b:
+        raise HTTPException(status_code=404, detail="not_found")
+    if not b.get("classification"):
+        await classify_book(catalog_id, use_ai=False, reason="admin_view")
+        await enqueue(catalog_id, "admin_view")
+        b = await db.catalog_books.find_one({"catalog_id": catalog_id}, {"_id": 0})
+    return _admin_view(b)
+
+
+@admin_router.patch("/classification/{catalog_id}")
+async def admin_patch_classification(catalog_id: str, body: OverrideBody, authorization: Optional[str] = Header(None)):
+    b = await db.catalog_books.find_one({"catalog_id": catalog_id}, {"_id": 0, "overrides": 1, "classification": 1})
+    if not b:
+        raise HTTPException(status_code=404, detail="not_found")
+    admin = await _admin_user(authorization)
+    prev = {f"{x['dim']}:{x['key']}": x for x in (b.get("classification") or {}).get("labels", [])}
+    ov = b.get("overrides") or {"add": [], "remove": []}
+    add, remove = set(ov.get("add") or []), set(ov.get("remove") or [])
+    feedback = []
+    for k in list(body.add) + list(body.confirm):
+        dim, _, key = k.partition(":")
+        if key not in tx.valid_keys(dim):
+            raise HTTPException(status_code=422, detail=f"invalid_label:{k}")
+        add.add(k); remove.discard(k)
+        p = prev.get(k)
+        feedback.append({"label": k, "action": "confirm" if p else "add", "previous_value": (p or {}).get("confidence"),
+                         "previous_source": (p or {}).get("source"), "corrected_value": 1.0})
+    for k in body.remove:
+        remove.add(k); add.discard(k)
+        p = prev.get(k)
+        feedback.append({"label": k, "action": "remove", "previous_value": (p or {}).get("confidence"),
+                         "previous_source": (p or {}).get("source"), "corrected_value": None})
+    await db.catalog_books.update_one({"catalog_id": catalog_id}, {"$set": {
+        "overrides": {"add": sorted(add), "remove": sorted(remove), "updated_at": now_utc()}}})
+    if feedback:
+        # jeu de données de corrections humaines (amélioration future des règles/prompts ; pas d'entraînement automatique)
+        await db.classification_feedback.insert_many([{**f, "catalog_id": catalog_id, "admin_id": admin.get("user_id"),
+                                                       "engine_version": ENGINE_VERSION, "prompt_version": PROMPT_VERSION,
+                                                       "created_at": now_utc()} for f in feedback])
+    await classify_book(catalog_id, use_ai=False, reason="admin_override")
+    return _admin_view(await db.catalog_books.find_one({"catalog_id": catalog_id}, {"_id": 0}))
+
+
+@admin_router.post("/classification/{catalog_id}/reclassify")
+async def admin_reclassify(catalog_id: str):
+    b = await db.catalog_books.find_one({"catalog_id": catalog_id}, {"_id": 0, "catalog_id": 1})
+    if not b:
+        raise HTTPException(status_code=404, detail="not_found")
+    if not await _ai_quota_ok():
+        raise HTTPException(status_code=429, detail="classify_quota_reached")
+    cls = await classify_book(catalog_id, use_ai=True, force_ai=True, reason="admin_reclassify")
+    return _admin_view(await db.catalog_books.find_one({"catalog_id": catalog_id}, {"_id": 0})) | {"ai_ok": bool(cls and cls.get("ai_reason") in ("forced",) and cls.get("ai_version"))}
 
 
 class TaxonomyEntry(BaseModel):

@@ -11,7 +11,7 @@ import ManentLoader from '@/src/components/ManentLoader';
 import { useT } from '@/src/i18n';
 
 // Page d'un genre (Polar et thriller, Imaginaire, Jeunesse…) : livres du catalogue, croisables
-// avec une littérature (continent ou aire) via les chips.
+// avec une origine (continent) via les chips.
 export default function GenrePage() {
   const t = useT();
   const colors = useColors();
@@ -68,11 +68,11 @@ export default function GenrePage() {
           {areas.length > 0 && (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: spacing.xl, marginBottom: spacing.sm }}>
               <Pressable testID="genre-area-all" onPress={() => setArea(null)} style={[styles.chip, !area && styles.chipActive]}>
-                <Text style={[styles.chipText, !area && { color: colors.creme }]}>{t('Toutes les littératures')}</Text>
+                <Text style={[styles.chipText, !area && { color: colors.creme }]}>{t('Toutes les origines')}</Text>
               </Pressable>
               {areas.map((a: any) => (
                 <Pressable key={a.key} testID={`genre-area-${a.key}`} onPress={() => setArea(area === a.key ? null : a.key)} style={[styles.chip, area === a.key && styles.chipActive]}>
-                  <Text style={[styles.chipText, area === a.key && { color: colors.creme }]}>{a.label.replace(/^(Autres littératures |Littératures |Littérature )/, '')}</Text>
+                  <Text style={[styles.chipText, area === a.key && { color: colors.creme }]}>{a.label}</Text>
                 </Pressable>
               ))}
             </ScrollView>
