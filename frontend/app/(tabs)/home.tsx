@@ -30,7 +30,6 @@ export default function Home() {
   const { user, refresh } = useAuth();
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [themes, setThemes] = useState<string[]>([]);
-  const [trending, setTrending] = useState<string[]>([]);
   const [areas, setAreas] = useState<any[]>([]);
   const [pubClubs, setPubClubs] = useState<any[]>([]);
   const [joiningClub, setJoiningClub] = useState<string | null>(null);
@@ -142,10 +141,6 @@ export default function Home() {
         try { setThemes((await api<{ themes: string[] }>('/themes')).themes); } catch {}
       }
       try {
-        const tr = await api<{ subjects: string[] }>('/catalog/subjects/trending');
-        setTrending(tr.subjects || []);
-      } catch {}
-      try {
         const ar = await api<{ areas: any[] }>('/catalog/areas');
         setAreas(ar.areas || []);
       } catch {}
@@ -184,15 +179,6 @@ export default function Home() {
             <Feather name="maximize" size={17} color={colors.espresso} />
           </Pressable>
         </View>
-        <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: spacing.xl, marginTop: 8 }}>
-          <Pressable testID="home-intent" onPress={() => router.push('/intent')} style={[styles.chip, { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.bisque, borderColor: colors.bisque }]}>
-            <Text style={styles.chipText} numberOfLines={1}>✨ {t('Je cherche un livre qui…')}</Text>
-          </Pressable>
-          <Pressable testID="home-filters" onPress={() => router.push('/filters')} style={[styles.chip, { flexDirection: 'row', alignItems: 'center', gap: 6 }]}>
-            <Feather name="sliders" size={13} color={colors.espresso} />
-            <Text style={styles.chipText}>{t('Filtres')}</Text>
-          </Pressable>
-        </View>
         <View style={styles.chipRow}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: spacing.xl }}>
             <View style={[styles.chip, styles.chipActive]}>
@@ -208,18 +194,16 @@ export default function Home() {
             </Pressable>
           </ScrollView>
         </View>
-        {trending.length > 0 && (
-          <View style={[styles.chipRow, { marginTop: 6 }]}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: spacing.xl, alignItems: 'center' }}>
-              <Text style={styles.trendLabel}>{t('Sujets du moment')}</Text>
-              {trending.filter(s => !themes.includes(s)).slice(0, 6).map(s => (
-                <Pressable key={s} testID={`trend-chip-${s}`} onPress={() => router.push({ pathname: '/theme/[name]', params: { name: s } })} style={styles.chip}>
-                  <Text style={styles.chipText}>{s}</Text>
-                </Pressable>
-              ))}
-            </ScrollView>
+        <Pressable testID="home-intent" onPress={() => router.push('/intent')} style={({ pressed }) => [styles.intentCard, pressed && { opacity: 0.9 }]}>
+          <View style={styles.intentIcon}><Feather name="feather" size={16} color={colors.creme} /></View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.intentTitle}>{t('Je cherche un livre qui…')}</Text>
+            <Text style={styles.intentSub} numberOfLines={1}>{t('Décris ton envie, Manent trouve le livre.')}</Text>
           </View>
-        )}
+          <Pressable testID="home-filters" onPress={() => router.push('/filters')} hitSlop={8} style={styles.intentFilters}>
+            <Feather name="sliders" size={14} color={colors.espresso} />
+          </Pressable>
+        </Pressable>
       </View>
       <ScrollView
         contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + 80 }}
@@ -413,7 +397,11 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   scanBtn: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: colors.creme, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center' },
   dailyLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: spacing.sm },
   chipRow: { height: 44 },
-  trendLabel: { fontFamily: fonts.bodyMedium, fontSize: 10.5, color: colors.clay, letterSpacing: 1.2, textTransform: 'uppercase' },
+  intentCard: { marginHorizontal: spacing.xl, flexDirection: 'row', alignItems: 'center', gap: 12, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.bisque },
+  intentIcon: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },
+  intentTitle: { fontFamily: fonts.displayMedium, fontSize: 17, color: colors.espresso },
+  intentSub: { fontFamily: fonts.body, fontSize: 12, color: colors.clay, marginTop: 1 },
+  intentFilters: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.creme, alignItems: 'center', justifyContent: 'center' },
   areasLabel: { fontFamily: fonts.displayMedium, fontSize: 21, color: colors.espresso, marginBottom: spacing.md },
   seeAll: { fontFamily: fonts.bodyMedium, fontSize: 12.5, color: colors.chambray },
   reason: { fontFamily: fonts.body, fontSize: 10.5, color: colors.chambray, marginTop: 3, lineHeight: 14 },

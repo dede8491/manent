@@ -1101,4 +1101,5 @@ export const EN: Record<string, string> = {
   'Épingler': 'Pin',
   'Sois la première à laisser un mot.': 'Be the first to leave a word.',
   'Laisser un mot…': 'Leave a word…',
+  'Décris ton envie, Manent trouve le livre.': 'Describe what you feel like, Manent finds the book.',
 };
