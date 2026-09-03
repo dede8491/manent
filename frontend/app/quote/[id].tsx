@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Modal, FlatList, Platform, Alert, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Modal, FlatList, Platform, Alert, Linking, TextInput, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -9,11 +9,11 @@ import * as Sharing from 'expo-sharing';
 import { ShareQuoteCard } from '@/src/components/ShareQuoteCard';
 import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
-import { QuoteCard, Quote } from '@/src/components/QuoteCard';
+import { Quote } from '@/src/components/QuoteCard';
 import { api } from '@/src/api';
 import { shareUrl } from '@/src/share';
 import { useT } from '@/src/i18n';
-import { PrimaryButton, GhostButton } from '@/src/components/Button';
+import { GhostButton } from '@/src/components/Button';
 import ManentLoader from '@/src/components/ManentLoader';
 
 export default function QuoteDetail() {
@@ -30,6 +30,31 @@ export default function QuoteDetail() {
   const shareRef = useRef<View>(null);
   const [busy, setBusy] = useState<null | 'save' | 'share'>(null);
   const [feedback, setFeedback] = useState('');
+  const [comments, setComments] = useState<any[] | null>(null);
+  const [comment, setComment] = useState('');
+  const [sendingComment, setSendingComment] = useState(false);
+
+  const toggleLike = async () => {
+    if (!quote) return;
+    const q: any = quote;
+    setQuote({ ...q, liked_by_me: !q.liked_by_me, likes_count: (q.likes_count || 0) + (q.liked_by_me ? -1 : 1) });
+    try { const r = await api<{ liked: boolean; likes_count: number }>(`/quotes/${id}/like`, { method: 'POST' }); setQuote(prev => prev ? ({ ...(prev as any), liked_by_me: r.liked, likes_count: r.likes_count }) : prev); } catch {}
+  };
+  const loadComments = async () => {
+    try { setComments((await api<{ comments: any[] }>(`/quotes/${id}/comments`)).comments || []); } catch { setComments([]); }
+  };
+  const sendComment = async () => {
+    if (!comment.trim() || sendingComment) return;
+    setSendingComment(true);
+    try {
+      const c = await api<any>(`/quotes/${id}/comments`, { method: 'POST', body: JSON.stringify({ text: comment.trim() }) });
+      setComments(prev => [...(prev || []), c]); setComment('');
+      setQuote(prev => prev ? ({ ...(prev as any), comments_count: c.comments_count }) : prev);
+    } catch {} finally { setSendingComment(false); }
+  };
+  const deleteComment = async (cid: string) => {
+    try { const r = await api<{ comments_count: number }>(`/quotes/${id}/comments/${cid}`, { method: 'DELETE' }); setComments(prev => (prev || []).filter(c => c.comment_id !== cid)); setQuote(prev => prev ? ({ ...(prev as any), comments_count: r.comments_count }) : prev); } catch {}
+  };
 
   useEffect(() => {
     (async () => {
@@ -216,6 +241,48 @@ export default function QuoteDetail() {
           <Text style={[styles.brand, { color: style === 'encre' ? colors.creme : colors.clay }]}>Manent · @{quote.author?.handle}</Text>
         </View>
 
+        <View style={styles.actionBar} testID="quote-actions">
+          <Pressable testID="q-like" onPress={toggleLike} style={styles.action}>
+            <Feather name="heart" size={20} color={(quote as any).liked_by_me ? '#B3552F' : colors.espresso} />
+            <Text style={[styles.actionCount, (quote as any).liked_by_me && { color: '#B3552F' }]}>{(quote as any).likes_count || 0}</Text>
+          </Pressable>
+          <Pressable testID="q-comments" onPress={() => (comments === null ? loadComments() : setComments(null))} style={styles.action}>
+            <Feather name="message-circle" size={20} color={colors.espresso} />
+            <Text style={styles.actionCount}>{(quote as any).comments_count || 0}</Text>
+          </Pressable>
+          <Pressable testID="q-share" onPress={shareImage} style={styles.action}>
+            <Feather name="share" size={20} color={colors.espresso} />
+          </Pressable>
+          <Pressable testID="q-save" onPress={openPin} style={[styles.action, styles.actionSave]}>
+            <Feather name="bookmark" size={16} color={colors.creme} />
+            <Text style={styles.actionSaveText}>{t('Épingler')}</Text>
+          </Pressable>
+        </View>
+
+        {comments !== null && (
+          <View style={styles.commentsBox} testID="quote-comments">
+            {comments.length === 0 && <Text style={styles.commentEmpty}>{t('Sois la première à laisser un mot.')}</Text>}
+            {comments.map((c: any) => (
+              <View key={c.comment_id} style={styles.comment} testID={`comment-${c.comment_id}`}>
+                {c.author?.picture ? <Image source={{ uri: c.author.picture }} style={styles.commentAvatar} /> : <View style={styles.commentAvatar}><Text style={styles.commentInitial}>{(c.author?.pseudo?.[0] || 'M').toUpperCase()}</Text></View>}
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.commentAuthor}>{c.author?.pseudo}</Text>
+                  <Text style={styles.commentText}>{c.text}</Text>
+                </View>
+                {(c.is_mine || quote.is_owner) && (
+                  <Pressable testID={`comment-delete-${c.comment_id}`} onPress={() => deleteComment(c.comment_id)} hitSlop={8}><Feather name="x" size={14} color={colors.clay} /></Pressable>
+                )}
+              </View>
+            ))}
+            <View style={styles.commentRow}>
+              <TextInput testID="comment-input" value={comment} onChangeText={setComment} placeholder={t('Laisser un mot…')} placeholderTextColor={colors.clay} style={styles.commentInput} maxLength={600} multiline />
+              <Pressable testID="comment-send" onPress={sendComment} disabled={!comment.trim() || sendingComment} style={[styles.commentSend, (!comment.trim() || sendingComment) && { opacity: 0.4 }]}>
+                <Feather name="send" size={16} color={colors.creme} />
+              </Pressable>
+            </View>
+          </View>
+        )}
+
         <Text style={styles.label}>{t('Style de partage')}</Text>
         <View style={{ flexDirection: 'row', gap: 8 }}>
           {(['papier','encre','glacier'] as const).map(s => (
@@ -259,9 +326,7 @@ export default function QuoteDetail() {
             </View>
             <Feather name="chevron-right" size={18} color={colors.clay} />
           </Pressable>
-        ) : (
-          <PrimaryButton testID="btn-pin" title={t('Épingler sur un tableau')} onPress={openPin} />
-        )}
+        ) : null}
         <GhostButton title={t('Retour')} onPress={() => router.back()} />
       </ScrollView>
 
@@ -315,6 +380,21 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   styleChip: { flex: 1, height: 44, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.creme },
   styleChipActive: { backgroundColor: colors.chambray, borderColor: colors.chambray },
   styleText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.espresso },
+  actionBar: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.md },
+  action: { flexDirection: 'row', alignItems: 'center', gap: 5, height: 40, paddingHorizontal: 12, borderRadius: radius.pill, backgroundColor: colors.creme, borderWidth: 1, borderColor: colors.borderSoft },
+  actionCount: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.espresso },
+  actionSave: { marginLeft: 'auto', backgroundColor: colors.chambray, borderColor: colors.chambray },
+  actionSaveText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.creme },
+  commentsBox: { marginTop: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },
+  commentEmpty: { fontFamily: fonts.body, fontSize: 13, color: colors.clay, marginBottom: spacing.sm },
+  comment: { flexDirection: 'row', gap: 10, alignItems: 'flex-start', marginBottom: spacing.sm },
+  commentAvatar: { width: 30, height: 30, borderRadius: 15, backgroundColor: colors.bisque, alignItems: 'center', justifyContent: 'center' },
+  commentInitial: { fontFamily: fonts.displayMedium, fontSize: 13, color: colors.espresso },
+  commentAuthor: { fontFamily: fonts.bodyMedium, fontSize: 12.5, color: colors.espresso },
+  commentText: { fontFamily: fonts.body, fontSize: 13.5, color: colors.espresso, lineHeight: 19 },
+  commentRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, marginTop: spacing.xs },
+  commentInput: { flex: 1, minHeight: 40, maxHeight: 120, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, backgroundColor: colors.glacier, paddingHorizontal: spacing.md, paddingVertical: 10, fontFamily: fonts.body, fontSize: 14, color: colors.espresso },
+  commentSend: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },
   shareBtn: { flex: 1.4, height: 52, borderRadius: radius.md, backgroundColor: colors.chambray, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   shareBtnGhost: { flex: 1, backgroundColor: colors.creme, borderWidth: 1, borderColor: colors.borderSoft },
   shareBtnText: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.creme },

@@ -1160,7 +1160,90 @@ async def get_quote(quote_id: str, user=Depends(get_current_user)):
     owner = await db.users.find_one({"user_id": q["user_id"]}, {"_id": 0, "pseudo": 1, "handle": 1, "picture": 1})
     q["author"] = owner or {"pseudo": "Lecteur", "handle": "lecteur"}
     q["is_owner"] = is_owner
+    q["likes_count"] = q.get("likes_count") or 0
+    q["comments_count"] = q.get("comments_count") or 0
+    q["liked_by_me"] = await db.quote_likes.find_one({"quote_id": quote_id, "user_id": user["user_id"]}) is not None
     return q
+
+
+# ============ Réactions sur les citations (cœur, commentaires) ============
+async def _visible_quote_or_404(quote_id: str, user: dict) -> dict:
+    q = await db.quotes.find_one({"quote_id": quote_id}, {"_id": 0})
+    if not q:
+        raise HTTPException(status_code=404, detail="not_found")
+    if q["user_id"] != user["user_id"]:
+        allowed = q.get("is_public")
+        if not allowed and q.get("visibility") == "followers":
+            allowed = await db.follows.find_one({"follower_id": user["user_id"], "followed_id": q["user_id"]}) is not None
+        if not allowed or q.get("is_hidden") or (q.get("is_sensitive") and not _is_adult(user)):
+            raise HTTPException(status_code=404, detail="not_found")
+    return q
+
+
+@api.post("/quotes/{quote_id}/like")
+async def toggle_like_quote(quote_id: str, user=Depends(get_current_user)):
+    """Cœur sur une citation (bascule). L'autrice reçoit une notification, sauf pour ses propres cœurs."""
+    q = await _visible_quote_or_404(quote_id, user)
+    existing = await db.quote_likes.find_one({"quote_id": quote_id, "user_id": user["user_id"]})
+    if existing:
+        await db.quote_likes.delete_one({"_id": existing["_id"]})
+        liked = False
+    else:
+        await db.quote_likes.insert_one({"quote_id": quote_id, "user_id": user["user_id"], "created_at": now_utc()})
+        liked = True
+        if q["user_id"] != user["user_id"]:
+            try:
+                await send_push([q["user_id"]], {"title": "Manent", "message": f"{user.get('pseudo', 'Une lectrice')} a aimé ta citation",
+                                                 "data": {"type": "quote_like", "quote_id": quote_id}}, idempotency_key=f"like_{quote_id}_{user['user_id']}")
+            except Exception:
+                pass
+    count = await db.quote_likes.count_documents({"quote_id": quote_id})
+    await db.quotes.update_one({"quote_id": quote_id}, {"$set": {"likes_count": count}})
+    return {"liked": liked, "likes_count": count}
+
+
+class QuoteCommentBody(BaseModel):
+    text: str = Field(min_length=1, max_length=600)
+
+
+@api.get("/quotes/{quote_id}/comments")
+async def list_quote_comments(quote_id: str, user=Depends(get_current_user)):
+    await _visible_quote_or_404(quote_id, user)
+    rows = await db.quote_comments.find({"quote_id": quote_id}, {"_id": 0}).sort("created_at", 1).to_list(200)
+    ids = list({r["user_id"] for r in rows})
+    users = {u["user_id"]: u for u in await db.users.find({"user_id": {"$in": ids}}, {"_id": 0, "user_id": 1, "pseudo": 1, "handle": 1, "picture": 1}).to_list(200)}
+    return {"comments": [{**r, "author": users.get(r["user_id"], {"pseudo": "Lectrice"}), "is_mine": r["user_id"] == user["user_id"]} for r in rows]}
+
+
+@api.post("/quotes/{quote_id}/comments")
+async def add_quote_comment(quote_id: str, body: QuoteCommentBody, user=Depends(get_current_user)):
+    q = await _visible_quote_or_404(quote_id, user)
+    c = {"comment_id": new_id("qc"), "quote_id": quote_id, "user_id": user["user_id"], "text": body.text.strip(), "created_at": now_utc()}
+    await db.quote_comments.insert_one(dict(c))
+    count = await db.quote_comments.count_documents({"quote_id": quote_id})
+    await db.quotes.update_one({"quote_id": quote_id}, {"$set": {"comments_count": count}})
+    if q["user_id"] != user["user_id"]:
+        try:
+            await send_push([q["user_id"]], {"title": "Manent", "message": f"{user.get('pseudo', 'Une lectrice')} a commenté ta citation : « {c['text'][:60]} »",
+                                             "data": {"type": "quote_comment", "quote_id": quote_id}}, idempotency_key=c["comment_id"])
+        except Exception:
+            pass
+    return {**c, "author": {"pseudo": user.get("pseudo"), "handle": user.get("handle"), "picture": user.get("picture")}, "is_mine": True, "comments_count": count}
+
+
+@api.delete("/quotes/{quote_id}/comments/{comment_id}")
+async def delete_quote_comment(quote_id: str, comment_id: str, user=Depends(get_current_user)):
+    """Supprimable par son autrice ou par la propriétaire de la citation."""
+    q = await db.quotes.find_one({"quote_id": quote_id}, {"_id": 0, "user_id": 1})
+    c = await db.quote_comments.find_one({"comment_id": comment_id, "quote_id": quote_id}, {"_id": 0, "user_id": 1})
+    if not q or not c:
+        raise HTTPException(status_code=404, detail="not_found")
+    if c["user_id"] != user["user_id"] and q["user_id"] != user["user_id"] and not user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="forbidden")
+    await db.quote_comments.delete_one({"comment_id": comment_id})
+    count = await db.quote_comments.count_documents({"quote_id": quote_id})
+    await db.quotes.update_one({"quote_id": quote_id}, {"$set": {"comments_count": count}})
+    return {"ok": True, "comments_count": count}
 
 
 @api.patch("/quotes/{quote_id}")
@@ -1337,11 +1420,86 @@ async def create_board(body: BoardCreate, user=Depends(get_current_user)):
         "description": body.description,
         "visibility": body.visibility,
         "share_slug": f"{slug}-{board_id[-6:]}",
+        "invite_code": _club_code(),
         "members": [user["user_id"]],
         "created_at": now_utc(),
     }
     await db.boards.insert_one(doc.copy())
     return clean_doc(doc)
+
+
+async def _board_view(b: dict, uid: str) -> dict:
+    """Vue d'un tableau pour un utilisateur : citations, membres, rôle, code d'invitation (membres seulement)."""
+    if not b.get("invite_code"):
+        b["invite_code"] = _club_code()
+        await db.boards.update_one({"board_id": b["board_id"]}, {"$set": {"invite_code": b["invite_code"]}})
+    member_ids = b.get("members", [])
+    pins = await db.board_quotes.find({"board_id": b["board_id"]}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    quotes = []
+    for p in pins:
+        q = await db.quotes.find_one({"quote_id": p["quote_id"]}, {"_id": 0})
+        if q:
+            if q.get("book_id"):
+                q["book"] = await db.books.find_one({"book_id": q["book_id"]}, {"_id": 0, "title": 1, "author": 1, "type": 1})
+            q["pinned_by"] = p.get("pinned_by")
+            quotes.append(q)
+    users = await db.users.find({"user_id": {"$in": member_ids}}, {"_id": 0, "user_id": 1, "pseudo": 1, "handle": 1, "picture": 1}).to_list(200)
+    b["quotes"] = quotes
+    b["members_info"] = users
+    b["members_count"] = len(member_ids)
+    b["is_owner"] = b.get("user_id") == uid
+    b["is_member"] = uid in member_ids
+    if not b["is_member"]:
+        b.pop("invite_code", None)
+    return b
+
+
+@api.get("/boards/by-slug/{slug}")
+async def get_board_by_slug(slug: str, user=Depends(get_current_user)):
+    """Lien de partage d'un tableau : lisible si public, ou si je suis membre."""
+    b = await db.boards.find_one({"share_slug": slug}, {"_id": 0})
+    if not b:
+        raise HTTPException(status_code=404, detail="not_found")
+    if user["user_id"] not in b.get("members", []) and b["visibility"] == "private":
+        raise HTTPException(status_code=403, detail="private_board")
+    return await _board_view(b, user["user_id"])
+
+
+class BoardJoin(BaseModel):
+    code: str = Field(min_length=4, max_length=12)
+
+
+@api.post("/boards/join")
+async def join_board(body: BoardJoin, user=Depends(get_current_user)):
+    """Rejoindre un tableau avec son code d'invitation (lien partagé par un membre)."""
+    b = await db.boards.find_one({"invite_code": body.code.strip().upper()}, {"_id": 0, "board_id": 1, "members": 1})
+    if not b:
+        raise HTTPException(status_code=404, detail="unknown_code")
+    if user["user_id"] not in b.get("members", []):
+        await db.boards.update_one({"board_id": b["board_id"]}, {"$addToSet": {"members": user["user_id"]}})
+    return {"board_id": b["board_id"]}
+
+
+@api.post("/boards/{board_id}/leave")
+async def leave_board(board_id: str, user=Depends(get_current_user)):
+    b = await db.boards.find_one({"board_id": board_id}, {"_id": 0, "user_id": 1})
+    if not b:
+        raise HTTPException(status_code=404, detail="not_found")
+    if b["user_id"] == user["user_id"]:
+        raise HTTPException(status_code=400, detail="owner_cannot_leave")
+    await db.boards.update_one({"board_id": board_id}, {"$pull": {"members": user["user_id"]}})
+    return {"ok": True}
+
+
+@api.post("/boards/{board_id}/invite-code")
+async def regenerate_board_code(board_id: str, user=Depends(get_current_user)):
+    """Nouveau code : les anciens liens d'invitation cessent de fonctionner."""
+    b = await db.boards.find_one({"board_id": board_id, "user_id": user["user_id"]}, {"_id": 0, "board_id": 1})
+    if not b:
+        raise HTTPException(status_code=403, detail="forbidden")
+    code = _club_code()
+    await db.boards.update_one({"board_id": board_id}, {"$set": {"invite_code": code}})
+    return {"invite_code": code}
 
 
 @api.get("/boards")
@@ -1365,17 +1523,7 @@ async def get_board(board_id: str, user=Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="not_found")
     if user["user_id"] not in b.get("members", []) and b["visibility"] == "private":
         raise HTTPException(status_code=403, detail="forbidden")
-    pins = await db.board_quotes.find({"board_id": board_id}, {"_id": 0}).sort("created_at", -1).to_list(500)
-    quotes = []
-    for p in pins:
-        q = await db.quotes.find_one({"quote_id": p["quote_id"]}, {"_id": 0})
-        if q:
-            if q.get("book_id"):
-                q["book"] = await db.books.find_one({"book_id": q["book_id"]}, {"_id": 0, "title": 1, "author": 1, "type": 1})
-            q["pinned_by"] = p.get("pinned_by")
-            quotes.append(q)
-    b["quotes"] = quotes
-    return b
+    return await _board_view(b, user["user_id"])
 
 
 class PinBody(BaseModel):
@@ -2671,6 +2819,90 @@ async def create_recommendation(body: RecommendationBody, user=Depends(get_curre
     return clean_doc(doc)
 
 
+# ============ Invitations (tableaux et clubs) ============
+class InvitationBody(BaseModel):
+    kind: Literal["board", "club"]
+    target_id: str
+    to_handle: str = Field(min_length=1, max_length=40)
+    message: Optional[str] = Field(default=None, max_length=300)
+
+
+async def _invite_target(kind: str, target_id: str) -> Optional[dict]:
+    if kind == "board":
+        b = await db.boards.find_one({"board_id": target_id}, {"_id": 0, "board_id": 1, "name": 1, "members": 1, "user_id": 1})
+        return {"id": b["board_id"], "name": b["name"], "members": b.get("members", [])} if b else None
+    c = await db.clubs.find_one({"club_id": target_id}, {"_id": 0, "club_id": 1, "name": 1, "members": 1, "owner_id": 1})
+    return {"id": c["club_id"], "name": c["name"], "members": c.get("members", [])} if c else None
+
+
+@api.post("/invitations")
+async def create_invitation(body: InvitationBody, user=Depends(get_current_user)):
+    """Inviter une lectrice (que je suis ou qui me suit) à rejoindre un tableau ou un club dont je suis membre."""
+    target = await _invite_target(body.kind, body.target_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="target_not_found")
+    if user["user_id"] not in target["members"]:
+        raise HTTPException(status_code=403, detail="not_a_member")
+    to = await db.users.find_one({"handle": body.to_handle.lstrip("@")}, {"_id": 0, "user_id": 1, "pseudo": 1})
+    if not to:
+        raise HTTPException(status_code=404, detail="reader_not_found")
+    if to["user_id"] == user["user_id"]:
+        raise HTTPException(status_code=400, detail="self_invitation")
+    if to["user_id"] in target["members"]:
+        return {"ok": True, "already_member": True}
+    existing = await db.invitations.find_one({"kind": body.kind, "target_id": body.target_id, "to_id": to["user_id"], "status": "pending"}, {"_id": 0, "invite_id": 1})
+    if existing:
+        return {"ok": True, "invite_id": existing["invite_id"], "already_sent": True}
+    inv = {"invite_id": new_id("inv"), "kind": body.kind, "target_id": body.target_id, "target_name": target["name"],
+           "from_id": user["user_id"], "to_id": to["user_id"], "message": (body.message or "").strip() or None,
+           "status": "pending", "read": False, "created_at": now_utc()}
+    await db.invitations.insert_one(dict(inv))
+    try:
+        label = "le tableau" if body.kind == "board" else "le club de lecture"
+        await send_push([to["user_id"]], {"title": "Manent", "message": f"{user.get('pseudo', 'Une lectrice')} t'invite à rejoindre {label} « {target['name']} »",
+                                          "data": {"type": "invitation", "invite_id": inv["invite_id"]}}, idempotency_key=inv["invite_id"])
+    except Exception:
+        pass
+    return {"ok": True, "invite_id": inv["invite_id"]}
+
+
+@api.get("/invitations/badge")
+async def invitations_badge(user=Depends(get_current_user)):
+    return {"unread": await db.invitations.count_documents({"to_id": user["user_id"], "status": "pending", "read": False})}
+
+
+@api.get("/invitations")
+async def list_invitations(user=Depends(get_current_user)):
+    rows = await db.invitations.find({"to_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    await db.invitations.update_many({"to_id": user["user_id"], "read": False}, {"$set": {"read": True}})
+    out = []
+    for r in rows:
+        u = await db.users.find_one({"user_id": r["from_id"]}, {"_id": 0, "pseudo": 1, "handle": 1, "picture": 1})
+        out.append({**r, "from": u})
+    return {"invitations": out}
+
+
+@api.post("/invitations/{invite_id}/accept")
+async def accept_invitation(invite_id: str, user=Depends(get_current_user)):
+    inv = await db.invitations.find_one({"invite_id": invite_id, "to_id": user["user_id"]}, {"_id": 0})
+    if not inv:
+        raise HTTPException(status_code=404, detail="not_found")
+    coll = db.boards if inv["kind"] == "board" else db.clubs
+    key = "board_id" if inv["kind"] == "board" else "club_id"
+    await coll.update_one({key: inv["target_id"]}, {"$addToSet": {"members": user["user_id"]}})
+    await db.invitations.update_one({"invite_id": invite_id}, {"$set": {"status": "accepted", "decided_at": now_utc()}})
+    return {"ok": True, "kind": inv["kind"], "target_id": inv["target_id"]}
+
+
+@api.post("/invitations/{invite_id}/decline")
+async def decline_invitation(invite_id: str, user=Depends(get_current_user)):
+    r = await db.invitations.update_one({"invite_id": invite_id, "to_id": user["user_id"], "status": "pending"},
+                                        {"$set": {"status": "declined", "decided_at": now_utc()}})
+    if not r.matched_count:
+        raise HTTPException(status_code=404, detail="not_found")
+    return {"ok": True}
+
+
 @api.get("/recommendations/badge")
 async def recommendations_badge(user=Depends(get_current_user)):
     unread = await db.recommendations.count_documents({"to_id": user["user_id"], "read": False, "status": "pending"})
@@ -2746,11 +2978,16 @@ async def feed(theme: Optional[str] = None, user=Depends(get_current_user)):
         for qd in quotes:
             qd["is_followed_author"] = qd["user_id"] in fset
         quotes.sort(key=lambda x: (not x.get("is_followed_author"),))
+    liked = {x["quote_id"] for x in await db.quote_likes.find({"user_id": user["user_id"], "quote_id": {"$in": [x["quote_id"] for x in quotes]}},
+                                                               {"_id": 0, "quote_id": 1}).to_list(200)}
     for qd in quotes:
         if qd.get("book_id"):
             qd["book"] = await db.books.find_one({"book_id": qd["book_id"]}, {"_id": 0, "title": 1, "author": 1, "type": 1})
         u = await db.users.find_one({"user_id": qd["user_id"]}, {"_id": 0, "pseudo": 1, "handle": 1, "picture": 1})
         qd["author"] = u
+        qd["likes_count"] = qd.get("likes_count") or 0
+        qd["comments_count"] = qd.get("comments_count") or 0
+        qd["liked_by_me"] = qd["quote_id"] in liked
     return {"quotes": quotes}
 
 
@@ -2915,6 +3152,11 @@ async def on_startup():
     await db.boards.create_index("members")
     await db.follows.create_index([("follower_id", 1), ("followed_id", 1)], unique=True)
     await db.follows.create_index("followed_id")
+    await db.boards.create_index("share_slug")
+    await db.boards.create_index("invite_code")
+    await db.invitations.create_index([("to_id", 1), ("status", 1)])
+    await db.quote_likes.create_index([("quote_id", 1), ("user_id", 1)], unique=True)
+    await db.quote_comments.create_index([("quote_id", 1), ("created_at", 1)])
     asyncio.get_event_loop().create_task(_watch_wattpad())
     asyncio.get_event_loop().create_task(_migrate_covers())
     asyncio.get_event_loop().create_task(_seed_featured())

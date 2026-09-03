@@ -51,6 +51,7 @@ export default function Profile() {
   const [goalInput, setGoalInput] = useState('');
   const [adminBadge, setAdminBadge] = useState(0);
   const [recoBadge, setRecoBadge] = useState(0);
+  const [invBadge, setInvBadge] = useState(0);
 
   useFocusEffect(React.useCallback(() => {
     (async () => {
@@ -59,6 +60,7 @@ export default function Profile() {
         try { const b = await api<{ total: number }>('/admin/badge'); setAdminBadge(b.total || 0); } catch {}
       }
       try { const r = await api<{ unread: number }>('/recommendations/badge'); setRecoBadge(r.unread || 0); } catch {}
+      try { const r = await api<{ unread: number }>('/invitations/badge'); setInvBadge(r.unread || 0); } catch {}
       try { setClubSummary(await api('/club/me/summary')); } catch {}
       try { setReading(await api('/stats/reading')); } catch {}
       try { const b = await api<{ badges: any[] }>('/badges'); setBadges(b.badges); } catch {}
@@ -205,6 +207,10 @@ export default function Profile() {
         <Pressable testID="row-recommendations" onPress={() => router.push('/recommendations')} style={styles.row}>
           <Feather name="gift" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Recommandations')}</Text>
           {recoBadge > 0 && <View style={styles.badgeDot} testID="reco-badge"><Text style={styles.badgeDotText}>{recoBadge > 99 ? '99+' : recoBadge}</Text></View>}
+        </Pressable>
+        <Pressable testID="row-invitations" onPress={() => router.push('/invitations')} style={styles.row}>
+          <Feather name="mail" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Invitations')}</Text>
+          {invBadge > 0 && <View style={styles.badgeDot} testID="inv-badge"><Text style={styles.badgeDotText}>{invBadge > 99 ? '99+' : invBadge}</Text></View>}
         </Pressable>
         <Pressable testID="row-share-library" onPress={() => router.push('/share-library')} style={styles.row}><Feather name="share-2" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Partager ma bibliothèque')}</Text></Pressable>
         {(user as any)?.is_admin && (

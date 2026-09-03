@@ -109,6 +109,11 @@ export default function Home() {
     } catch {}
   }, []);
 
+  const likeQuote = async (quoteId: string) => {
+    setQuotes(prev => prev.map(q => q.quote_id === quoteId ? { ...q, liked_by_me: !q.liked_by_me, likes_count: (q.likes_count || 0) + (q.liked_by_me ? -1 : 1) } : q));
+    try { const r = await api<{ liked: boolean; likes_count: number }>(`/quotes/${quoteId}/like`, { method: 'POST' }); setQuotes(prev => prev.map(q => q.quote_id === quoteId ? { ...q, liked_by_me: r.liked, likes_count: r.likes_count } : q)); } catch {}
+  };
+
   const dismissForYou = async (catalogId: string) => {
     setForYou(prev => prev.filter(b => b.catalog_id !== catalogId));
     try { await api('/catalog/for-you/dismiss', { method: 'POST', body: JSON.stringify({ catalog_id: catalogId }) }); } catch {}
@@ -314,7 +319,7 @@ export default function Home() {
                         <Text style={styles.followTagText}>{t('Suivi')}</Text>
                       </View>
                     ) : null}
-                    <QuoteCard quote={x} compact onPress={() => router.push({ pathname: '/quote/[id]', params: { id: x.quote_id } })} onPressAuthor={x.author?.handle ? () => router.push({ pathname: '/reader/[handle]', params: { handle: x.author!.handle! } }) : undefined} />
+                    <QuoteCard quote={x} compact onLike={() => likeQuote(x.quote_id)} onPress={() => router.push({ pathname: '/quote/[id]', params: { id: x.quote_id } })} onPressAuthor={x.author?.handle ? () => router.push({ pathname: '/reader/[handle]', params: { handle: x.author!.handle! } }) : undefined} />
                   </View>
                 ))}
               </View>

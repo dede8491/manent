@@ -133,6 +133,27 @@ async def _library_page(handle: str):
                               f"/@{handle}/bibliotheque", extra=extra, open_label=f"Voir dans l’application"))
 
 
+async def _board_page(slug: str, code: str = ""):
+    """Aperçu public d'un tableau de citations (privé : page neutre, le lien invite quand même)."""
+    b = await db.boards.find_one({"share_slug": slug}, {"_id": 0, "board_id": 1, "name": 1, "description": 1, "visibility": 1, "members": 1, "user_id": 1})
+    if not b:
+        return HTMLResponse(_page("Manent", "Ce que tes lectures te laissent.", None, "/"))
+    u = await db.users.find_one({"user_id": b.get("user_id")}, {"_id": 0, "pseudo": 1})
+    n = len(b.get("members") or [])
+    target = f"/t/{slug}" + (f"?code={html.escape(code)}" if code else "")
+    if b.get("visibility") == "private" and not code:
+        return HTMLResponse(_page("Un tableau privé sur Manent", f"{(u or {}).get('pseudo', 'Une lectrice')} garde ses passages ici. Demande-lui une invitation.", None, target))
+    pins = await db.board_quotes.find({"board_id": b["board_id"]}, {"_id": 0, "quote_id": 1}).sort("created_at", -1).limit(3).to_list(3)
+    quotes = []
+    for p in pins:
+        q = await db.quotes.find_one({"quote_id": p["quote_id"], "is_hidden": {"$ne": True}}, {"_id": 0, "text": 1})
+        if q:
+            quotes.append(q)
+    extra = "".join(f"<blockquote>« {html.escape(q['text'][:140])} »</blockquote>" for q in quotes)
+    desc = b.get("description") or f"Un tableau de {(u or {}).get('pseudo', 'une lectrice')} — {n} membre{'s' if n > 1 else ''}."
+    return HTMLResponse(_page(b["name"], desc, None, target, extra=extra, open_label="Rejoindre le tableau" if code else "Voir dans l’application"))
+
+
 async def _club_page(code: str):
     c = await db.clubs.find_one({"code": code.upper()}, {"_id": 0, "name": 1, "members": 1})
     if not c:
@@ -146,10 +167,13 @@ router.add_api_route("/b/{catalog_id}", _book_page, response_class=HTMLResponse)
 router.add_api_route("/u/{handle}", _profile_page, response_class=HTMLResponse)
 router.add_api_route("/u/{handle}/bibliotheque", _library_page, response_class=HTMLResponse)
 router.add_api_route("/c/{code}", _club_page, response_class=HTMLResponse)
+router.add_api_route("/t/{slug}", _board_page, response_class=HTMLResponse)
 
 root_router.add_api_route("/q/{quote_id}", _quote_page, response_class=HTMLResponse)
 root_router.add_api_route("/b/{catalog_id}", _book_page, response_class=HTMLResponse)
 root_router.add_api_route("/c/{code}", _club_page, response_class=HTMLResponse)
+root_router.add_api_route("/t/{slug}", _board_page, response_class=HTMLResponse)
+router.add_api_route("/t/{slug}", _board_page, response_class=HTMLResponse)
 root_router.add_api_route("/@{handle}", _profile_page, response_class=HTMLResponse)
 root_router.add_api_route("/@{handle}/bibliotheque", _library_page, response_class=HTMLResponse)
 
@@ -226,7 +250,7 @@ root_router.add_api_route("/conditions", _terms_page, response_class=HTMLRespons
 def _aasa() -> dict:
     team, bundle = _env("APPLE_TEAM_ID") or "TEAMID", _env("IOS_BUNDLE_ID") or "com.manent.app"
     return {"applinks": {"apps": [], "details": [
-        {"appID": f"{team}.{bundle}", "paths": ["/@*", "/q/*", "/b/*", "/c/*", "/api/s/*"]}]}}
+        {"appID": f"{team}.{bundle}", "paths": ["/@*", "/q/*", "/b/*", "/c/*", "/t/*", "/api/s/*"]}]}}
 
 
 def _assetlinks() -> list:

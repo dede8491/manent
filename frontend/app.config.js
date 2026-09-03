@@ -23,6 +23,7 @@ module.exports = ({ config }) => ({
           { scheme: 'https', host: PUBLIC_DOMAIN, pathPrefix: '/q' },
           { scheme: 'https', host: PUBLIC_DOMAIN, pathPrefix: '/b' },
           { scheme: 'https', host: PUBLIC_DOMAIN, pathPrefix: '/c' },
+          { scheme: 'https', host: PUBLIC_DOMAIN, pathPrefix: '/t' },
           { scheme: 'https', host: PUBLIC_DOMAIN, pathPrefix: '/@' },
           { scheme: 'https', host: PUBLIC_DOMAIN, pathPrefix: '/api/s' },
         ],
