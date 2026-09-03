@@ -377,3 +377,8 @@ Testé e2e via curl (création publique, discover, join, correspondance titre in
 - Conflits résolus : share.py (_board_page avec base dynamique + Request), _layout.tsx (deep link fiable + suffixe ?code=), app.config.js (intentFilters conditionnels + /t).
 - Vérifié : testing agent 16/16 backend + 7 points UI verts ; compléments main agent : invitation club envoyée→pastille→accept→membre (API), admin sans Auteurs + Moteur IA (1452/1458 classés). 13 tests unitaires + tsc clean.
 - Note : test_admin@manent.app passé premium (is_premium) pour tester la création de club.
+
+## Fusion 6b4e34a (sept. 2026) — Accueil épuré + reprise par activité + retry couvertures
+- Fusion Git : carte unique « Je cherche un livre qui… » (plume, sous-titre, bouton filtres), suppression « Sujets du moment » et double rangée de boutons, « Reprendre ta lecture » trié par activité (updated_at), retry couvertures au démarrage (« covers retry: N livres remis en file », fenêtre échec 2 j).
+- Conflit unique résolu (catalog.py) : fenêtre 2 jours de la branche + clôture non destructive _finish_task conservée (contrainte déploiement).
+- Vérifié (iteration 20) : 13/13 checklist — backend 11/11 pytest + non-régression iter19 16/16, couverture « Les Bouts de bois de Dieu » récupérée, accueil épuré confirmé par captures, filtres/origine/scan/admin OK, 13 tests unitaires + tsc clean. Prêt à publier.
