@@ -585,7 +585,7 @@ async def process_tasks(limit: int = 4) -> int:
         try:
             book = await db.catalog_books.find_one({"catalog_id": t["catalog_id"]}, {"_id": 0, "summary": 1})
             if not book:
-                await db.catalog_tasks.delete_one({"_id": t["_id"]})
+                await db.catalog_tasks.update_one({"_id": t["_id"]}, {"$set": {"status": "done", "finished_at": now_utc()}})
                 continue
             if not book.get("summary") and t.get("tries", 0) < 2:
                 # le résumé arrive en général quelques secondes plus tard : l'IA classera mieux avec.
@@ -594,7 +594,7 @@ async def process_tasks(limit: int = 4) -> int:
                     await db.catalog_tasks.update_one({"_id": t["_id"]}, {"$set": {"status": "pending", "created_at": now_utc()}, "$inc": {"tries": 1}})
                     continue
             await classify_book(t["catalog_id"], use_ai=True, force_ai=t.get("reason") == "reclassify", reason=t.get("reason", "task"))
-            await db.catalog_tasks.delete_one({"_id": t["_id"]})
+            await db.catalog_tasks.update_one({"_id": t["_id"]}, {"$set": {"status": "done", "finished_at": now_utc()}})
         except Exception as e:
             logger.warning("classify task failed (%s): %s", t.get("catalog_id"), e)
             try:

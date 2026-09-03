@@ -1130,11 +1130,15 @@ async def list_quotes(book_id: Optional[str] = None, user=Depends(get_current_us
         q["book_id"] = book_id
     cur = db.quotes.find(q, {"_id": 0}).sort("created_at", -1)
     quotes = await cur.to_list(500)
-    # attach book info (title/author) minimal
-    for qd in quotes:
-        if qd.get("book_id"):
-            b = await db.books.find_one({"book_id": qd["book_id"]}, {"_id": 0, "title": 1, "author": 1, "type": 1})
-            qd["book"] = b
+    # attache titre/auteur des livres en une seule requête (pas de N+1)
+    bids = list({qd["book_id"] for qd in quotes if qd.get("book_id")})
+    if bids:
+        books = {b["book_id"]: b for b in await db.books.find(
+            {"book_id": {"$in": bids}}, {"_id": 0, "book_id": 1, "title": 1, "author": 1, "type": 1}).to_list(len(bids))}
+        for qd in quotes:
+            if qd.get("book_id"):
+                b = books.get(qd["book_id"])
+                qd["book"] = {k: b.get(k) for k in ("title", "author", "type")} if b else None
     return {"quotes": quotes}
 
 

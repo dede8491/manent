@@ -408,6 +408,11 @@ async def _propagate(catalog_id: str, field: str, value: str):
         await db[col].update_many(flt, {"$set": {field: value}})
 
 
+async def _finish_task(task_id, status: str = "done"):
+    """Clôture non destructive d'une tâche (aucune suppression au démarrage/traitement)."""
+    await db.catalog_tasks.update_one({"_id": task_id}, {"$set": {"status": status, "finished_at": now_utc()}})
+
+
 async def process_tasks(limit: int = 5):
     """Traite quelques travaux d'enrichissement. Échec de couverture mémorisé 7 jours."""
     tasks = await db.catalog_tasks.find({"status": "pending", "kind": {"$in": ["cover", "summary"]}}) \
@@ -420,7 +425,7 @@ async def process_tasks(limit: int = 5):
             await db.catalog_tasks.update_one({"_id": t["_id"]}, {"$set": {"status": "running"}})
             book = await db.catalog_books.find_one({"catalog_id": t["catalog_id"]}, {"_id": 0})
             if not book:
-                await db.catalog_tasks.delete_one({"_id": t["_id"]})
+                await _finish_task(t["_id"], "done")
                 continue
             author = ", ".join(book.get("authors") or [])
             try:
@@ -430,7 +435,7 @@ async def process_tasks(limit: int = 5):
                         if last.tzinfo is None:
                             last = last.replace(tzinfo=timezone.utc)
                         if book.get("cover_status") == "failed" and (now_utc() - last) < timedelta(days=7):
-                            await db.catalog_tasks.delete_one({"_id": t["_id"]})
+                            await _finish_task(t["_id"], "done")
                             continue
                     cover = await _find_cover_chain(http, book["title"], author, book.get("isbn13") or book.get("isbn10"))
                     await db.catalog_books.update_one({"catalog_id": book["catalog_id"]}, {"$set": {
@@ -460,13 +465,13 @@ async def process_tasks(limit: int = 5):
                         await db.catalog_books.update_one({"catalog_id": book["catalog_id"]}, {"$set": {"areas": [], "continents": []}})
                     if (s or cats) and not (book.get("classification") or {}).get("ai_version"):
                         await classification.enqueue(book["catalog_id"])
-                await db.catalog_tasks.delete_one({"_id": t["_id"]})
+                await _finish_task(t["_id"], "done")
                 done += 1
             except Exception as e:
                 logger.warning("catalog task failed: %s", e)
                 await db.catalog_tasks.update_one({"_id": t["_id"]}, {"$set": {"status": "pending"}, "$inc": {"tries": 1}})
                 if t.get("tries", 0) >= 3:
-                    await db.catalog_tasks.delete_one({"_id": t["_id"]})
+                    await _finish_task(t["_id"], "failed")
     return done
 
 
@@ -994,7 +999,7 @@ async def _recompute_books_for_author(author_id: str):
 async def process_author_origin(task):
     a = await db.catalog_authors.find_one({"author_id": task["catalog_id"]}, {"_id": 0})
     if not a:
-        await db.catalog_tasks.delete_one({"_id": task["_id"]})
+        await _finish_task(task["_id"], "done")
         return
     iso, meta = None, None
     _ua = {"User-Agent": "Manent/1.0 (https://manentlc.app)"}
@@ -1014,7 +1019,7 @@ async def process_author_origin(task):
     await db.catalog_authors.update_one({"author_id": a["author_id"]}, {"$set": upd})
     if iso:
         await _recompute_books_for_author(a["author_id"])
-    await db.catalog_tasks.delete_one({"_id": task["_id"]})
+    await _finish_task(task["_id"], "done")
 
 
 async def process_author_tasks(limit: int = 4):
@@ -1028,7 +1033,7 @@ async def process_author_tasks(limit: int = 4):
             logger.warning("author origin task failed: %s", e)
             await db.catalog_tasks.update_one({"_id": t["_id"]}, {"$set": {"status": "pending"}, "$inc": {"tries": 1}})
             if t.get("tries", 0) >= 3:
-                await db.catalog_tasks.delete_one({"_id": t["_id"]})
+                await _finish_task(t["_id"], "failed")
     return len(tasks)
 
 
