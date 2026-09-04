@@ -769,17 +769,31 @@ async def browse(q: Optional[str] = None, sort: str = "pertinence", page: int = 
     flt = build_filter(sel)
     if q and q.strip():
         flt["$text"] = {"$search": q.strip()[:120]}
-    total = await db.catalog_books.count_documents(flt)
+    exact_total = await db.catalog_books.count_documents(flt)
     if count_only:
-        return {"total": total, "chips": selected_chips(sel)}
+        return {"total": exact_total, "chips": selected_chips(sel)}
     size = min(max(size, 1), 40)
     skip = max(page - 1, 0) * size
+    fields = {k: v["$in"] for k, v in flt.items() if k != "$text"}
+    if sort == "pertinence" and len(fields) >= 2 and "$text" not in flt:
+        # Pertinence : d'abord les livres qui remplissent TOUS les filtres, puis ceux qui en remplissent
+        # le plus grand nombre (score = nombre de dimensions satisfaites) — la liste ne s'arrête jamais
+        # aux seules correspondances exactes.
+        conds = [{"$cond": [{"$gt": [{"$size": {"$setIntersection": [{"$ifNull": [f"${f}", []]}, keys]}}, 0]}, 1, 0]} for f, keys in fields.items()]
+        base = {"$or": [{f: {"$in": keys}} for f, keys in fields.items()]}
+        pipe = [{"$match": base}, {"$addFields": {"match_score": {"$add": conds}, "match_of": len(fields)}},
+                {"$sort": {"match_score": -1, "popularity": -1, "classification.score": -1, "updated_at": -1}},
+                {"$skip": skip}, {"$limit": size}, {"$project": {"_id": 0}}]
+        docs = await db.catalog_books.aggregate(pipe).to_list(size)
+        total = await db.catalog_books.count_documents(base)
+        return {"results": [_card(b) | {"match_score": b.get("match_score"), "match_of": b.get("match_of")} for b in docs],
+                "total": total, "exact_total": exact_total, "page": page, "size": size, "chips": selected_chips(sel), "filters": sel, "sort": sort}
     if "$text" in flt and sort == "pertinence":
         cur = db.catalog_books.find(flt, {"_id": 0, "score": {"$meta": "textScore"}}).sort([("score", {"$meta": "textScore"})])
     else:
         cur = db.catalog_books.find(flt, {"_id": 0}).sort(SORTS.get(sort, SORTS["pertinence"]))
     docs = await cur.skip(skip).limit(size).to_list(size)
-    return {"results": [_card(b) for b in docs], "total": total, "page": page, "size": size,
+    return {"results": [_card(b) for b in docs], "total": exact_total, "exact_total": exact_total, "page": page, "size": size,
             "chips": selected_chips(sel), "filters": sel, "sort": sort}
 
 

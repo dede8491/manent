@@ -18,7 +18,7 @@ type Profile = {
   is_me: boolean;
   private?: boolean;
   is_following?: boolean;
-  stats?: { public_quotes: number; books: number; boards: number; followers: number };
+  stats?: { public_quotes: number; books: number; boards: number; followers: number; following?: number };
   quotes?: Quote[];
   library?: { book_id: string; title: string; author?: string; cover?: string; status?: string }[];
   fiches?: { title: string; author?: string; cover?: string; rating: number; summary: string }[];
@@ -163,15 +163,15 @@ export default function ReaderProfile() {
           <>
           <View style={styles.statsRow}>
             {[
-              { n: profile.stats!.followers, l: t(profile.stats!.followers > 1 ? 'abonnés' : 'abonné') },
+              { n: profile.stats!.followers, l: t(profile.stats!.followers > 1 ? 'abonnées' : 'abonnée'), tab: 'followers' },
+              { n: profile.stats!.following ?? 0, l: t((profile.stats!.following ?? 0) > 1 ? 'abonnements' : 'abonnement'), tab: 'following' },
               { n: profile.stats!.public_quotes, l: t(profile.stats!.public_quotes > 1 ? 'citations' : 'citation') },
               { n: profile.stats!.books, l: t(profile.stats!.books > 1 ? 'livres' : 'livre') },
-              { n: profile.stats!.boards, l: t(profile.stats!.boards > 1 ? 'tableaux' : 'tableau') },
             ].map(s => (
-              <View key={s.l} style={styles.statCard}>
+              <Pressable key={s.l} testID={`reader-stat-${s.tab || s.l}`} disabled={!s.tab} onPress={() => router.push({ pathname: '/follows', params: { handle, tab: s.tab } })} style={styles.statCard}>
                 <Text style={styles.statNum}>{s.n}</Text>
-                <Text style={styles.statLbl}>{s.l}</Text>
-              </View>
+                <Text style={styles.statLbl} numberOfLines={1} adjustsFontSizeToFit>{s.l}</Text>
+              </Pressable>
             ))}
           </View>
 

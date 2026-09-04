@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Platform, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Platform, Image, Share } from 'react-native';
+import { shareUrl } from '@/src/share';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -52,6 +53,7 @@ export default function Profile() {
   const [adminBadge, setAdminBadge] = useState(0);
   const [recoBadge, setRecoBadge] = useState(0);
   const [invBadge, setInvBadge] = useState(0);
+  const [follows, setFollows] = useState<{ followers_count: number; following_count: number } | null>(null);
 
   useFocusEffect(React.useCallback(() => {
     (async () => {
@@ -61,6 +63,7 @@ export default function Profile() {
       }
       try { const r = await api<{ unread: number }>('/recommendations/badge'); setRecoBadge(r.unread || 0); } catch {}
       try { const r = await api<{ unread: number }>('/invitations/badge'); setInvBadge(r.unread || 0); } catch {}
+      try { setFollows(await api('/me/follows')); } catch {}
       try { setClubSummary(await api('/club/me/summary')); } catch {}
       try { setReading(await api('/stats/reading')); } catch {}
       try { const b = await api<{ badges: any[] }>('/badges'); setBadges(b.badges); } catch {}
@@ -74,6 +77,16 @@ export default function Profile() {
       } catch {}
     })();
   }, []));
+  const shareProfile = async () => {
+    if (!user?.handle) return;
+    const message = `${t('Suis mes lectures sur Manent : @{handle}', { handle: user.handle })} — ${shareUrl.profile(user.handle)}`;
+    try {
+      if (Platform.OS === 'web') {
+        const nav: any = navigator;
+        if (nav.share) await nav.share({ text: message }); else if (nav.clipboard) await nav.clipboard.writeText(message);
+      } else { await Share.share({ message }); }
+    } catch {}
+  };
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.glacier }} contentContainerStyle={{ paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 80 }} testID="screen-profile">
       <View style={{ alignItems: 'flex-end', paddingHorizontal: spacing.xl }}>
@@ -94,6 +107,20 @@ export default function Profile() {
         </Pressable>
         <Text style={styles.pseudo}>{user?.pseudo}</Text>
         <Text style={styles.handle}>@{user?.handle}</Text>
+        <View style={styles.followRow}>
+          <Pressable testID="profile-followers" onPress={() => router.push({ pathname: '/follows', params: { tab: 'followers' } })} hitSlop={6}>
+            <Text style={styles.followText}><Text style={styles.followNum}>{follows?.followers_count ?? 0}</Text> {t((follows?.followers_count ?? 0) > 1 ? 'abonnées' : 'abonnée')}</Text>
+          </Pressable>
+          <Text style={styles.followDot}>·</Text>
+          <Pressable testID="profile-following" onPress={() => router.push({ pathname: '/follows', params: { tab: 'following' } })} hitSlop={6}>
+            <Text style={styles.followText}><Text style={styles.followNum}>{follows?.following_count ?? 0}</Text> {t((follows?.following_count ?? 0) > 1 ? 'abonnements' : 'abonnement')}</Text>
+          </Pressable>
+          <Text style={styles.followDot}>·</Text>
+          <Pressable testID="profile-share" onPress={shareProfile} hitSlop={6} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Feather name="share" size={13} color={colors.chambray} />
+            <Text style={[styles.followText, { color: colors.chambray }]}>{t('Partager')}</Text>
+          </Pressable>
+        </View>
       </View>
       <View style={styles.statsRow}>
         <View style={styles.stat}><Text style={styles.statNum}>{stats.books}</Text><Text style={styles.statLbl} numberOfLines={1} adjustsFontSizeToFit>{t('livres')}</Text></View>
@@ -212,6 +239,7 @@ export default function Profile() {
           <Feather name="mail" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Invitations')}</Text>
           {invBadge > 0 && <View style={styles.badgeDot} testID="inv-badge"><Text style={styles.badgeDotText}>{invBadge > 99 ? '99+' : invBadge}</Text></View>}
         </Pressable>
+        <Pressable testID="row-share-profile" onPress={shareProfile} style={styles.row}><Feather name="user-plus" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Partager mon profil')}</Text></Pressable>
         <Pressable testID="row-share-library" onPress={() => router.push('/share-library')} style={styles.row}><Feather name="share-2" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Partager ma bibliothèque')}</Text></Pressable>
         {(user as any)?.is_admin && (
           <Pressable testID="row-admin" onPress={() => router.push('/admin')} style={styles.row}>
@@ -266,6 +294,10 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   statsRow: { flexDirection: 'row', paddingHorizontal: spacing.xl, marginTop: spacing.xl, gap: spacing.sm },
   stat: { flex: 1, backgroundColor: colors.creme, borderRadius: radius.md, paddingVertical: spacing.md, paddingHorizontal: 4, alignItems: 'center', borderWidth: 1, borderColor: colors.borderSoft },
   statNum: { fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso },
+  followRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
+  followText: { fontFamily: fonts.body, fontSize: 13, color: colors.clay },
+  followNum: { fontFamily: fonts.bodyMedium, color: colors.espresso },
+  followDot: { fontFamily: fonts.body, fontSize: 13, color: colors.clay },
   statLbl: { fontFamily: fonts.bodyMedium, fontSize: 8.5, color: colors.clay, letterSpacing: 0.4, textTransform: 'uppercase', marginTop: 2, textAlign: 'center' },
   readingCard: { marginHorizontal: spacing.xl, marginTop: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },
   clubCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginHorizontal: spacing.xl, marginTop: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },
