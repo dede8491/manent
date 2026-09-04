@@ -25,6 +25,7 @@ export default function BrowseScreen() {
   const sort = params.sort || 'pertinence';
   const [books, setBooks] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
+  const [exactTotal, setExactTotal] = useState<number | null>(null);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [more, setMore] = useState(false);
@@ -35,7 +36,7 @@ export default function BrowseScreen() {
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    fetchPage(1).then(r => { if (!alive) return; setBooks(r.results || []); setTotal(r.total || 0); setPage(1); })
+    fetchPage(1).then(r => { if (!alive) return; setBooks(r.results || []); setTotal(r.total || 0); setExactTotal(typeof r.exact_total === 'number' ? r.exact_total : null); setPage(1); })
       .catch(() => { if (alive) { setBooks([]); setTotal(0); } })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
@@ -76,7 +77,7 @@ export default function BrowseScreen() {
       </View>
 
       {chips.length > 0 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 6, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, alignItems: 'center' }}>
           {chips.map(c => (
             <Pressable key={`${c.dim}:${c.key}`} testID={`browse-chip-${c.dim}-${c.key}`} onPress={() => setSelection(toggleSel(sel, c.dim, c.key))} style={styles.selChip}>
               <Text style={styles.selChipText} numberOfLines={1}>{c.label}</Text>
@@ -93,7 +94,11 @@ export default function BrowseScreen() {
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ManentLoader /></View>
       ) : (
         <ScrollView contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: insets.bottom + spacing.xxl }}>
-          <Text style={styles.total} testID="browse-total">{total === 0 ? t('Aucun livre') : t(total > 1 ? '{n} livres' : '{n} livre', { n: total })}</Text>
+          <Text style={styles.total} testID="browse-total">
+            {total === 0 ? t('Aucun livre')
+              : exactTotal !== null && exactTotal < total ? t('{e} correspondances exactes · {n} livres proches', { e: exactTotal, n: total - exactTotal })
+              : t(total > 1 ? '{n} livres' : '{n} livre', { n: total })}
+          </Text>
           {books.length === 0 ? (
             <View style={{ paddingVertical: spacing.xxl, alignItems: 'center' }}>
               <Text style={styles.emptyTitle}>{t('Rien pour ces filtres.')}</Text>
@@ -102,7 +107,21 @@ export default function BrowseScreen() {
                 <Text style={styles.moreBtnText}>✨ {t('Je cherche un livre qui…')}</Text>
               </Pressable>
             </View>
-          ) : books.map((b: any, i: number) => <CatalogBookRow key={b.catalog_id || i} book={b} testID={`browse-book-${i}`} />)}
+          ) : books.map((b: any, i: number) => {
+            const partial = typeof b.match_of === 'number' && b.match_score < b.match_of;
+            const firstPartial = partial && (i === 0 || !(typeof books[i - 1].match_of === 'number' && books[i - 1].match_score < books[i - 1].match_of));
+            return (
+              <View key={b.catalog_id || i}>
+                {firstPartial && (
+                  <View style={styles.sep} testID="browse-partial-sep">
+                    <Text style={styles.sepText}>{t('Proches de ta recherche')}</Text>
+                    <Text style={styles.sepSub}>{t('Ces livres remplissent une partie des filtres, les plus proches d’abord.')}</Text>
+                  </View>
+                )}
+                <CatalogBookRow book={b} testID={`browse-book-${i}`} />
+              </View>
+            );
+          })}
           {books.length < total && (
             <Pressable testID="browse-see-more" onPress={loadMore} style={styles.moreBtn}>
               <Feather name="plus" size={15} color={colors.chambray} />
@@ -138,6 +157,9 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   resetChip: { height: 28, paddingHorizontal: 10, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center' },
   resetText: { fontFamily: fonts.body, fontSize: 11.5, color: colors.clay },
   total: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1.2, textTransform: 'uppercase', marginTop: spacing.sm, marginBottom: spacing.sm },
+  sep: { marginTop: spacing.md, marginBottom: spacing.sm, paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.borderSoft },
+  sepText: { fontFamily: fonts.displayMedium, fontSize: 18, color: colors.espresso },
+  sepSub: { fontFamily: fonts.body, fontSize: 12.5, color: colors.clay, marginTop: 2 },
   emptyTitle: { fontFamily: fonts.displayMedium, fontSize: 22, color: colors.espresso, textAlign: 'center' },
   emptySub: { fontFamily: fonts.body, fontSize: 14, color: colors.clay, textAlign: 'center', marginTop: spacing.sm, lineHeight: 20 },
   moreBtn: { marginTop: spacing.md, height: 46, paddingHorizontal: spacing.lg, borderRadius: radius.pill, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.chambray, backgroundColor: colors.creme, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },

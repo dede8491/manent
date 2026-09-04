@@ -1105,4 +1105,7 @@ export const EN: Record<string, string> = {
   'Un titre, une autrice, un sujet, un pays…': 'A title, an author, a subject, a country…',
   'La recherche parcourt ta bibliothèque, tes citations, les lectrices et tout le catalogue en ligne.': 'Search covers your library, your quotes, readers and the whole online catalogue.',
   'Essaie un autre mot, ou ouvre les filtres.': 'Try another word, or open the filters.',
+  '{e} correspondances exactes · {n} livres proches': '{e} exact matches · {n} close books',
+  'Proches de ta recherche': 'Close to your search',
+  'Ces livres remplissent une partie des filtres, les plus proches d’abord.': 'These books meet part of the filters, closest first.',
 };
