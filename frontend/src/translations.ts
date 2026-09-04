@@ -1102,4 +1102,7 @@ export const EN: Record<string, string> = {
   'Sois la première à laisser un mot.': 'Be the first to leave a word.',
   'Laisser un mot…': 'Leave a word…',
   'Décris ton envie, Manent trouve le livre.': 'Describe what you feel like, Manent finds the book.',
+  'Un titre, une autrice, un sujet, un pays…': 'A title, an author, a subject, a country…',
+  'La recherche parcourt ta bibliothèque, tes citations, les lectrices et tout le catalogue en ligne.': 'Search covers your library, your quotes, readers and the whole online catalogue.',
+  'Essaie un autre mot, ou ouvre les filtres.': 'Try another word, or open the filters.',
 };
