@@ -456,11 +456,41 @@ async def public_profile(handle: str, user=Depends(get_current_user)):
         "is_me": uid == user["user_id"],
         "private": False,
         "is_following": is_following,
-        "stats": {"public_quotes": total, "books": books, "boards": boards, "followers": followers},
+        "stats": {"public_quotes": total, "books": books, "boards": boards, "followers": followers,
+                  "following": await db.follows.count_documents({"follower_id": uid})},
         "quotes": quotes,
         "library": library,
         "fiches": fiches[:10],
     }
+
+
+async def _follow_lists(uid: str, viewer_id: str) -> dict:
+    """Abonnées (qui suivent uid) et abonnements (que uid suit), avec « je la suis » pour la lectrice qui regarde."""
+    followers_ids = [f["follower_id"] for f in await db.follows.find({"followed_id": uid}, {"_id": 0, "follower_id": 1}).sort("created_at", -1).to_list(2000)]
+    following_ids = [f["followed_id"] for f in await db.follows.find({"follower_id": uid}, {"_id": 0, "followed_id": 1}).sort("created_at", -1).to_list(2000)]
+    mine = {f["followed_id"] for f in await db.follows.find({"follower_id": viewer_id}, {"_id": 0, "followed_id": 1}).to_list(5000)}
+    users = {x["user_id"]: x for x in await db.users.find({"user_id": {"$in": list(set(followers_ids + following_ids))}},
+                                                          {"_id": 0, "user_id": 1, "pseudo": 1, "handle": 1, "picture": 1}).to_list(4000)}
+    def row(i):
+        x = users.get(i)
+        return {"pseudo": x["pseudo"], "handle": x.get("handle"), "picture": x.get("picture"), "is_following": i in mine, "is_me": i == viewer_id} if x and x.get("handle") else None
+    return {"followers": [r for r in map(row, followers_ids) if r], "following": [r for r in map(row, following_ids) if r],
+            "followers_count": len(followers_ids), "following_count": len(following_ids)}
+
+
+@api.get("/me/follows")
+async def my_follows(user=Depends(get_current_user)):
+    return await _follow_lists(user["user_id"], user["user_id"])
+
+
+@api.get("/readers/{handle}/follows")
+async def reader_follows(handle: str, user=Depends(get_current_user)):
+    u = await db.users.find_one({"handle": handle}, {"_id": 0, "user_id": 1, "profile_public": 1, "pseudo": 1})
+    if not u:
+        raise HTTPException(status_code=404, detail="not_found")
+    if u.get("profile_public", True) is False and u["user_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="private_profile")
+    return {**(await _follow_lists(u["user_id"], user["user_id"])), "pseudo": u.get("pseudo")}
 
 
 # ============ Books ============
