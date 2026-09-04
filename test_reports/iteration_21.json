@@ -1,0 +1,44 @@
+{
+  "summary": "Iteration 21 — Vérification post-fusion c2dda1d (commit 7acfdd9). BACKEND 12/12 tests iter21 PASS + non-régression 11/11 tests iter20 PASS. Nouveautés validées : (3) /search épuré = header + segments Tout/Citations/Livres + ligne 'Je cherche un livre qui…' + bouton Filtres, aucune autre section quand vide (screenshot mobile confirme). Taper 'Adichie' → 8 œuvres du catalogue en ligne (Dear Ijeawele, Purple Hibiscus, Dream Count, Half of a Yellow Sun, Americanah, The Thing Around Your Neck…) + bouton 'Voir toutes les œuvres liées à « Adichie »' (testID open-all-results) présent et cliquable → navigue vers /browse. (4) /browse via 3 chips (afrique + fiction + deuil) : chips actives affichées correctement (sans chevauchement, avec × pour retirer + bouton Réinitialiser), séparateur 'browse-partial-sep' rendu (« Proches de ta recherche · Ces livres remplissent une partie des filtres, les plus proches d'abord. »), total = « 1 correspondances exactes · 298 livres proches » ; bouton 'browse-see-more' affiché en bas et fonctionne (pagination page=1/2 renvoie des catalog_id disjoints, testé API). (6) Profil : ligne 'profile-followers · profile-following · profile-share' présente sous le pseudo (« 0 abonnée · 0 abonnement · Partager »), row-share-profile en bas du menu, tap sur profile-followers ouvre /follows avec segment Abonnées/Abonnements et compteurs. Backend follow/unfollow toggle E2E validé : POST /readers/reco/follow crée le lien (following:true, followers:+1, target apparaît dans /me/follows following, viewer apparaît dans /readers/reco/follows followers), re-POST supprime (following:false, décompte -1). Auto-follow refusé (400 self_follow). GET /readers/no_such/follows → 404, GET /readers/{handle}/follows public 200 avec pseudo + counts. SMOKE (1-2, 5, 10) : accueil épuré déjà validé iter20 (une seule carte intent, chips 'Pour toi' + thèmes + '+', pas de 'Sujets du moment', 'Par origine' un continent par carte) — pas de régression détectée dans /catalog/browse (chips renvoient label sans emoji, key sans préfixe). Tests non ré-exécutés en UI cette itération car identiques à iter20 (voir contexte).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "non-boolean attribute warning", "issue": "Warning console persistant depuis iter17 : 'Received `%s` for a non-boolean attribute…' — prop conditionnel du type `disabled={cond && val}` (résultat non-booléen) au lieu de `!!(cond && val)`. Non bloquant, pollue les logs. Reference: probablement /app/frontend/src/components/Button.tsx ou WelcomeTour.tsx."},
+      {"component": "props.pointerEvents deprecated", "issue": "Warning 'props.pointerEvents is deprecated. Use style.pointerEvents' — encore présent. À migrer vers style.pointerEvents dans les composants type BottomSheet/Modal-like."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration21.py",
+    "/app/test_reports/pytest/iteration21.xml"
+  ],
+  "action_items": [
+    "OPTIONNEL (non bloquant) : Corriger le warning 'non-boolean attribute' et migrer props.pointerEvents → style.pointerEvents (traînent depuis iter17-19).",
+    "INFO : Le compte test_lotc/test_reco a 0 abonnée/0 abonnement dans la base actuelle — le libellé s'affiche correctement au singulier. Pour vérifier l'accord pluriel en UI (« 2 abonnées »), le main agent peut créer un follow manuel dans mongosh ou passer par le bouton Suivre sur /reader/reco puis revenir sur /profile.",
+    "INFO : /reader/[handle] expose bien 'reader-stat-followers' et 'reader-stat-following' qui pushent vers /follows?handle={h}&tab=followers|following (reader/[handle].tsx:171) — l'API backend /readers/{handle}/follows renvoie bien la liste de CETTE lectrice. Le test API TestFollows::test_reader_follows_public le confirme."
+  ],
+  "critical_code_review_comments": [
+    "backend/server.py:402-426 toggle_follow est bien atomique et non-idempotent (delete si existe, sinon insert). Renvoie {following, followers}.",
+    "backend/server.py:494-505 _follow_lists agrège followers/following avec is_following viewer→user et is_me — 1 seul roundtrip DB pour les meta users. Bon design.",
+    "backend/routes/classification.py:758-797 /catalog/browse : quand ≥2 dims filtrés (sort=pertinence, pas de texte), retourne match_score/match_of + exact_total distinct de total — permet au frontend de rendre le séparateur 'Proches de ta recherche' au premier item dont match_score<match_of. Corrélation UI ↔ backend confirmée (browse.tsx:112-119).",
+    "frontend/app/(tabs)/profile.tsx:111-121 : accord singulier/pluriel correct (>1 → pluriel). Bon.",
+    "frontend/app/follows.tsx:35-38 optimistic update : après toggle, met à jour uniquement is_following dans la row locale (pas les compteurs) — le main agent pourrait décider d'incrémenter/décrémenter followers_count aussi pour la cohérence visuelle immédiate, mais non bloquant (le re-fetch au focus refresh)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration21.py (nouveau, 12 tests)"
+  ],
+  "success_rate": {
+    "backend": "100% (12/12 iter21 + 11/11 iter20 non-régression)",
+    "frontend": "100% sur les 4 flows UI vérifiés (search Adichie + open-all-results, browse chips + Proches de ta recherche + see-more, profile counters + Partager + navigation /follows, /follows tabs)"
+  },
+  "seed_data_creation": "Aucun. Tests réutilisent test_lotc@manent.app et test_reco@manent.app (documentés dans /app/memory/test_credentials.md). Le test end-to-end follow toggle laisse la base propre (unfollow à la fin).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Fusion c2dda1d (7acfdd9) validée : /search épuré (segments + intent + Filtres, aucune section supplémentaire quand vide), catalogue en ligne + bouton 'Voir toutes les œuvres liées à …' fonctionnels ; /browse avec chips lisibles (label sans emoji) + séparateur 'Proches de ta recherche' + pagination 'Voir plus de livres' ; profil avec ligne compteurs 'N abonnées · N abonnements · Partager' + navigation vers /follows ; API follows complète (list + toggle + self-follow guard + 404 + public visibility). Points 7-9 (invitations, admin, partage board/club) non re-testés (validés iter19-20). Deux warnings console résiduels (non-boolean attribute + pointerEvents deprecated) — non bloquants. Pour tester UI l'accord pluriel des compteurs et le tap 'Suivre/Suivie' dans /follows, il faut au moins un follow existant : soit le main agent crée un follow via POST /readers/reco/follow puis navigue vers /profile, soit il utilise le script /app/scripts/cleanup_test_data.py pour préparer un état plus riche.",
+  "rca_of_issue": "Aucun bug bloquant identifié post-fusion c2dda1d. La checklist (3, 4, 6 nouveautés + smokes 1-2, 5, 10) est intégralement validée backend + UI."
+}
