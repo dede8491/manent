@@ -1,24 +1,16 @@
-import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Modal, TextInput } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
 import { api } from '@/src/api';
-import { BookCover } from '@/src/components/BookCover';
-import ManentLoader from '@/src/components/ManentLoader';
-import { timeAgo, dateFr } from '@/src/timeago';
 import { InfoTooltip } from '@/src/components/InfoTooltip';
-import { useT, useLang } from '@/src/i18n';
+import { ClubCard } from '@/src/components/ClubCard';
+import { useT } from '@/src/i18n';
 
-type ClubBook = {
-  cb_id: string; title: string; author?: string; cover?: string; book_of_month?: boolean;
-  readers_count: number; avg_rating: number; ratings_count: number;
-  posts_count: number; collective_pct: number; is_joined: boolean; my_pct: number; my_status?: string | null;
-};
-
-type Post = { post_id: string; text: string; spoiler?: boolean; created_at: string; author: { pseudo: string }; book_title?: string; likes_count: number };
-
+// Onglet Club : tes clubs, créer (Premium) / rejoindre par code, clubs publics.
+// Plus aucun appel au club global (/api/club) : chaque club porte ses propres contenus.
 export function ClubHome({ clubs, onOpenClub, onCreateClub, onJoinClub }: {
   clubs: any[];
   onOpenClub: (id: string) => void;
@@ -26,30 +18,12 @@ export function ClubHome({ clubs, onOpenClub, onCreateClub, onJoinClub }: {
   onJoinClub: () => void;
 }) {
   const t = useT();
-  const lang = useLang();
   const colors = useColors();
   const styles = useStyles(makeStyles);
   const router = useRouter();
   const [premium, setPremium] = useState<boolean | null>(null);
-  const [events, setEvents] = useState<any[]>([]);
-  const [gami, setGami] = useState<any>(null);
-  const [eventModal, setEventModal] = useState(false);
-  const [evTitle, setEvTitle] = useState('');
-  const [evType, setEvType] = useState<'discussion' | 'visio' | 'rencontre' | 'rencontre_auteur' | 'audio' | 'challenge'>('discussion');
-  const [evDate, setEvDate] = useState('');
-  const [evLoc, setEvLoc] = useState('');
-  const [creatingEvent, setCreatingEvent] = useState(false);
-  const [books, setBooks] = useState<ClubBook[]>([]);
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [polls, setPolls] = useState<any[]>([]);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [pollModal, setPollModal] = useState(false);
-  const [pollQuestion, setPollQuestion] = useState('Quel sera notre prochain livre ?');
-  const [pollSel, setPollSel] = useState<Set<string>>(new Set());
-  const [creatingPoll, setCreatingPoll] = useState(false);
-  const [sort, setSort] = useState<'tous' | 'populaires' | 'nouveaux' | 'notes'>('tous');
-  const [loaded, setLoaded] = useState(false);
   const [pubClubs, setPubClubs] = useState<any[]>([]);
+  const [joining, setJoining] = useState<string | null>(null);
 
   useFocusEffect(React.useCallback(() => {
     (async () => {
@@ -58,95 +32,22 @@ export function ClubHome({ clubs, onOpenClub, onCreateClub, onJoinClub }: {
         setPremium(st.is_premium);
       } catch { setPremium(true); }
       try {
-        const r = await api<{ books: ClubBook[]; active_posts: Post[]; is_admin: boolean }>('/club/home');
-        setBooks(r.books); setPosts(r.active_posts); setIsAdmin(r.is_admin);
-      } catch {}
-      try {
-        const p = await api<{ polls: any[] }>('/club/polls');
-        setPolls(p.polls);
-      } catch {}
-      try {
-        const e = await api<{ events: any[] }>('/club/events');
-        setEvents(e.events);
-      } catch {}
-      try {
-        setGami(await api<any>('/club/gamification'));
-      } catch {}
-      try {
         const pc = await api<{ clubs: any[] }>('/clubs/discover');
-        setPubClubs(pc.clubs);
+        setPubClubs(pc.clubs || []);
       } catch {}
-      setLoaded(true);
     })();
   }, []));
 
-  const toggleEvent = async (ev: any) => {
-    try {
-      const r = await api<{ i_participate: boolean }>(`/club/events/${ev.event_id}/${ev.i_participate ? 'leave' : 'join'}`, { method: 'POST' });
-      setEvents(prev => prev.map(x => x.event_id === ev.event_id
-        ? { ...x, i_participate: r.i_participate, participants_count: x.participants_count + (r.i_participate ? 1 : -1) }
-        : x));
-    } catch {}
-  };
-
-  const evDateIso = React.useMemo(() => {
-    const m = evDate.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{1,2})[:h](\d{2}))?$/);
-    if (!m) return null;
-    const [, d, mo, y, h, mi] = m;
-    const dt = new Date(`${y}-${mo}-${d}T${(h || '18').padStart(2, '0')}:${mi || '00'}:00`);
-    return isNaN(dt.getTime()) || dt < new Date() ? null : dt.toISOString();
-  }, [evDate]);
-
-  const createEvent = async () => {
-    if (!evTitle.trim() || !evDateIso) return;
-    setCreatingEvent(true);
-    try {
-      const e = await api<any>('/club/events', { method: 'POST', body: JSON.stringify({ title: evTitle.trim(), type: evType, date: evDateIso, location: evLoc.trim() || undefined }) });
-      setEvents(prev => [...prev, e].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
-      setEventModal(false); setEvTitle(''); setEvDate(''); setEvLoc('');
-    } finally { setCreatingEvent(false); }
-  };
-
   const joinPublic = async (cid: string) => {
+    if (joining) return;
+    setJoining(cid);
     try {
       await api(`/clubs/${cid}/join`, { method: 'POST' });
       setPubClubs(prev => prev.filter(c => c.club_id !== cid));
       onOpenClub(cid);
     } catch {}
+    finally { setJoining(null); }
   };
-
-  const vote = async (pollId: string, option: number) => {
-    try {
-      const p = await api<any>(`/club/polls/${pollId}/vote`, { method: 'POST', body: JSON.stringify({ option }) });
-      setPolls(prev => prev.map(x => x.poll_id === pollId ? p : x));
-    } catch {}
-  };
-
-  const createPoll = async () => {
-    const options = books.filter(b => pollSel.has(b.cb_id)).map(b => ({ title: b.title, author: b.author, cover: b.cover, cb_id: b.cb_id }));
-    if (options.length < 2 || !pollQuestion.trim()) return;
-    setCreatingPoll(true);
-    try {
-      const p = await api<any>('/club/polls', { method: 'POST', body: JSON.stringify({ question: pollQuestion.trim(), options, days: 7 }) });
-      setPolls(prev => [p, ...prev]);
-      setPollModal(false); setPollSel(new Set());
-    } finally { setCreatingPoll(false); }
-  };
-
-  const shown = useMemo(() => {
-    const arr = [...books];
-    if (sort === 'populaires') arr.sort((a, b) => (b.readers_count * 2 + b.posts_count) - (a.readers_count * 2 + a.posts_count));
-    else if (sort === 'notes') arr.sort((a, b) => b.avg_rating - a.avg_rating || b.ratings_count - a.ratings_count);
-    // 'nouveaux' et 'tous' : ordre du serveur (plus récents d'abord)
-    const res = sort === 'nouveaux' ? arr.slice(0, 5) : arr;
-    // Le livre du mois toujours en tête
-    return [...res.filter(b => b.book_of_month), ...res.filter(b => !b.book_of_month)];
-  }, [books, sort]);
-
-  const SORTS: [typeof sort, string][] = [['tous', 'Tous'], ['populaires', 'Populaires'], ['nouveaux', 'Nouveautés'], ['notes', 'Mieux notés']];
-
-  const EVENT_TYPES: [typeof evType, string][] = [['discussion', 'Discussion de livre'], ['rencontre_auteur', 'Rencontre avec un auteur'], ['visio', 'Visioconférence'], ['rencontre', 'Rencontre physique'], ['audio', 'Discussion audio'], ['challenge', 'Challenge']];
-  const typeLabel = (ty: string) => (EVENT_TYPES.find(([k]) => k === ty)?.[1]) || ty;
 
   return (
     <ScrollView contentContainerStyle={{ paddingBottom: 100 }} testID="club-home">
@@ -155,13 +56,13 @@ export function ClubHome({ clubs, onOpenClub, onCreateClub, onJoinClub }: {
           <Text style={[styles.sectionLabel, { paddingHorizontal: 0, marginBottom: 0 }]}>{t('Tes clubs')}</Text>
           <InfoTooltip
             testID="info-clubs"
-            title={t('Clubs de lecture')}
+            title={t('Comment ça marche')}
             text={t("Un club de lecture a ses lectures communes, ses sondages, ses événements et ses messages. Fermé (cadenas), il ne s'ouvre qu'avec son code d'invitation — parfait entre amis ou en famille. Public (globe), il apparaît dans « Clubs publics à rejoindre » et toute la communauté peut y entrer librement. Avec ton abonnement, tu peux en créer autant que tu veux.")}
           />
         </View>
         <View style={{ paddingHorizontal: spacing.xl, gap: spacing.sm }}>
           {clubs.map((item: any) => (
-            <Pressable key={item.club_id} testID={`club-${item.club_id}`} onPress={() => onOpenClub(item.club_id)} style={styles.clubCard}>
+            <Pressable key={item.club_id} testID={`club-${item.club_id}`} onPress={() => onOpenClub(item.club_id)} style={({ pressed }) => [styles.clubCard, pressed && { opacity: 0.85 }]}>
               <View style={styles.clubAvatar}>
                 <Feather name={item.visibility === 'public' ? 'globe' : 'lock'} size={15} color={colors.chambray} />
               </View>
@@ -200,158 +101,27 @@ export function ClubHome({ clubs, onOpenClub, onCreateClub, onJoinClub }: {
             <Text style={styles.sectionLabel}>{t('Clubs publics à rejoindre')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm, paddingHorizontal: spacing.xl }}>
               {pubClubs.map((c: any) => (
-                <View key={c.club_id} style={styles.pubCard} testID={`pub-club-${c.club_id}`}>
-                  <View style={styles.clubAvatar}><Feather name="globe" size={15} color={colors.chambray} /></View>
-                  <Text style={styles.pubName} numberOfLines={1}>{c.name}</Text>
-                  {!!c.description && <Text style={styles.pubDesc} numberOfLines={2}>{c.description}</Text>}
-                  <Text style={styles.clubMeta}>{c.members_count} {t(c.members_count > 1 ? 'MEMBRES' : 'MEMBRE')}</Text>
-                  <Pressable testID={`join-pub-${c.club_id}`} onPress={() => joinPublic(c.club_id)} style={styles.pubJoinBtn}>
-                    <Text style={styles.pubJoinText}>{t('Rejoindre')}</Text>
-                  </Pressable>
-                </View>
+                <ClubCard key={c.club_id} testID={`pub-club-${c.club_id}`} club={c} joining={joining === c.club_id} onJoin={() => joinPublic(c.club_id)} />
               ))}
             </ScrollView>
           </View>
         )}
       </View>
-
-      <Modal visible={eventModal} transparent animationType="slide" onRequestClose={() => setEventModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalBox}>
-            <Text style={styles.pollQuestion}>{t('Nouvel événement')}</Text>
-            <TextInput testID="event-title-input" value={evTitle} onChangeText={setEvTitle} placeholder={t('Titre (ex. Discussion finale — Houris)')} placeholderTextColor={colors.clay} style={styles.pollInput} />
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, marginBottom: spacing.sm }}>
-              {EVENT_TYPES.map(([k, lbl]) => (
-                <Pressable key={k} onPress={() => setEvType(k)} style={[styles.chip, evType === k && styles.chipActive]}>
-                  <Text style={[styles.chipText, evType === k && styles.chipTextActive]}>{t(lbl)}</Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-            <TextInput testID="event-date-input" value={evDate} onChangeText={setEvDate} placeholder={t('Date : JJ/MM/AAAA 18h30')} placeholderTextColor={colors.clay} style={styles.pollInput} />
-            <TextInput testID="event-loc-input" value={evLoc} onChangeText={setEvLoc} placeholder={t('Lieu ou lien (optionnel)')} placeholderTextColor={colors.clay} style={styles.pollInput} />
-            <Pressable testID="event-create-confirm" onPress={createEvent} disabled={!evTitle.trim() || !evDateIso || creatingEvent} style={[styles.pollSubmit, (!evTitle.trim() || !evDateIso || creatingEvent) && { opacity: 0.5 }]}>
-              <Text style={styles.pollSubmitText}>{t('Créer l’événement')}</Text>
-            </Pressable>
-            <Pressable onPress={() => setEventModal(false)} style={{ alignSelf: 'center', padding: spacing.sm }}>
-              <Text style={styles.cancelText}>{t('Annuler')}</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal visible={pollModal} transparent animationType="slide" onRequestClose={() => setPollModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalBox}>
-            <Text style={styles.pollQuestion}>{t('Nouveau sondage')}</Text>
-            <TextInput
-              testID="poll-question-input"
-              value={pollQuestion} onChangeText={setPollQuestion}
-              placeholder={t('Ta question…')} placeholderTextColor={colors.clay}
-              style={styles.pollInput}
-            />
-            <Text style={styles.pollMeta}>{t('Choisis 2 à 6 livres du Club :')}</Text>
-            <ScrollView style={{ maxHeight: 260 }}>
-              {books.map(b => {
-                const sel = pollSel.has(b.cb_id);
-                return (
-                  <Pressable key={b.cb_id} testID={`poll-pick-${b.cb_id}`} onPress={() => setPollSel(prev => { const n = new Set(prev); if (n.has(b.cb_id)) n.delete(b.cb_id); else if (n.size < 6) n.add(b.cb_id); return n; })} style={styles.pickRow}>
-                    <Feather name={sel ? 'check-square' : 'square'} size={17} color={colors.chambray} />
-                    <Text style={styles.pollOptionText} numberOfLines={1}>{b.title}</Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-            <Pressable
-              testID="poll-create-confirm"
-              onPress={createPoll}
-              disabled={pollSel.size < 2 || !pollQuestion.trim() || creatingPoll}
-              style={[styles.pollSubmit, (pollSel.size < 2 || !pollQuestion.trim() || creatingPoll) && { opacity: 0.5 }]}
-            >
-              <Text style={styles.pollSubmitText}>{t('Lancer le sondage (7 jours)')}</Text>
-            </Pressable>
-            <Pressable onPress={() => setPollModal(false)} style={{ alignSelf: 'center', padding: spacing.sm }}>
-              <Text style={styles.cancelText}>{t('Annuler')}</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
     </ScrollView>
   );
 }
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
-  searchFake: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 44, paddingHorizontal: spacing.md, marginHorizontal: spacing.xl, backgroundColor: colors.creme, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft },
-  searchFakeText: { flex: 1, fontFamily: fonts.body, fontSize: 13.5, color: colors.clay },
-  chip: { height: 34, paddingHorizontal: 14, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  chipActive: { backgroundColor: colors.chambray, borderColor: colors.chambray },
-  chipText: { fontFamily: fonts.body, fontSize: 13, color: colors.espresso },
-  chipTextActive: { color: colors.creme, fontFamily: fonts.bodyMedium },
-  emptyBox: { alignItems: 'center', paddingVertical: spacing.xl },
   emptyTitle: { fontFamily: fonts.displayMedium, fontSize: 20, color: colors.espresso, textAlign: 'center' },
   emptySub: { fontFamily: fonts.body, fontSize: 13, color: colors.clay, textAlign: 'center', marginTop: 4 },
-  bookCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },
-  bookTitle: { fontFamily: fonts.displayMedium, fontSize: 18, color: colors.espresso },
-  bookAuthor: { fontFamily: fonts.body, fontSize: 12.5, color: colors.clay, marginTop: 1 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 },
-  meta: { fontFamily: fonts.bodyMedium, fontSize: 10.5, color: colors.clay, letterSpacing: 0.5 },
-  metaDot: { color: colors.clay, fontSize: 10 },
-  progressBar: { height: 3, backgroundColor: colors.borderSoft, borderRadius: 2, overflow: 'hidden', marginTop: 6 },
-  progressFill: { height: 3, backgroundColor: colors.chambray },
   sectionLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase', paddingHorizontal: spacing.xl, marginBottom: spacing.sm },
-  postCard: { backgroundColor: colors.bisque, borderRadius: radius.md, padding: spacing.md },
-  postMeta: { fontFamily: fonts.bodyMedium, fontSize: 10.5, color: colors.clay, letterSpacing: 0.8, textTransform: 'uppercase' },
-  postText: { fontFamily: fonts.display, fontSize: 15, color: colors.espresso, marginTop: 4, lineHeight: 21 },
   clubCard: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },
   clubAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.glacier, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center' },
   ownerBadge: { fontFamily: fonts.bodyMedium, fontSize: 8, color: colors.creme, backgroundColor: colors.clay, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 3, letterSpacing: 1 },
   sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: spacing.xl, marginBottom: spacing.sm },
   clubEmpty: { alignItems: 'center', paddingVertical: spacing.lg, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.borderSoft, paddingHorizontal: spacing.md },
-  pubCard: { width: 190, backgroundColor: colors.bisque, borderRadius: radius.md, padding: spacing.md, gap: 4 },
-  pubName: { fontFamily: fonts.displayMedium, fontSize: 17, color: colors.espresso, marginTop: 4 },
-  pubDesc: { fontFamily: fonts.body, fontSize: 12, color: colors.clay, lineHeight: 17 },
-  pubJoinBtn: { marginTop: 8, height: 34, borderRadius: radius.pill, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md },
-  pubJoinText: { fontFamily: fonts.bodyMedium, fontSize: 12.5, color: colors.creme },
   clubName: { fontFamily: fonts.displayMedium, fontSize: 17, color: colors.espresso },
   clubMeta: { fontFamily: fonts.bodyMedium, fontSize: 9.5, color: colors.clay, letterSpacing: 1, marginTop: 3 },
   clubAction: { height: 44, borderRadius: radius.md, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.chambray, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.creme },
   clubActionText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.chambray },
-  bomBadge: { fontFamily: fonts.bodyMedium, fontSize: 8.5, color: colors.chambray, letterSpacing: 1.5 },
-  pollCard: { marginHorizontal: spacing.xl, marginTop: spacing.md, backgroundColor: colors.creme, borderRadius: 16, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },
-  pollLabel: { fontFamily: fonts.bodyMedium, fontSize: 9.5, color: colors.chambray, letterSpacing: 1.5 },
-  pollQuestion: { fontFamily: fonts.displayMedium, fontSize: 19, color: colors.espresso, marginTop: 2, marginBottom: spacing.sm },
-  pollOption: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 42, borderRadius: radius.sm, borderWidth: 1, borderColor: colors.borderSoft, paddingHorizontal: spacing.md, marginBottom: 6, overflow: 'hidden' },
-  pollFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: colors.glacier },
-  pollOptionText: { fontFamily: fonts.body, fontSize: 13.5, color: colors.espresso, flexShrink: 1 },
-  pollPct: { fontFamily: fonts.bodyMedium, fontSize: 12, color: colors.chambray },
-  pollMeta: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.clay, letterSpacing: 0.8, textTransform: 'uppercase', marginTop: 4 },
-  createPollBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 42, marginHorizontal: spacing.xl, marginTop: spacing.sm, borderRadius: radius.md, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.chambray, backgroundColor: colors.creme },
-  createPollText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.chambray },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(58,33,25,0.4)', justifyContent: 'flex-end' },
-  modalBox: { backgroundColor: colors.glacier, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: spacing.xl, paddingBottom: spacing.xxl },
-  pollInput: { height: 48, borderWidth: 1, borderColor: colors.borderSoft, borderRadius: radius.md, paddingHorizontal: spacing.md, fontFamily: fonts.body, fontSize: 14, color: colors.espresso, backgroundColor: colors.creme, marginBottom: spacing.sm },
-  pickRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10 },
-  pollSubmit: { height: 48, borderRadius: radius.md, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center', marginTop: spacing.md },
-  pollSubmitText: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.creme },
-  cancelText: { fontFamily: fonts.body, fontSize: 13, color: colors.clay, textDecorationLine: 'underline' },
-  paywall: { alignItems: 'center', paddingHorizontal: spacing.xxl, paddingVertical: spacing.xxl },
-  paywallIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: colors.creme, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center' },
-  paywallTitle: { fontFamily: fonts.displayMedium, fontSize: 22, color: colors.espresso, textAlign: 'center', marginTop: spacing.lg, lineHeight: 28 },
-  paywallSub: { fontFamily: fonts.body, fontSize: 13.5, color: colors.clay, textAlign: 'center', lineHeight: 20, marginTop: spacing.sm },
-  paywallBtn: { height: 48, paddingHorizontal: spacing.xxl, borderRadius: radius.pill, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center', marginTop: spacing.lg },
-  paywallBtnText: { fontFamily: fonts.bodyMedium, fontSize: 14.5, color: colors.creme },
-  gamiCard: { marginHorizontal: spacing.xl, marginTop: spacing.md, backgroundColor: colors.bisque, borderRadius: 16, padding: spacing.md },
-  gamiTitle: { fontFamily: fonts.displayMedium, fontSize: 19, color: colors.espresso, marginTop: 2, marginBottom: spacing.sm },
-  gamiPoints: { fontFamily: fonts.bodyMedium, fontSize: 12, color: colors.espresso },
-  gamiMeta: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.clay, letterSpacing: 0.8, textTransform: 'uppercase', marginTop: 4 },
-  badgeChip: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 24, paddingHorizontal: 10, borderRadius: radius.pill, backgroundColor: colors.creme },
-  badgeChipText: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.espresso },
-  leaderRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 3 },
-  leaderRank: { fontFamily: fonts.displayMedium, fontSize: 14, color: colors.chambray, width: 30 },
-  leaderName: { flex: 1, fontFamily: fonts.body, fontSize: 13, color: colors.espresso },
-  eventCard: { backgroundColor: colors.creme, borderRadius: 16, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },
-  eventTitle: { fontFamily: fonts.displayMedium, fontSize: 18, color: colors.espresso, marginTop: 2 },
-  joinEvBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 32, paddingHorizontal: 12, borderRadius: radius.pill, backgroundColor: colors.chambray },
-  joinEvBtnActive: { backgroundColor: colors.creme, borderWidth: 1, borderColor: colors.borderSoft },
-  joinEvText: { fontFamily: fonts.bodyMedium, fontSize: 11.5, color: colors.creme },
-  createPollBtn2: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 42, borderRadius: radius.md, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.chambray, backgroundColor: colors.creme },
 });

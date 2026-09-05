@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
 
@@ -12,10 +13,15 @@ export type Quote = {
   is_owner?: boolean;
   book?: { title?: string; author?: string; type?: string } | null;
   author?: { pseudo?: string; handle?: string } | null;
+  likes_count?: number;
+  comments_count?: number;
+  liked_by_me?: boolean;
 };
 
-export function QuoteCard({ quote, onPress, compact, onPressAuthor }: { quote: Quote; onPress?: () => void; compact?: boolean; onPressAuthor?: () => void }) {
+export function QuoteCard({ quote, onPress, compact, onPressAuthor, onLike }: { quote: Quote; onPress?: () => void; compact?: boolean; onPressAuthor?: () => void; onLike?: () => void }) {
   const styles = useStyles(makeStyles);
+  const colors = useColors();
+  const hasStats = quote.likes_count !== undefined || quote.comments_count !== undefined;
   const isWattpad = quote.book?.type === 'wattpad';
   const label = isWattpad ? 'CHAP.' : 'PAGE';
   const num = isWattpad ? quote.chapter : quote.page;
@@ -40,10 +46,24 @@ export function QuoteCard({ quote, onPress, compact, onPressAuthor }: { quote: Q
           </View>
         ) : null}
       </View>
-      {(handle || quote.themes?.length) ? (
-        <Pressable style={styles.metaRow} onPress={onPressAuthor} disabled={!onPressAuthor} hitSlop={6}>
-          <Text style={styles.brand}>Manent{handle ? `  ·  ${handle}` : ''}</Text>
-        </Pressable>
+      {(handle || quote.themes?.length || hasStats) ? (
+        <View style={[styles.metaRow, { flexDirection: 'row', alignItems: 'center' }]}>
+          <Pressable style={{ flex: 1 }} onPress={onPressAuthor} disabled={!onPressAuthor} hitSlop={6}>
+            <Text style={styles.brand}>Manent{handle ? `  ·  ${handle}` : ''}</Text>
+          </Pressable>
+          {hasStats && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Pressable testID={`quote-like-${quote.quote_id}`} onPress={onLike} disabled={!onLike} hitSlop={8} style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                <Feather name="heart" size={13} color={quote.liked_by_me ? '#B3552F' : colors.clay} />
+                <Text style={[styles.stat, quote.liked_by_me && { color: '#B3552F' }]}>{quote.likes_count || 0}</Text>
+              </Pressable>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                <Feather name="message-circle" size={13} color={colors.clay} />
+                <Text style={styles.stat}>{quote.comments_count || 0}</Text>
+              </View>
+            </View>
+          )}
+        </View>
       ) : null}
     </Pressable>
   );
@@ -75,4 +95,5 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   pageLabel: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.clay, letterSpacing: 2 },
   metaRow: { marginTop: spacing.sm },
   brand: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.clay, letterSpacing: 2, textTransform: 'uppercase' },
+  stat: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay },
 });

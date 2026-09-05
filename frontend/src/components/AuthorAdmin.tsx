@@ -1,4 +1,4 @@
-// Administration des auteurs (Lot C) : pays d'origine → aires littéraires dérivées.
+// Administration des auteurs : pays d'origine, donnée structurée prioritaire sur l'IA pour l'origine des livres.
 // Les auteurs sans pays ou détectés par IA (faible confiance) arrivent en tête.
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, TextInput, Modal, ScrollView } from 'react-native';
@@ -80,7 +80,7 @@ export function AuthorAdmin() {
   return (
     <View style={{ marginTop: spacing.xl }} testID="admin-authors">
       <Text style={styles.section}>{t('Auteurs')}</Text>
-      <Text style={styles.help}>{t('Le pays d’un auteur détermine les aires littéraires de ses livres. Les pays inconnus ou incertains sont en tête.')}</Text>
+      <Text style={styles.help}>{t('Le pays d’un auteur fixe l’origine de tous ses livres et prime sur l’IA. Les pays inconnus ou incertains sont en tête, les auteurs les plus présents d’abord.')}</Text>
       <View style={styles.searchRow}>
         <Feather name="search" size={15} color={colors.clay} />
         <TextInput testID="admin-author-search" value={q} onChangeText={setQ}

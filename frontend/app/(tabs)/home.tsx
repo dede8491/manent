@@ -10,10 +10,12 @@ import { QuoteCard, Quote } from '@/src/components/QuoteCard';
 import { api } from '@/src/api';
 import { useAuth } from '@/src/auth';
 import { Wordmark } from '@/src/components/Wordmark';
-import { BookCardFeed, AwardCard, CollectionCard, ResumeCard } from '@/src/components/FeedCards';
+import { BookCardFeed, AwardCard, CollectionCard, ResumeCard, NextUpCard } from '@/src/components/FeedCards';
 import ManentLoader from '@/src/components/ManentLoader';
 import { InfoTooltip } from '@/src/components/InfoTooltip';
 import { WelcomeTour } from '@/src/components/WelcomeTour';
+import { AreaCard } from '@/src/components/AreaCard';
+import { ClubCard } from '@/src/components/ClubCard';
 import { useT } from '@/src/i18n';
 
 const BIRTH_PROMPT_KEY = 'manent_birth_prompted';
@@ -28,8 +30,11 @@ export default function Home() {
   const { user, refresh } = useAuth();
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [themes, setThemes] = useState<string[]>([]);
-  const [trending, setTrending] = useState<string[]>([]);
   const [areas, setAreas] = useState<any[]>([]);
+  const [pubClubs, setPubClubs] = useState<any[]>([]);
+  const [joiningClub, setJoiningClub] = useState<string | null>(null);
+  const [forYou, setForYou] = useState<any[]>([]);
+  const [forYouTotal, setForYouTotal] = useState(0);
   const [daily, setDaily] = useState<Quote | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -92,7 +97,37 @@ export default function Home() {
     try {
       setDiscover(await api<any>('/home/discover'));
     } catch {}
+    try {
+      const pc = await api<{ clubs: any[] }>('/clubs/discover');
+      setPubClubs(pc.clubs || []);
+    } catch {}
+    try {
+      const fy = await api<{ books: any[]; total: number }>('/catalog/for-you?page=1&size=10');
+      setForYou(fy.books || []);
+      setForYouTotal(fy.total || 0);
+    } catch {}
   }, []);
+
+  const likeQuote = async (quoteId: string) => {
+    setQuotes(prev => prev.map(q => q.quote_id === quoteId ? { ...q, liked_by_me: !q.liked_by_me, likes_count: (q.likes_count || 0) + (q.liked_by_me ? -1 : 1) } : q));
+    try { const r = await api<{ liked: boolean; likes_count: number }>(`/quotes/${quoteId}/like`, { method: 'POST' }); setQuotes(prev => prev.map(q => q.quote_id === quoteId ? { ...q, liked_by_me: r.liked, likes_count: r.likes_count } : q)); } catch {}
+  };
+
+  const dismissForYou = async (catalogId: string) => {
+    setForYou(prev => prev.filter(b => b.catalog_id !== catalogId));
+    try { await api('/catalog/for-you/dismiss', { method: 'POST', body: JSON.stringify({ catalog_id: catalogId }) }); } catch {}
+  };
+
+  const joinPublicClub = async (cid: string) => {
+    if (joiningClub) return;
+    setJoiningClub(cid);
+    try {
+      await api(`/clubs/${cid}/join`, { method: 'POST' });
+      setPubClubs(prev => prev.filter(c => c.club_id !== cid));
+      router.push({ pathname: '/club/[id]', params: { id: cid } });
+    } catch {}
+    finally { setJoiningClub(null); }
+  };
 
   useEffect(() => {
     (async () => {
@@ -105,10 +140,6 @@ export default function Home() {
       } catch {
         try { setThemes((await api<{ themes: string[] }>('/themes')).themes); } catch {}
       }
-      try {
-        const tr = await api<{ subjects: string[] }>('/catalog/subjects/trending');
-        setTrending(tr.subjects || []);
-      } catch {}
       try {
         const ar = await api<{ areas: any[] }>('/catalog/areas');
         setAreas(ar.areas || []);
@@ -135,8 +166,8 @@ export default function Home() {
           <Wordmark size={19} variant="horizontal" />
           <InfoTooltip
             testID="info-home"
-            title={t('Ton fil de lecture')}
-            text={t("C'est ici que Manent respire : ta citation du matin, les passages des lecteurs que tu suis, les livres primés et les plus lus de la semaine. Tape un thème en haut pour explorer, ou l'icône de scan pour identifier un livre par sa couverture ou son code-barres.")}
+            title={t('Comment ça marche')}
+            text={t("Reprends ta lecture en cours, ou commence la suivante. « Pour toi » te propose des livres d'après tes sujets, les origines de tes auteurs, tes clubs et les lectrices que tu suis : « Pas pour moi » affine les prochaines propositions. Plus bas, les origines, les clubs publics, ta citation du matin et le fil des lectrices. L'icône de scan identifie un livre par son code-barres.")}
           />
         </View>
         <View style={[styles.searchRow, { flexDirection: 'row', gap: 8, alignItems: 'center' }]}>
@@ -163,18 +194,16 @@ export default function Home() {
             </Pressable>
           </ScrollView>
         </View>
-        {trending.length > 0 && (
-          <View style={[styles.chipRow, { marginTop: 6 }]}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: spacing.xl, alignItems: 'center' }}>
-              <Text style={styles.trendLabel}>{t('Sujets du moment')}</Text>
-              {trending.filter(s => !themes.includes(s)).slice(0, 6).map(s => (
-                <Pressable key={s} testID={`trend-chip-${s}`} onPress={() => router.push({ pathname: '/theme/[name]', params: { name: s } })} style={styles.chip}>
-                  <Text style={styles.chipText}>{s}</Text>
-                </Pressable>
-              ))}
-            </ScrollView>
+        <Pressable testID="home-intent" onPress={() => router.push('/intent')} style={({ pressed }) => [styles.intentCard, pressed && { opacity: 0.9 }]}>
+          <View style={styles.intentIcon}><Feather name="feather" size={16} color={colors.creme} /></View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.intentTitle}>{t('Je cherche un livre qui…')}</Text>
+            <Text style={styles.intentSub} numberOfLines={1}>{t('Décris ton envie, Manent trouve le livre.')}</Text>
           </View>
-        )}
+          <Pressable testID="home-filters" onPress={() => router.push('/filters')} hitSlop={8} style={styles.intentFilters}>
+            <Feather name="sliders" size={14} color={colors.espresso} />
+          </Pressable>
+        </Pressable>
       </View>
       <ScrollView
         contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + 80 }}
@@ -182,26 +211,71 @@ export default function Home() {
       >
         {areas.length > 0 && (
           <View style={{ marginBottom: spacing.lg }} testID="home-areas">
-            <Text style={styles.areasLabel}>{t('Littératures')}</Text>
+            <Text style={styles.areasLabel}>{t('Par origine')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>
               {areas.map((a: any) => (
-                <Pressable key={a.key} testID={`area-card-${a.key}`} onPress={() => router.push({ pathname: '/area/[key]', params: { key: a.key } })} style={styles.areaCard}>
-                  <Text style={styles.areaName}>{a.label}</Text>
-                  <Text style={styles.areaCount}>{a.count} {t(a.count > 1 ? 'livres' : 'livre')}</Text>
-                </Pressable>
+                <AreaCard key={a.key} testID={`area-card-${a.key}`} label={a.label} count={a.count} onPress={() => router.push({ pathname: '/browse', params: { f: JSON.stringify({ continent: [a.key] }), title: a.label } })} />
               ))}
             </ScrollView>
           </View>
         )}
-        {discover?.resume && (
+        {pubClubs.length > 0 && (
+          <View style={{ marginBottom: spacing.lg }} testID="home-public-clubs">
+            <Text style={styles.areasLabel}>{t('Clubs publics à rejoindre')}</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>
+              {pubClubs.slice(0, 8).map((c: any) => (
+                <ClubCard key={c.club_id} testID={`home-club-${c.club_id}`} club={c} joining={joiningClub === c.club_id} onJoin={() => joinPublicClub(c.club_id)} />
+              ))}
+            </ScrollView>
+          </View>
+        )}
+        {discover?.resume ? (
           <View style={{ marginBottom: spacing.lg }}>
             <ResumeCard
               testID="resume-card"
               book={discover.resume}
               t={t}
+              nextTitle={discover.next_up?.title}
+              onNext={() => router.push('/queue')}
               onPress={() => router.push({ pathname: '/book/[id]', params: { id: discover.resume.book_id } })}
               onPhoto={() => router.push({ pathname: '/book/[id]', params: { id: discover.resume.book_id } })}
             />
+          </View>
+        ) : discover?.next_up ? (
+          <View style={{ marginBottom: spacing.lg }}>
+            <NextUpCard
+              testID="next-up-card"
+              book={discover.next_up}
+              t={t}
+              onStart={() => router.push({ pathname: '/book/[id]', params: { id: discover.next_up.book_id } })}
+              onOpenQueue={() => router.push('/queue')}
+            />
+          </View>
+        ) : null}
+        {forYou.length > 0 && (
+          <View style={{ marginBottom: spacing.lg }} testID="home-for-you">
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
+              <Text style={styles.areasLabel}>{t('Pour toi')}</Text>
+              {forYouTotal > forYou.length && (
+                <Pressable testID="home-for-you-more" onPress={() => router.push('/for-you')} hitSlop={8}>
+                  <Text style={styles.seeAll}>{t('Voir plus')}</Text>
+                </Pressable>
+              )}
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.md }}>
+              {forYou.map((b: any) => (
+                <View key={b.catalog_id} style={{ width: 130 }}>
+                  <BookCardFeed
+                    testID={`for-you-${b.catalog_id}`} title={b.title} author={b.author} cover={b.cover} width={130}
+                    onPress={() => router.push({ pathname: '/discover/book', params: { title: b.title, author: b.author || '', cover: b.cover || '', year: b.year || '', summary: b.summary || '', catalog_id: b.catalog_id } })}
+                  />
+                  {!!b.reason && <Text style={styles.reason} numberOfLines={2}>{b.reason}</Text>}
+                  <Pressable testID={`for-you-dismiss-${b.catalog_id}`} onPress={() => dismissForYou(b.catalog_id)} hitSlop={6} style={{ marginTop: 4 }}>
+                    <Text style={styles.dismiss}>{t('Pas pour moi')}</Text>
+                  </Pressable>
+                </View>
+              ))}
+            </ScrollView>
           </View>
         )}
         {daily && (
@@ -229,7 +303,7 @@ export default function Home() {
                         <Text style={styles.followTagText}>{t('Suivi')}</Text>
                       </View>
                     ) : null}
-                    <QuoteCard quote={x} compact onPress={() => router.push({ pathname: '/quote/[id]', params: { id: x.quote_id } })} onPressAuthor={x.author?.handle ? () => router.push({ pathname: '/reader/[handle]', params: { handle: x.author!.handle! } }) : undefined} />
+                    <QuoteCard quote={x} compact onLike={() => likeQuote(x.quote_id)} onPress={() => router.push({ pathname: '/quote/[id]', params: { id: x.quote_id } })} onPressAuthor={x.author?.handle ? () => router.push({ pathname: '/reader/[handle]', params: { handle: x.author!.handle! } }) : undefined} />
                   </View>
                 ))}
               </View>
@@ -251,11 +325,11 @@ export default function Home() {
 
         {discover?.popular?.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>{t('Les plus lus cette semaine')}</Text>
+            <Text style={styles.sectionTitle}>{discover.popular_scope === 'all' ? t('Les plus lus sur Manent') : t('Les plus lus cette semaine')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.md }}>
               {discover.popular.map((b: any, i: number) => (
                 <BookCardFeed key={i} testID={`popular-${i}`} {...b}
-                  onPress={() => router.push({ pathname: '/discover/book', params: { title: b.title, author: b.author || '', cover: b.cover || '' } })} />
+                  onPress={() => router.push({ pathname: '/discover/book', params: { title: b.title, author: b.author || '', cover: b.cover || '', catalog_id: b.catalog_id || '' } })} />
               ))}
             </ScrollView>
           </View>
@@ -323,11 +397,15 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   scanBtn: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: colors.creme, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center' },
   dailyLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: spacing.sm },
   chipRow: { height: 44 },
-  trendLabel: { fontFamily: fonts.bodyMedium, fontSize: 10.5, color: colors.clay, letterSpacing: 1.2, textTransform: 'uppercase' },
+  intentCard: { marginHorizontal: spacing.xl, flexDirection: 'row', alignItems: 'center', gap: 12, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.bisque },
+  intentIcon: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },
+  intentTitle: { fontFamily: fonts.displayMedium, fontSize: 17, color: colors.espresso },
+  intentSub: { fontFamily: fonts.body, fontSize: 12, color: colors.clay, marginTop: 1 },
+  intentFilters: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.creme, alignItems: 'center', justifyContent: 'center' },
   areasLabel: { fontFamily: fonts.displayMedium, fontSize: 21, color: colors.espresso, marginBottom: spacing.md },
-  areaCard: { backgroundColor: colors.bisque, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.md, minWidth: 150 },
-  areaName: { fontFamily: fonts.displayMedium, fontSize: 16.5, color: colors.espresso },
-  areaCount: { fontFamily: fonts.bodyMedium, fontSize: 10.5, color: colors.clay, letterSpacing: 0.8, marginTop: 3, textTransform: 'uppercase' },
+  seeAll: { fontFamily: fonts.bodyMedium, fontSize: 12.5, color: colors.chambray },
+  reason: { fontFamily: fonts.body, fontSize: 10.5, color: colors.chambray, marginTop: 3, lineHeight: 14 },
+  dismiss: { fontFamily: fonts.body, fontSize: 10.5, color: colors.clay, textDecorationLine: 'underline' },
   chip: { height: 36, paddingHorizontal: 14, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   chipActive: { backgroundColor: colors.chambray, borderColor: colors.chambray },
   chipText: { fontFamily: fonts.body, fontSize: 13, color: colors.espresso },

@@ -6,7 +6,9 @@ const BASE = (process.env.EXPO_PUBLIC_PUBLIC_BASE_URL || process.env.EXPO_PUBLIC
 // balises Open Graph (aperçus riches WhatsApp/iMessage) + boutons stores + manent://.
 export const shareUrl = {
   profile: (handle: string) => `${BASE}/api/s/u/${handle}`,
+  library: (handle: string) => `${BASE}/api/s/u/${handle}/bibliotheque`,
   quote: (quoteId: string) => `${BASE}/api/s/q/${quoteId}`,
   book: (catalogId: string) => `${BASE}/api/s/b/${catalogId}`,
   club: (code: string) => `${BASE}/api/s/c/${code}`,
+  board: (slug: string, code?: string) => `${BASE}/api/s/t/${slug}${code ? `?code=${code}` : ''}`,
 };

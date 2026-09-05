@@ -15,7 +15,7 @@ type Q = {
 
 type VisFilter = 'toutes' | 'publiques' | 'privees' | 'masquees';
 
-export function QuotesManager() {
+export function QuotesManager({ initialBookId }: { initialBookId?: string | null } = {}) {
   const t = useT();
   const colors = useColors();
   const styles = useStyles(makeStyles);
@@ -23,7 +23,7 @@ export function QuotesManager() {
   const [quotes, setQuotes] = useState<Q[]>([]);
   const [search, setSearch] = useState('');
   const [vis, setVis] = useState<VisFilter>('toutes');
-  const [bookFilter, setBookFilter] = useState<string | null>(null);
+  const [bookFilter, setBookFilter] = useState<string | null>(initialBookId || null);
   const [themeFilter, setThemeFilter] = useState<string | null>(null);
   const [grid, setGrid] = useState(false);
   const [menuFor, setMenuFor] = useState<Q | null>(null);
@@ -176,13 +176,8 @@ export function QuotesManager() {
       <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingTop: spacing.md, paddingBottom: 140 }}>
         {shown.length === 0 ? (
           <View style={{ alignItems: 'center', paddingVertical: spacing.xxl }}>
-            <Text style={styles.emptyTitle}>{quotes.length === 0 ? t('Photographie ta première citation.') : t('Rien ne correspond à ces filtres.')}</Text>
-            {quotes.length === 0 && (
-              <Pressable testID="mq-empty-capture" onPress={() => router.push('/capture')} style={styles.captureBtn}>
-                <Feather name="camera" size={15} color={colors.creme} />
-                <Text style={styles.captureBtnText}>{t('Capturer un passage')}</Text>
-              </Pressable>
-            )}
+            <Text style={styles.emptyTitle}>{quotes.length === 0 ? t('Aucune citation pour l’instant.') : t('Rien ne correspond à ces filtres.')}</Text>
+            {quotes.length === 0 && <Text style={styles.writeLink}>{t('Le « + » en haut photographie une page ou te laisse écrire un passage.')}</Text>}
           </View>
         ) : grid ? (
           <View style={{ flexDirection: 'row', gap: spacing.md }}>
@@ -262,6 +257,7 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   emptyTitle: { fontFamily: fonts.displayMedium, fontSize: 20, color: colors.espresso, textAlign: 'center' },
   captureBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 44, paddingHorizontal: spacing.lg, borderRadius: radius.pill, backgroundColor: colors.chambray, marginTop: spacing.lg },
   captureBtnText: { fontFamily: fonts.bodyMedium, fontSize: 13.5, color: colors.creme },
+  writeLink: { fontFamily: fonts.body, fontSize: 13, color: colors.clay, textDecorationLine: 'underline' },
   bulkBar: { position: 'absolute', bottom: 90, left: spacing.xl, right: spacing.xl, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.espresso, borderRadius: radius.pill, paddingHorizontal: spacing.md, height: 54 },
   bulkCount: { fontFamily: fonts.displayMedium, fontSize: 18, color: colors.creme, marginRight: 2 },
   bulkBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },

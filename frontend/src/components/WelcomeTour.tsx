@@ -9,17 +9,19 @@ import { useColors, useStyles } from '@/src/themeCtx';
 import { Wordmark } from '@/src/components/Wordmark';
 import { useT } from '@/src/i18n';
 
-const TOUR_KEY = 'manent_tour_done';
+const TOUR_KEY = 'manent_tour_done_v2';
 
 type Step = { icon: React.ComponentProps<typeof Feather>['name'] | null; title: string; text: string };
 
 const STEPS: Step[] = [
-  { icon: null, title: 'Bienvenue sur Manent', text: 'Ce que tes lectures te laissent. Voici un petit tour des lieux — une minute, promis.' },
-  { icon: 'grid', title: "L'accueil", text: "Ton fil de lecture : ta citation du matin, les passages des lecteurs que tu suis, les livres primés et les nouveautés. Les thèmes en haut t'ouvrent des univers." },
-  { icon: 'book-open', title: 'La bibliothèque', text: 'Tes lectures en trois étapes : À lire, En cours, Terminés. Mets à jour ta page pour suivre ta progression, et retrouve toutes tes citations au même endroit.' },
-  { icon: 'camera', title: 'La capture', text: "Le bouton central photographie une page : l'IA transcrit le passage pour toi. Relie-le à un livre, choisis sa visibilité, et il reste pour toujours." },
-  { icon: 'bookmark', title: 'La communauté', text: 'Épingle tes citations dans des tableaux par thème, et rejoins le Club de lecture : Livre du mois, discussions, événements et challenge de l’année.' },
-  { icon: 'user', title: 'Ton profil', text: 'Tes statistiques, ta série de jours de lecture, tes tableaux publics. Et si tu te poses une question, les petits « i » t’expliquent chaque écran. Bonne lecture.' },
+  { icon: null, title: 'Bienvenue sur Manent', text: 'Lis. Retiens. Partage. Voici un tour des lieux — une minute, promis.' },
+  { icon: 'grid', title: "L'accueil", text: "Reprends ta lecture en cours, découvre « Pour toi », des livres choisis d'après tes sujets, les origines de tes auteurs et les lectrices que tu suis, puis les clubs publics à rejoindre et le fil des citations." },
+  { icon: 'book-open', title: 'La bibliothèque', text: "Le « + » ouvre l'ajout d'une lecture par titre, ISBN ou Wattpad. Ta liste de lecture s'ordonne dans « Lecture suivante » : le prochain livre en tête, comme une file d'attente." },
+  { icon: 'maximize', title: 'En librairie', text: "Un livre te plaît ? Scanne son code-barres depuis l'accueil : un seul bouton l'ajoute à ta liste de lecture, avec sa couverture et son résumé." },
+  { icon: 'feather', title: 'Les citations', text: "L'onglet plume rassemble tes citations. Son « + » photographie une page (l'IA transcrit le passage) ou te laisse écrire. Depuis une citation, tu retrouves le livre et sa page." },
+  { icon: 'send', title: 'Partager', text: "Depuis une fiche livre : recommande-le à une lectrice avec un petit mot, propose-le à ton club, ou envoie le lien. Tu reçois les recommandations des autres dans ton profil." },
+  { icon: 'users', title: 'La communauté', text: "Épingle tes citations dans des tableaux par thème. Crée ton club de lecture (Premium) ou rejoins-en un : lectures communes, sondages, événements et messages." },
+  { icon: 'user', title: 'Ton profil', text: "Tes statistiques, ta série de jours, tes badges. Partage ton profil ou ta bibliothèque en image. Et si tu te poses une question, les petits « i » t'expliquent chaque écran. Bonne lecture." },
 ];
 
 export function WelcomeTour() {

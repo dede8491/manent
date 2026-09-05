@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Modal, TextInput, KeyboardAvoidingView, Platform, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Platform, Image, Share } from 'react-native';
+import { shareUrl } from '@/src/share';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -9,6 +10,7 @@ import { useAuth } from '@/src/auth';
 import { api, getCachedToken } from '@/src/api';
 import * as ImagePicker from 'expo-image-picker';
 import { InfoTooltip } from '@/src/components/InfoTooltip';
+import { BottomSheet } from '@/src/components/BottomSheet';
 import { useT } from '@/src/i18n';
 
 export default function Profile() {
@@ -48,10 +50,20 @@ export default function Profile() {
   const [badges, setBadges] = useState<{ id: string; title: string; desc: string; icon: string; earned: boolean }[]>([]);
   const [goalModal, setGoalModal] = useState(false);
   const [goalInput, setGoalInput] = useState('');
+  const [adminBadge, setAdminBadge] = useState(0);
+  const [recoBadge, setRecoBadge] = useState(0);
+  const [invBadge, setInvBadge] = useState(0);
+  const [follows, setFollows] = useState<{ followers_count: number; following_count: number } | null>(null);
 
   useFocusEffect(React.useCallback(() => {
     (async () => {
       try { setPremium(await api('/premium/status')); } catch {}
+      if ((user as any)?.is_admin) {
+        try { const b = await api<{ total: number }>('/admin/badge'); setAdminBadge(b.total || 0); } catch {}
+      }
+      try { const r = await api<{ unread: number }>('/recommendations/badge'); setRecoBadge(r.unread || 0); } catch {}
+      try { const r = await api<{ unread: number }>('/invitations/badge'); setInvBadge(r.unread || 0); } catch {}
+      try { setFollows(await api('/me/follows')); } catch {}
       try { setClubSummary(await api('/club/me/summary')); } catch {}
       try { setReading(await api('/stats/reading')); } catch {}
       try { const b = await api<{ badges: any[] }>('/badges'); setBadges(b.badges); } catch {}
@@ -65,13 +77,23 @@ export default function Profile() {
       } catch {}
     })();
   }, []));
+  const shareProfile = async () => {
+    if (!user?.handle) return;
+    const message = `${t('Suis mes lectures sur Manent : @{handle}', { handle: user.handle })} — ${shareUrl.profile(user.handle)}`;
+    try {
+      if (Platform.OS === 'web') {
+        const nav: any = navigator;
+        if (nav.share) await nav.share({ text: message }); else if (nav.clipboard) await nav.clipboard.writeText(message);
+      } else { await Share.share({ message }); }
+    } catch {}
+  };
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.glacier }} contentContainerStyle={{ paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 80 }} testID="screen-profile">
       <View style={{ alignItems: 'flex-end', paddingHorizontal: spacing.xl }}>
         <InfoTooltip
           testID="info-profile"
-          title={t('Ton profil')}
-          text={t("Ton espace personnel : tes statistiques de lecture, ta série de jours d'affilée, tes tableaux et tes thèmes. Tape sur ton avatar pour changer ta photo, et sur Paramètres pour régler la langue, le thème et la confidentialité.")}
+          title={t('Comment ça marche')}
+          text={t("Tes statistiques, ta série de jours, ton objectif de l'année et tes badges. « Recommandations » rassemble les livres que des lectrices t'ont envoyés ; « Partager ma bibliothèque » crée un lien ou une image pour tes réseaux. Tape sur ton avatar pour changer ta photo, et sur Paramètres pour la langue, le mode sombre et la confidentialité.")}
         />
       </View>
       <View style={styles.header}>
@@ -85,6 +107,20 @@ export default function Profile() {
         </Pressable>
         <Text style={styles.pseudo}>{user?.pseudo}</Text>
         <Text style={styles.handle}>@{user?.handle}</Text>
+        <View style={styles.followRow}>
+          <Pressable testID="profile-followers" onPress={() => router.push({ pathname: '/follows', params: { tab: 'followers' } })} hitSlop={6}>
+            <Text style={styles.followText}><Text style={styles.followNum}>{follows?.followers_count ?? 0}</Text> {t((follows?.followers_count ?? 0) > 1 ? 'abonnées' : 'abonnée')}</Text>
+          </Pressable>
+          <Text style={styles.followDot}>·</Text>
+          <Pressable testID="profile-following" onPress={() => router.push({ pathname: '/follows', params: { tab: 'following' } })} hitSlop={6}>
+            <Text style={styles.followText}><Text style={styles.followNum}>{follows?.following_count ?? 0}</Text> {t((follows?.following_count ?? 0) > 1 ? 'abonnements' : 'abonnement')}</Text>
+          </Pressable>
+          <Text style={styles.followDot}>·</Text>
+          <Pressable testID="profile-share" onPress={shareProfile} hitSlop={6} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Feather name="share" size={13} color={colors.chambray} />
+            <Text style={[styles.followText, { color: colors.chambray }]}>{t('Partager')}</Text>
+          </Pressable>
+        </View>
       </View>
       <View style={styles.statsRow}>
         <View style={styles.stat}><Text style={styles.statNum}>{stats.books}</Text><Text style={styles.statLbl} numberOfLines={1} adjustsFontSizeToFit>{t('livres')}</Text></View>
@@ -120,8 +156,8 @@ export default function Profile() {
             </View>
           </View>
           <View style={styles.weekRow}>
-            {reading.week.map((d, i) => {
-              const max = Math.max(1, ...reading.week.map(x => x.pages));
+            {reading.week.map((d: any, i: number) => {
+              const max = Math.max(1, ...reading.week.map((x: any) => x.pages));
               const h = d.pages > 0 ? Math.max(8, Math.round((d.pages / max) * 44)) : (d.active ? 8 : 3);
               return (
                 <View key={i} style={styles.dayCol}>
@@ -195,21 +231,28 @@ export default function Profile() {
       </View>
 
       <View style={{ paddingHorizontal: spacing.xl, gap: spacing.sm, marginTop: spacing.lg }}>
-        <Pressable testID="row-quotes" onPress={() => router.push('/quotes')} style={styles.row}><Feather name="feather" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Mes citations')}</Text></Pressable>
+        <Pressable testID="row-recommendations" onPress={() => router.push('/recommendations')} style={styles.row}>
+          <Feather name="gift" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Recommandations')}</Text>
+          {recoBadge > 0 && <View style={styles.badgeDot} testID="reco-badge"><Text style={styles.badgeDotText}>{recoBadge > 99 ? '99+' : recoBadge}</Text></View>}
+        </Pressable>
+        <Pressable testID="row-invitations" onPress={() => router.push('/invitations')} style={styles.row}>
+          <Feather name="mail" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Invitations')}</Text>
+          {invBadge > 0 && <View style={styles.badgeDot} testID="inv-badge"><Text style={styles.badgeDotText}>{invBadge > 99 ? '99+' : invBadge}</Text></View>}
+        </Pressable>
+        <Pressable testID="row-share-profile" onPress={shareProfile} style={styles.row}><Feather name="user-plus" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Partager mon profil')}</Text></Pressable>
+        <Pressable testID="row-share-library" onPress={() => router.push('/share-library')} style={styles.row}><Feather name="share-2" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Partager ma bibliothèque')}</Text></Pressable>
         {(user as any)?.is_admin && (
-          <Pressable testID="row-admin" onPress={() => router.push('/admin')} style={styles.row}><Feather name="shield" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Dashboard admin')}</Text></Pressable>
+          <Pressable testID="row-admin" onPress={() => router.push('/admin')} style={styles.row}>
+            <Feather name="shield" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Dashboard admin')}</Text>
+            {adminBadge > 0 && <View style={styles.badgeDot} testID="admin-badge"><Text style={styles.badgeDotText}>{adminBadge > 99 ? '99+' : adminBadge}</Text></View>}
+          </Pressable>
         )}
         <Pressable testID="row-carnet" onPress={() => router.push('/carnet')} style={styles.row}><Feather name="book-open" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Carnet de lecture')}</Text><View style={styles.premiumTag}><Text style={styles.premiumTagText}>PREMIUM</Text></View></Pressable>
         <Pressable testID="row-settings" onPress={() => router.push('/settings')} style={styles.row}><Feather name="settings" size={18} color={colors.espresso} /><Text style={styles.rowLabel}>{t('Paramètres')}</Text></Pressable>
         <Pressable testID="row-signout" onPress={signOut} style={styles.row}><Feather name="log-out" size={18} color={colors.espresso} /><Text style={styles.rowLabel}>{t('Se déconnecter')}</Text></Pressable>
       </View>
 
-      <Modal visible={goalModal} transparent animationType="slide" onRequestClose={() => setGoalModal(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
-          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }}>
-            <View style={styles.modal}>
-            <Text style={styles.modalTitle}>{t('Objectif de l’année')}</Text>
-            <Text style={styles.readingSub}>{t('Un cap réaliste vaut mieux qu’un record : combien de livres cette année ?')}</Text>
+      <BottomSheet visible={goalModal} onClose={() => setGoalModal(false)} title={t('Objectif de l’année')} subtitle={t('Un cap réaliste vaut mieux qu’un record : combien de livres cette année ?')} testID="sheet-goal">
             <TextInput
               testID="goal-input"
               value={goalInput} onChangeText={setGoalInput}
@@ -236,10 +279,7 @@ export default function Profile() {
             <Pressable testID="goal-cancel" onPress={() => setGoalModal(false)} style={{ alignSelf: 'center', padding: spacing.sm }}>
               <Text style={styles.goalEdit}>{t('Annuler')}</Text>
             </Pressable>
-          </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </Modal>
+      </BottomSheet>
     </ScrollView>
   );
 }
@@ -254,6 +294,10 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   statsRow: { flexDirection: 'row', paddingHorizontal: spacing.xl, marginTop: spacing.xl, gap: spacing.sm },
   stat: { flex: 1, backgroundColor: colors.creme, borderRadius: radius.md, paddingVertical: spacing.md, paddingHorizontal: 4, alignItems: 'center', borderWidth: 1, borderColor: colors.borderSoft },
   statNum: { fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso },
+  followRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
+  followText: { fontFamily: fonts.body, fontSize: 13, color: colors.clay },
+  followNum: { fontFamily: fonts.bodyMedium, color: colors.espresso },
+  followDot: { fontFamily: fonts.body, fontSize: 13, color: colors.clay },
   statLbl: { fontFamily: fonts.bodyMedium, fontSize: 8.5, color: colors.clay, letterSpacing: 0.4, textTransform: 'uppercase', marginTop: 2, textAlign: 'center' },
   readingCard: { marginHorizontal: spacing.xl, marginTop: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },
   clubCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginHorizontal: spacing.xl, marginTop: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },
@@ -279,9 +323,6 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   goalBar: { height: 8, backgroundColor: colors.glacier, borderRadius: 4, overflow: 'hidden', marginTop: spacing.sm },
   goalFill: { height: 8, backgroundColor: colors.chambray },
   goalText: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1, textTransform: 'uppercase', marginTop: 6 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(58,33,25,0.4)', justifyContent: 'flex-end' },
-  modal: { backgroundColor: colors.glacier, padding: spacing.xl, paddingBottom: spacing.xxl, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
-  modalTitle: { fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso, marginBottom: spacing.xs },
   goalInput: { height: 56, borderWidth: 1, borderColor: colors.borderSoft, borderRadius: radius.md, paddingHorizontal: spacing.md, fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso, backgroundColor: colors.creme, marginTop: spacing.md, textAlign: 'center' },
   goalSaveBtn: { height: 52, borderRadius: radius.md, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center', marginTop: spacing.md },
   goalSaveText: { fontFamily: fonts.bodyMedium, fontSize: 15, color: colors.creme },
@@ -296,4 +337,6 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   premiumTag: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.bisque },
   premiumTagText: { fontFamily: fonts.bodyMedium, fontSize: 9, color: colors.espresso, letterSpacing: 1.5 },
   rowLabel: { fontFamily: fonts.body, fontSize: 15, color: colors.espresso },
+  badgeDot: { minWidth: 22, height: 22, borderRadius: 11, paddingHorizontal: 6, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },
+  badgeDotText: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.creme },
 });

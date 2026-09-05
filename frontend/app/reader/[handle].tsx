@@ -18,7 +18,7 @@ type Profile = {
   is_me: boolean;
   private?: boolean;
   is_following?: boolean;
-  stats?: { public_quotes: number; books: number; boards: number; followers: number };
+  stats?: { public_quotes: number; books: number; boards: number; followers: number; following?: number };
   quotes?: Quote[];
   library?: { book_id: string; title: string; author?: string; cover?: string; status?: string }[];
   fiches?: { title: string; author?: string; cover?: string; rating: number; summary: string }[];
@@ -31,11 +31,12 @@ export default function ReaderProfile() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { width } = useWindowDimensions();
-  const { handle } = useLocalSearchParams<{ handle: string }>();
+  const { handle, follow, section } = useLocalSearchParams<{ handle: string; follow?: string; section?: string }>();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [feedback, setFeedback] = useState('');
   const [followBusy, setFollowBusy] = useState(false);
+  const autoFollowed = React.useRef(false);
 
   const toggleFollow = async () => {
     if (!profile || followBusy) return;
@@ -52,12 +53,23 @@ export default function ReaderProfile() {
     (async () => {
       try {
         const r = await api<Profile>(`/readers/${encodeURIComponent(handle)}`);
+        // Arrivée depuis un lien « Suivre » : on suit directement, une seule fois
+        if (follow === '1' && !r.is_me && !r.is_following && !autoFollowed.current) {
+          autoFollowed.current = true;
+          try {
+            const f = await api<{ following: boolean; followers: number }>(`/readers/${encodeURIComponent(handle)}/follow`, { method: 'POST' });
+            r.is_following = f.following;
+            if (r.stats) r.stats.followers = f.followers;
+            setFeedback(t('Tu suis maintenant {pseudo}.', { pseudo: r.user.pseudo }));
+          } catch {}
+        }
         setProfile(r);
       } catch {
         setNotFound(true);
       }
     })();
-  }, [handle]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handle, follow]);
 
   const shareProfile = async () => {
     if (!profile) return;
@@ -151,29 +163,40 @@ export default function ReaderProfile() {
           <>
           <View style={styles.statsRow}>
             {[
-              { n: profile.stats!.followers, l: t(profile.stats!.followers > 1 ? 'abonnés' : 'abonné') },
+              { n: profile.stats!.followers, l: t(profile.stats!.followers > 1 ? 'abonnées' : 'abonnée'), tab: 'followers' },
+              { n: profile.stats!.following ?? 0, l: t((profile.stats!.following ?? 0) > 1 ? 'abonnements' : 'abonnement'), tab: 'following' },
               { n: profile.stats!.public_quotes, l: t(profile.stats!.public_quotes > 1 ? 'citations' : 'citation') },
               { n: profile.stats!.books, l: t(profile.stats!.books > 1 ? 'livres' : 'livre') },
-              { n: profile.stats!.boards, l: t(profile.stats!.boards > 1 ? 'tableaux' : 'tableau') },
             ].map(s => (
-              <View key={s.l} style={styles.statCard}>
+              <Pressable key={s.l} testID={`reader-stat-${s.tab || s.l}`} disabled={!s.tab} onPress={() => router.push({ pathname: '/follows', params: { handle, tab: s.tab } })} style={styles.statCard}>
                 <Text style={styles.statNum}>{s.n}</Text>
-                <Text style={styles.statLbl}>{s.l}</Text>
-              </View>
+                <Text style={styles.statLbl} numberOfLines={1} adjustsFontSizeToFit>{s.l}</Text>
+              </Pressable>
             ))}
           </View>
 
           {(profile.library || []).length > 0 && (
-            <View style={{ marginTop: spacing.xl }}>
+            <View style={{ marginTop: spacing.xl }} testID="reader-library">
               <Text style={[styles.sectionLabel, { paddingHorizontal: spacing.xl }]}>{t('Sa bibliothèque')}</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.xl, gap: spacing.sm }}>
-                {profile.library!.map(b => (
-                  <View key={b.book_id} style={{ width: 76, alignItems: 'center' }}>
-                    <BookCover uri={b.cover} title={b.title} width={72} height={100} initialSize={26} />
-                    <Text style={styles.libTitle} numberOfLines={2}>{b.title}</Text>
-                  </View>
-                ))}
-              </ScrollView>
+              {section === 'library' ? (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, paddingHorizontal: spacing.xl }}>
+                  {profile.library!.map(b => (
+                    <View key={b.book_id} style={{ width: (width - spacing.xl * 2 - spacing.sm * 3) / 4, alignItems: 'center' }}>
+                      <BookCover uri={b.cover} title={b.title} width={(width - spacing.xl * 2 - spacing.sm * 3) / 4} height={((width - spacing.xl * 2 - spacing.sm * 3) / 4) * 1.45} initialSize={24} />
+                      <Text style={styles.libTitle} numberOfLines={2}>{b.title}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.xl, gap: spacing.sm }}>
+                  {profile.library!.map(b => (
+                    <View key={b.book_id} style={{ width: 76, alignItems: 'center' }}>
+                      <BookCover uri={b.cover} title={b.title} width={72} height={100} initialSize={26} />
+                      <Text style={styles.libTitle} numberOfLines={2}>{b.title}</Text>
+                    </View>
+                  ))}
+                </ScrollView>
+              )}
             </View>
           )}
 

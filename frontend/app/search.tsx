@@ -9,6 +9,7 @@ import { QuoteCard, Quote } from '@/src/components/QuoteCard';
 import { api } from '@/src/api';
 import { useT } from '@/src/i18n';
 import ManentLoader from '@/src/components/ManentLoader';
+import { ClassificationLines } from '@/src/components/ClassificationLines';
 
 type Scope = 'all' | 'quotes' | 'books';
 
@@ -20,39 +21,22 @@ export default function SearchScreen() {
   const router = useRouter();
   const [q, setQ] = useState('');
   const [scope, setScope] = useState<Scope>('all');
-  const [theme, setTheme] = useState<string | null>(null);
-  const [bookId, setBookId] = useState<string | null>(null);
-  const [themes, setThemes] = useState<string[]>([]);
-  const [myBooks, setMyBooks] = useState<{ book_id: string; title: string }[]>([]);
   const [results, setResults] = useState<{ quotes: Quote[]; books: any[]; readers: any[] }>({ quotes: [], books: [], readers: [] });
   const [catalog, setCatalog] = useState<any[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogTotal, setCatalogTotal] = useState(0);
   const [catalogPage, setCatalogPage] = useState(1);
+  const [matched, setMatched] = useState<{ dim: string; key: string; label: string }[]>([]);
+  const [matchedSel, setMatchedSel] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(true);
   const timer = useRef<any>(null);
   const catalogTimer = useRef<any>(null);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const [t, b] = await Promise.all([
-          api<{ themes: string[] }>('/themes'),
-          api<{ books: any[] }>('/books'),
-        ]);
-        setThemes(t.themes);
-        setMyBooks(b.books.map((x: any) => ({ book_id: x.book_id, title: x.title })));
-      } catch {}
-    })();
-  }, []);
-
-  const run = useCallback(async (qv: string, scopeV: Scope, themeV: string | null, bookV: string | null) => {
+  const run = useCallback(async (qv: string, scopeV: Scope) => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
       if (qv.trim()) params.set('q', qv.trim());
-      if (themeV) params.set('theme', themeV);
-      if (bookV) params.set('book_id', bookV);
       params.set('scope', scopeV);
       const r = await api<{ quotes: Quote[]; books: any[]; readers: any[] }>(`/search?${params.toString()}`);
       setResults({ quotes: r.quotes || [], books: r.books || [], readers: r.readers || [] });
@@ -62,15 +46,15 @@ export default function SearchScreen() {
 
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => run(q, scope, theme, bookId), 350);
+    timer.current = setTimeout(() => run(q, scope), 350);
     return () => clearTimeout(timer.current);
-  }, [q, scope, theme, bookId, run]);
+  }, [q, scope, run]);
 
   // Recherche internet (catalogue) en parallèle de la recherche locale
   useEffect(() => {
     if (catalogTimer.current) clearTimeout(catalogTimer.current);
     const qv = q.trim();
-    if (qv.length < 2 || scope === 'quotes' || theme || bookId) {
+    if (qv.length < 2 || scope === 'quotes') {
       setCatalog([]);
       setCatalogLoading(false);
       return;
@@ -78,17 +62,20 @@ export default function SearchScreen() {
     setCatalogLoading(true);
     catalogTimer.current = setTimeout(async () => {
       try {
-        const r = await api<{ results: any[]; total: number }>(`/catalog/search?q=${encodeURIComponent(qv)}&page=1&size=10`);
+        const r = await api<{ results: any[]; total: number; matched_chips?: any[]; matched_filters?: Record<string, string[]> }>(`/catalog/search?q=${encodeURIComponent(qv)}&page=1&size=10`);
         setCatalog(r.results || []);
         setCatalogTotal(r.total || 0);
         setCatalogPage(1);
+        setMatched(r.matched_chips || []);
+        setMatchedSel(r.matched_filters || {});
       } catch {
         setCatalog([]);
+        setMatched([]);
       }
       setCatalogLoading(false);
     }, 450);
     return () => clearTimeout(catalogTimer.current);
-  }, [q, scope, theme, bookId]);
+  }, [q, scope]);
 
   const catalogMore = async () => {
     try {
@@ -99,10 +86,9 @@ export default function SearchScreen() {
     } catch {}
   };
 
-  const filtersActive = theme || bookId;
-  const showBooks = scope !== 'quotes' && !filtersActive;
+  const showBooks = scope !== 'quotes';
   const showQuotes = scope !== 'books';
-  const showReaders = scope === 'all' && !filtersActive;
+  const showReaders = scope === 'all';
   const total = (showQuotes ? results.quotes.length : 0) + (showBooks ? results.books.length : 0) + (showReaders ? results.readers.length : 0);
 
   return (
@@ -141,37 +127,44 @@ export default function SearchScreen() {
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xxl }} keyboardShouldPersistTaps="handled">
-        <Text style={styles.filterLabel}>{t('Par sujet')}</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipScroll}>
-          {themes.map(t => (
-            <Pressable key={t} testID={`search-theme-${t}`} onPress={() => setTheme(theme === t ? null : t)} style={[styles.chip, theme === t && styles.chipActive]}>
-              <Text style={[styles.chipText, theme === t && styles.chipTextActive]}>{t}</Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-
-        {myBooks.length > 0 && (
-          <>
-            <Text style={styles.filterLabel}>{t('Par livre')}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipScroll}>
-              {myBooks.map(b => (
-                <Pressable key={b.book_id} testID={`search-book-${b.book_id}`} onPress={() => setBookId(bookId === b.book_id ? null : b.book_id)} style={[styles.chip, bookId === b.book_id && styles.chipActive]}>
-                  <Text style={[styles.chipText, bookId === b.book_id && styles.chipTextActive]} numberOfLines={1}>{b.title}</Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </>
+        <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: spacing.xl, marginTop: spacing.md }}>
+          <Pressable testID="search-intent" onPress={() => router.push('/intent')} style={[styles.chip, { flex: 1, maxWidth: undefined, backgroundColor: colors.bisque, borderColor: colors.bisque }]}>
+            <Text style={styles.chipText} numberOfLines={1}>✨ {t('Je cherche un livre qui…')}</Text>
+          </Pressable>
+          <Pressable testID="search-filters" onPress={() => router.push({ pathname: '/filters', params: { q: q.trim() } })} style={[styles.chip, { flexDirection: 'row', gap: 6 }]}>
+            <Feather name="sliders" size={13} color={colors.espresso} />
+            <Text style={styles.chipText}>{t('Filtres')}</Text>
+          </Pressable>
+        </View>
+        {matched.length > 0 && q.trim().length >= 2 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.chipScroll, { marginTop: spacing.sm }]}>
+            {matched.map((c: any) => (
+              <Pressable key={`${c.dim}:${c.key}`} testID={`search-matched-${c.dim}-${c.key}`} onPress={() => router.push({ pathname: '/browse', params: { f: JSON.stringify({ [c.dim]: [c.key] }), title: c.label } })} style={[styles.chip, styles.chipActive, { flexDirection: 'row', gap: 6 }]}>
+                <Text style={[styles.chipText, styles.chipTextActive]}>{c.label}</Text>
+                <Feather name="arrow-right" size={12} color={colors.creme} />
+              </Pressable>
+            ))}
+            {matched.length > 1 && (
+              <Pressable testID="search-matched-all" onPress={() => router.push({ pathname: '/browse', params: { f: JSON.stringify(matchedSel), title: q.trim() } })} style={styles.chip}>
+                <Text style={styles.chipText}>{t('Combiner')}</Text>
+              </Pressable>
+            )}
+          </ScrollView>
         )}
-
         <View style={{ paddingHorizontal: spacing.xl }}>
           {loading ? (
             <View style={{ paddingTop: spacing.xxl, alignItems: 'center' }}>
               <ManentLoader size={48} />
             </View>
+          ) : q.trim().length < 2 && total === 0 ? (
+            <View style={{ paddingVertical: spacing.xxl, alignItems: 'center' }}>
+              <Text style={styles.emptyTitle}>{t('Un titre, une autrice, un sujet, un pays…')}</Text>
+              <Text style={styles.emptySub}>{t('La recherche parcourt ta bibliothèque, tes citations, les lectrices et tout le catalogue en ligne.')}</Text>
+            </View>
           ) : total === 0 && catalog.length === 0 && !catalogLoading ? (
             <View style={{ paddingVertical: spacing.xxl, alignItems: 'center' }}>
               <Text style={styles.emptyTitle}>{t('Rien pour l’instant.')}</Text>
-              <Text style={styles.emptySub}>{t('Essaie un autre mot, ou retire un filtre.')}</Text>
+              <Text style={styles.emptySub}>{t('Essaie un autre mot, ou ouvre les filtres.')}</Text>
             </View>
           ) : (
             <>
@@ -237,7 +230,8 @@ export default function SearchScreen() {
                       <View style={{ flex: 1 }}>
                         <Text style={styles.bookTitle} numberOfLines={1}>{b.title}</Text>
                         <Text style={styles.bookAuthor} numberOfLines={1}>{[b.author, b.year].filter(Boolean).join('  ·  ')}</Text>
-                        {!!b.summary && <Text style={styles.bookSummary} numberOfLines={2}>{b.summary}</Text>}
+                        {(b.lines || []).length > 0 ? <ClassificationLines lines={b.lines} compact style={{ marginTop: 2 }} />
+                          : !!b.summary && <Text style={styles.bookSummary} numberOfLines={2}>{b.summary}</Text>}
                       </View>
                       <Feather name="plus-circle" size={19} color={colors.chambray} />
                     </Pressable>
@@ -248,9 +242,9 @@ export default function SearchScreen() {
                     </Pressable>
                   )}
                   {q.trim().length >= 2 && (
-                    <Pressable testID="open-subject-page" onPress={() => router.push({ pathname: '/theme/[name]', params: { name: q.trim().toLowerCase() } })} style={[styles.moreBtn, { marginTop: spacing.sm }]}>
-                      <Feather name="hash" size={13} color={colors.chambray} />
-                      <Text style={styles.moreBtnText}>{t('Ouvrir le sujet « {s} »', { s: q.trim().toLowerCase() })}</Text>
+                    <Pressable testID="open-all-results" onPress={() => router.push({ pathname: '/browse', params: { q: q.trim(), title: q.trim() } })} style={[styles.moreBtn, { marginTop: spacing.sm }]}>
+                      <Feather name="arrow-right" size={13} color={colors.chambray} />
+                      <Text style={styles.moreBtnText}>{t('Voir toutes les œuvres liées à « {s} »', { s: q.trim() })}</Text>
                     </Pressable>
                   )}
                 </>

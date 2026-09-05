@@ -7,8 +7,8 @@ import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
 import { api } from '@/src/api';
 import { BookCover } from '@/src/components/BookCover';
-import { QuotesManager } from '@/src/components/QuotesManager';
 import { InfoTooltip } from '@/src/components/InfoTooltip';
+import { AddReadingSheet } from '@/src/components/AddReadingSheet';
 import { useT } from '@/src/i18n';
 
 type Book = {
@@ -31,7 +31,7 @@ const FILTERS = [
   { id: null as any, label: 'Tous' },
   { id: 'en_cours', label: 'En cours' },
   { id: 'termine', label: 'Terminés' },
-  { id: 'a_lire', label: 'À lire' },
+  { id: 'a_lire', label: 'Liste de lecture' },
 ];
 
 function BookCard({ b, onPress }: { b: Book; onPress: () => void }) {
@@ -76,7 +76,7 @@ export default function Library() {
   const [filter, setFilter] = useState<string | null>(null);
   const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
-  const [seg, setSeg] = useState<'livres' | 'citations'>('livres');
+  const [addSheet, setAddSheet] = useState(false);
 
   useFocusEffect(useCallback(() => {
     (async () => {
@@ -94,22 +94,14 @@ export default function Library() {
             <Text style={styles.h1}>{t('Bibliothèque')}</Text>
             <InfoTooltip
               testID="info-library"
-              title={t('Ta bibliothèque')}
-              text={t("Range tes lectures en trois étapes : À lire, En cours, Terminés. Ta progression se met à jour à mesure que tu avances dans les pages. L'onglet Citations rassemble tous les passages que tu as capturés, pour les retoucher ou changer leur visibilité en un geste.")}
+              title={t('Comment ça marche')}
+              text={t("Le « + » ajoute une lecture par titre, ISBN ou Wattpad. Tes livres se rangent en trois étapes : Liste de lecture, En cours, Terminés. La liste de lecture s'ordonne dans « Lecture suivante », le prochain livre en tête. Tes citations ont leur propre onglet, la plume en bas.")}
             />
           </View>
-          <Pressable testID="btn-library-add" onPress={() => router.push('/book/add')} style={styles.addBtn}>
+          <Pressable testID="btn-library-add" onPress={() => setAddSheet(true)} style={styles.addBtn}>
             <Feather name="plus" size={22} color={colors.creme} />
           </Pressable>
         </View>
-        <View style={styles.segRow}>
-          {([['livres', 'Livres'], ['citations', 'Citations']] as const).map(([s, lbl]) => (
-            <Pressable key={s} testID={`lib-seg-${s}`} onPress={() => setSeg(s)} style={[styles.seg, seg === s && styles.segActive]}>
-              <Text style={[styles.segText, seg === s && styles.segTextActive]}>{t(lbl)}</Text>
-            </Pressable>
-          ))}
-        </View>
-        {seg === 'livres' && (
         <View style={styles.filterRow}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: spacing.xl }}>
             {FILTERS.map(f => (
@@ -119,28 +111,34 @@ export default function Library() {
             ))}
           </ScrollView>
         </View>
-        )}
       </View>
-      {seg === 'citations' ? (
-        <QuotesManager />
-      ) : (
       <FlatList
         data={books}
         keyExtractor={x => x.book_id}
         renderItem={({ item }) => <BookCard b={item} onPress={() => router.push({ pathname: '/book/[id]', params: { id: item.book_id } })} />}
         contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + 80 }}
+        ListHeaderComponent={filter === 'a_lire' && books.length > 0 ? (
+          <Pressable testID="btn-open-queue" onPress={() => router.push('/queue')} style={styles.queueBtn}>
+            <Feather name="list" size={16} color={colors.chambray} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.queueTitle}>{t('Lecture suivante')}</Text>
+              <Text style={styles.queueSub}>{t('Ordonne ta file : le prochain livre en tête.')}</Text>
+            </View>
+            <Feather name="chevron-right" size={18} color={colors.clay} />
+          </Pressable>
+        ) : null}
         ItemSeparatorComponent={() => <View style={{ height: spacing.md }} />}
         ListEmptyComponent={loading ? null : (
           <View style={{ alignItems: 'center', paddingVertical: spacing.xxxl }}>
             <Text style={styles.emptyTitle}>{t("Ta bibliothèque t'attend.")}</Text>
             <Text style={styles.emptySub}>{t('Ajoute ton premier livre ou une histoire Wattpad.')}</Text>
-            <Pressable testID="empty-add-book" onPress={() => router.push('/book/add')} style={[styles.addBtn, { marginTop: spacing.lg }]}>
+            <Pressable testID="empty-add-book" onPress={() => setAddSheet(true)} style={[styles.addBtn, { marginTop: spacing.lg }]}>
               <Feather name="plus" size={22} color={colors.creme} />
             </Pressable>
           </View>
         )}
       />
-      )}
+      <AddReadingSheet visible={addSheet} onClose={() => setAddSheet(false)} />
     </View>
   );
 }
@@ -151,11 +149,6 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   h1: { fontFamily: fonts.displayMedium, fontSize: 30, color: colors.espresso },
   addBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },
   filterRow: { height: 44 },
-  segRow: { flexDirection: 'row', gap: 8, paddingHorizontal: spacing.xl },
-  seg: { flex: 1, height: 36, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center' },
-  segActive: { backgroundColor: colors.espresso, borderColor: colors.espresso },
-  segText: { fontFamily: fonts.body, fontSize: 13, color: colors.espresso },
-  segTextActive: { color: colors.creme, fontFamily: fonts.bodyMedium },
   chip: { height: 36, paddingHorizontal: 14, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   chipActive: { backgroundColor: colors.chambray, borderColor: colors.chambray },
   chipText: { fontFamily: fonts.body, fontSize: 13, color: colors.espresso },
@@ -173,4 +166,7 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   footer: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.clay, letterSpacing: 1.5, marginTop: spacing.sm, textTransform: 'uppercase' },
   emptyTitle: { fontFamily: fonts.displayMedium, fontSize: 22, color: colors.espresso, textAlign: 'center' },
   emptySub: { fontFamily: fonts.body, fontSize: 14, color: colors.clay, textAlign: 'center', marginTop: spacing.sm },
+  queueBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, backgroundColor: colors.bisque, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.md },
+  queueTitle: { fontFamily: fonts.displayMedium, fontSize: 17, color: colors.espresso },
+  queueSub: { fontFamily: fonts.body, fontSize: 12, color: colors.clay, marginTop: 1 },
 });

@@ -8,7 +8,10 @@ module.exports = ({ config }) => ({
   ...config,
   ios: {
     ...config.ios,
-    associatedDomains: [`applinks:${PUBLIC_DOMAIN}`],
+    // Liens universels iOS (applinks) : la capacité « Associated Domains » doit être activée sur l'App ID
+    // Apple ET présente dans le profil de provisionnement, sinon l'archive échoue (« ARCHIVE FAILED »).
+    // Réactiver avec EXPO_PUBLIC_IOS_APPLINKS=1 une fois la capacité activée dans le portail développeur.
+    ...(process.env.EXPO_PUBLIC_IOS_APPLINKS === '1' ? { associatedDomains: [`applinks:${PUBLIC_DOMAIN}`] } : {}),
   },
   android: {
     ...config.android,
@@ -20,7 +23,9 @@ module.exports = ({ config }) => ({
           { scheme: 'https', host: PUBLIC_DOMAIN, pathPrefix: '/q' },
           { scheme: 'https', host: PUBLIC_DOMAIN, pathPrefix: '/b' },
           { scheme: 'https', host: PUBLIC_DOMAIN, pathPrefix: '/c' },
+          { scheme: 'https', host: PUBLIC_DOMAIN, pathPrefix: '/t' },
           { scheme: 'https', host: PUBLIC_DOMAIN, pathPrefix: '/@' },
+          { scheme: 'https', host: PUBLIC_DOMAIN, pathPrefix: '/api/s' },
         ],
         category: ['BROWSABLE', 'DEFAULT'],
       },

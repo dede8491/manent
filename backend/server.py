@@ -246,6 +246,56 @@ async def me(user=Depends(get_current_user)):
     return {"user": user}
 
 
+# ============ Comptes (admin) ============
+@api.get("/admin/users")
+async def admin_users(q: str = "", user=Depends(require_admin)):
+    """Tous les comptes, du plus récent au plus ancien, avec leurs compteurs. `q` filtre sur pseudo, handle ou e-mail."""
+    flt: dict = {}
+    if q.strip():
+        rx = {"$regex": re.escape(q.strip().lstrip("@")), "$options": "i"}
+        flt = {"$or": [{"pseudo": rx}, {"handle": rx}, {"email": rx}]}
+    users = await db.users.find(flt, {"_id": 0, "user_id": 1, "pseudo": 1, "handle": 1, "email": 1, "picture": 1, "is_admin": 1, "created_at": 1}) \
+        .sort("created_at", -1).to_list(5000)
+    uids = [u["user_id"] for u in users]
+
+    async def counts(col):
+        rows = await db[col].aggregate([{"$match": {"user_id": {"$in": uids}}}, {"$group": {"_id": "$user_id", "n": {"$sum": 1}}}]).to_list(10000)
+        return {r["_id"]: r["n"] for r in rows}
+    nb, nq = await counts("books"), await counts("quotes")
+    last = {r["_id"]: r["t"] for r in await db.user_sessions.aggregate(
+        [{"$match": {"user_id": {"$in": uids}}}, {"$group": {"_id": "$user_id", "t": {"$max": "$created_at"}}}]).to_list(10000)}
+    for u in users:
+        u["books"] = nb.get(u["user_id"], 0)
+        u["quotes"] = nq.get(u["user_id"], 0)
+        u["last_login"] = last.get(u["user_id"])
+        u["is_me"] = u["user_id"] == user["user_id"]
+    return {"users": [clean_doc(u) for u in users], "total": len(users)}
+
+
+@api.delete("/admin/users/{user_id}")
+async def admin_delete_user(user_id: str, user=Depends(require_admin)):
+    """Supprime un compte et tout ce qui lui appartient (livres, citations, tableaux, clubs possédés, abonnements…),
+    après sauvegarde JSON sur le serveur. Les comptes admin ne peuvent pas être supprimés."""
+    import cleanup
+    target = await db.users.find_one({"user_id": user_id}, {"_id": 0, "is_admin": 1, "handle": 1})
+    if not target:
+        raise HTTPException(status_code=404, detail="user_not_found")
+    if target.get("is_admin") or user_id == user["user_id"]:
+        raise HTTPException(status_code=400, detail="admin_protected")
+    res = await cleanup.plan_accounts(db, [user_id])
+    out = await cleanup.apply_cleanup(db, res, os.path.join(ROOT_DIR, "cleanup_backups"))
+    logger.warning("account @%s deleted by admin @%s: %s documents, backup %s", target.get("handle"), user.get("handle"), out["deleted"], out["backup"])
+    return {"ok": True, "deleted": out["deleted"], "per_collection": out["per_collection"]}
+
+
+@api.get("/admin/badge")
+async def admin_badge(user=Depends(require_admin)):
+    """Pastille du Dashboard admin : ce qui attend une action."""
+    reports = await db.reports.count_documents({"status": "open"})
+    # l'origine des auteurs est désormais entièrement automatique (Wikidata, Open Library, IA) : plus de file à vérifier
+    return {"reports": reports, "authors": 0, "total": reports}
+
+
 @api.post("/auth/logout")
 async def logout(authorization: Optional[str] = Header(None)):
     if authorization and authorization.startswith("Bearer "):
@@ -299,7 +349,7 @@ async def _attach_public_meta(quotes: list):
 
 
 @api.get("/themes/{theme}/page")
-async def theme_page(theme: str, area: Optional[str] = None, page: int = 1, size: int = 12, user=Depends(get_current_user)):
+async def theme_page(theme: str, area: Optional[str] = None, genre: Optional[str] = None, page: int = 1, size: int = 12, user=Depends(get_current_user)):
     q = {"is_public": True, "themes": theme, "is_hidden": {"$ne": True}, **sensitive_filter(user)}
     total = await db.quotes.count_documents(q)
     readers = len(await db.quotes.distinct("user_id", q))
@@ -334,7 +384,9 @@ async def theme_page(theme: str, area: Optional[str] = None, page: int = 1, size
     subj = catalog._norm_subject(theme)
     cflt: dict = {"subjects": subj}
     if area:
-        cflt["areas"] = area
+        cflt |= catalog._area_filter(area)
+    if genre:
+        cflt["genre"] = genre
     discover_total = await db.catalog_books.count_documents(cflt)
     cdocs = await db.catalog_books.find(cflt, {"_id": 0}).sort([("popularity", -1), ("year", -1)]) \
         .skip(skip).limit(size).to_list(size)
@@ -446,11 +498,41 @@ async def public_profile(handle: str, user=Depends(get_current_user)):
         "is_me": uid == user["user_id"],
         "private": False,
         "is_following": is_following,
-        "stats": {"public_quotes": total, "books": books, "boards": boards, "followers": followers},
+        "stats": {"public_quotes": total, "books": books, "boards": boards, "followers": followers,
+                  "following": await db.follows.count_documents({"follower_id": uid})},
         "quotes": quotes,
         "library": library,
         "fiches": fiches[:10],
     }
+
+
+async def _follow_lists(uid: str, viewer_id: str) -> dict:
+    """Abonnées (qui suivent uid) et abonnements (que uid suit), avec « je la suis » pour la lectrice qui regarde."""
+    followers_ids = [f["follower_id"] for f in await db.follows.find({"followed_id": uid}, {"_id": 0, "follower_id": 1}).sort("created_at", -1).to_list(2000)]
+    following_ids = [f["followed_id"] for f in await db.follows.find({"follower_id": uid}, {"_id": 0, "followed_id": 1}).sort("created_at", -1).to_list(2000)]
+    mine = {f["followed_id"] for f in await db.follows.find({"follower_id": viewer_id}, {"_id": 0, "followed_id": 1}).to_list(5000)}
+    users = {x["user_id"]: x for x in await db.users.find({"user_id": {"$in": list(set(followers_ids + following_ids))}},
+                                                          {"_id": 0, "user_id": 1, "pseudo": 1, "handle": 1, "picture": 1}).to_list(4000)}
+    def row(i):
+        x = users.get(i)
+        return {"pseudo": x["pseudo"], "handle": x.get("handle"), "picture": x.get("picture"), "is_following": i in mine, "is_me": i == viewer_id} if x and x.get("handle") else None
+    return {"followers": [r for r in map(row, followers_ids) if r], "following": [r for r in map(row, following_ids) if r],
+            "followers_count": len(followers_ids), "following_count": len(following_ids)}
+
+
+@api.get("/me/follows")
+async def my_follows(user=Depends(get_current_user)):
+    return await _follow_lists(user["user_id"], user["user_id"])
+
+
+@api.get("/readers/{handle}/follows")
+async def reader_follows(handle: str, user=Depends(get_current_user)):
+    u = await db.users.find_one({"handle": handle}, {"_id": 0, "user_id": 1, "profile_public": 1, "pseudo": 1})
+    if not u:
+        raise HTTPException(status_code=404, detail="not_found")
+    if u.get("profile_public", True) is False and u["user_id"] != user["user_id"]:
+        raise HTTPException(status_code=403, detail="private_profile")
+    return {**(await _follow_lists(u["user_id"], user["user_id"])), "pseudo": u.get("pseudo")}
 
 
 # ============ Books ============
@@ -465,6 +547,7 @@ class BookCreate(BaseModel):
     pages: Optional[int] = None
     year: Optional[str] = None
     chapters: Optional[int] = None
+    summary: Optional[str] = Field(None, max_length=3000)
     status: Literal['a_lire', 'en_cours', 'termine'] = 'a_lire'
     mode: Literal['perso', 'etudes'] = 'perso'
     level: Optional[str] = None  # scolaire
@@ -479,6 +562,7 @@ class BookPatch(BaseModel):
     chapters: Optional[int] = None
     status: Optional[Literal['a_lire', 'en_cours', 'termine']] = None
     rating: Optional[int] = None
+    review: Optional[str] = Field(None, max_length=600)
     recap: Optional[str] = Field(None, max_length=4000)
     summary: Optional[str] = Field(None, max_length=3000)
     lessons: Optional[List[str]] = None
@@ -597,6 +681,11 @@ async def create_book(body: BookCreate, user=Depends(get_current_user)):
             doc["progress_page"] = body.pages
         doc["finished_at"] = now_utc()
         doc["read_count"] = 1
+    # Lecture suivante : un livre « à lire » rejoint la fin de la file
+    if body.status == "a_lire":
+        last = await db.books.find_one({"user_id": user["user_id"], "status": "a_lire", "queue_position": {"$ne": None}},
+                                       {"_id": 0, "queue_position": 1}, sort=[("queue_position", -1)])
+        doc["queue_position"] = ((last or {}).get("queue_position") or 0) + 1
     await db.books.insert_one(doc.copy())
     # Catalogue : source unique — le livre rejoint catalog_books (upsert, popularité +1)
     if body.type != "etude":
@@ -628,6 +717,9 @@ async def list_books(status: Optional[str] = None, user=Depends(get_current_user
         q["status"] = status
     cur = db.books.find(q, {"_id": 0}).sort("created_at", -1)
     books = await cur.to_list(500)
+    if status == "a_lire":
+        # Liste de lecture : ordre de la file « Lecture suivante », puis les plus récents
+        books.sort(key=lambda b: (b.get("queue_position") is None, b.get("queue_position") or 0))
     # attach quote counts
     for b in books:
         b["quotes_count"] = await db.quotes.count_documents({"book_id": b["book_id"]})
@@ -660,6 +752,31 @@ async def list_books(status: Optional[str] = None, user=Depends(get_current_user
             if not b.get("summary"):
                 await catalog.enqueue_task(b["catalog_id"], "summary")
     return {"books": books}
+
+
+# ---- Lecture suivante : file ordonnée des livres « à lire » ----
+class QueueBody(BaseModel):
+    book_ids: List[str]
+
+
+def _queue_sorted(books: list) -> list:
+    books.sort(key=lambda b: (b.get("queue_position") is None, b.get("queue_position") or 0,
+                              -(b.get("created_at").timestamp() if isinstance(b.get("created_at"), datetime) else 0)))
+    return books
+
+
+@api.get("/books/queue")
+async def get_queue(user=Depends(get_current_user)):
+    books = await db.books.find({"user_id": user["user_id"], "status": "a_lire", "type": {"$ne": "etude"}}, {"_id": 0}).to_list(500)
+    return {"books": _queue_sorted(books)}
+
+
+@api.patch("/books/queue")
+async def set_queue(body: QueueBody, user=Depends(get_current_user)):
+    """Réordonne la file : la liste complète des book_id dans l'ordre voulu."""
+    for i, bid in enumerate(body.book_ids):
+        await db.books.update_one({"book_id": bid, "user_id": user["user_id"]}, {"$set": {"queue_position": i}})
+    return await get_queue(user)
 
 
 @api.get("/books/{book_id}")
@@ -723,11 +840,16 @@ async def patch_book(book_id: str, body: BookPatch, user=Depends(get_current_use
     elif new_status == "a_lire":
         upd[prog_key] = 0
         upd["is_rereading"] = False
+        if book.get("queue_position") is None:
+            last = await db.books.find_one({"user_id": user["user_id"], "status": "a_lire", "queue_position": {"$ne": None}},
+                                           {"_id": 0, "queue_position": 1}, sort=[("queue_position", -1)])
+            upd["queue_position"] = ((last or {}).get("queue_position") or 0) + 1
     elif new_status == "en_cours" and book.get("status") == "termine":
         # Relecture : l'historique (finished_at, read_count) est conservé, on repart de 0
         upd["is_rereading"] = True
         upd.setdefault(prog_key, 0)
     if upd:
+        upd["updated_at"] = now_utc()
         await db.books.update_one({"book_id": book_id, "user_id": user["user_id"]}, {"$set": upd})
         # Clubs : progression partagée + notifications sobres sur la lecture commune
         if "progress_page" in upd or "progress_chapter" in upd or upd.get("status") == "termine":
@@ -1041,8 +1163,11 @@ async def create_quote(body: QuoteCreate, user=Depends(get_current_user)):
         if book and (book.get("progress_page") or 0) < body.page:
             await db.books.update_one(
                 {"book_id": body.book_id, "user_id": user["user_id"]},
-                {"$set": {"progress_page": body.page, "status": "en_cours" if book.get("status") == "a_lire" else book.get("status")}},
+                {"$set": {"progress_page": body.page, "status": "en_cours" if book.get("status") == "a_lire" else book.get("status"), "updated_at": now_utc()}},
             )
+    if body.book_id:
+        # une citation compte comme une activité de lecture : ce livre remonte dans « Reprendre ta lecture »
+        await db.books.update_one({"book_id": body.book_id, "user_id": user["user_id"]}, {"$set": {"updated_at": now_utc()}})
     return clean_doc(doc)
 
 
@@ -1110,7 +1235,90 @@ async def get_quote(quote_id: str, user=Depends(get_current_user)):
     owner = await db.users.find_one({"user_id": q["user_id"]}, {"_id": 0, "pseudo": 1, "handle": 1, "picture": 1})
     q["author"] = owner or {"pseudo": "Lecteur", "handle": "lecteur"}
     q["is_owner"] = is_owner
+    q["likes_count"] = q.get("likes_count") or 0
+    q["comments_count"] = q.get("comments_count") or 0
+    q["liked_by_me"] = await db.quote_likes.find_one({"quote_id": quote_id, "user_id": user["user_id"]}) is not None
     return q
+
+
+# ============ Réactions sur les citations (cœur, commentaires) ============
+async def _visible_quote_or_404(quote_id: str, user: dict) -> dict:
+    q = await db.quotes.find_one({"quote_id": quote_id}, {"_id": 0})
+    if not q:
+        raise HTTPException(status_code=404, detail="not_found")
+    if q["user_id"] != user["user_id"]:
+        allowed = q.get("is_public")
+        if not allowed and q.get("visibility") == "followers":
+            allowed = await db.follows.find_one({"follower_id": user["user_id"], "followed_id": q["user_id"]}) is not None
+        if not allowed or q.get("is_hidden") or (q.get("is_sensitive") and not _is_adult(user)):
+            raise HTTPException(status_code=404, detail="not_found")
+    return q
+
+
+@api.post("/quotes/{quote_id}/like")
+async def toggle_like_quote(quote_id: str, user=Depends(get_current_user)):
+    """Cœur sur une citation (bascule). L'autrice reçoit une notification, sauf pour ses propres cœurs."""
+    q = await _visible_quote_or_404(quote_id, user)
+    existing = await db.quote_likes.find_one({"quote_id": quote_id, "user_id": user["user_id"]})
+    if existing:
+        await db.quote_likes.delete_one({"_id": existing["_id"]})
+        liked = False
+    else:
+        await db.quote_likes.insert_one({"quote_id": quote_id, "user_id": user["user_id"], "created_at": now_utc()})
+        liked = True
+        if q["user_id"] != user["user_id"]:
+            try:
+                await send_push([q["user_id"]], {"title": "Manent", "message": f"{user.get('pseudo', 'Une lectrice')} a aimé ta citation",
+                                                 "data": {"type": "quote_like", "quote_id": quote_id}}, idempotency_key=f"like_{quote_id}_{user['user_id']}")
+            except Exception:
+                pass
+    count = await db.quote_likes.count_documents({"quote_id": quote_id})
+    await db.quotes.update_one({"quote_id": quote_id}, {"$set": {"likes_count": count}})
+    return {"liked": liked, "likes_count": count}
+
+
+class QuoteCommentBody(BaseModel):
+    text: str = Field(min_length=1, max_length=600)
+
+
+@api.get("/quotes/{quote_id}/comments")
+async def list_quote_comments(quote_id: str, user=Depends(get_current_user)):
+    await _visible_quote_or_404(quote_id, user)
+    rows = await db.quote_comments.find({"quote_id": quote_id}, {"_id": 0}).sort("created_at", 1).to_list(200)
+    ids = list({r["user_id"] for r in rows})
+    users = {u["user_id"]: u for u in await db.users.find({"user_id": {"$in": ids}}, {"_id": 0, "user_id": 1, "pseudo": 1, "handle": 1, "picture": 1}).to_list(200)}
+    return {"comments": [{**r, "author": users.get(r["user_id"], {"pseudo": "Lectrice"}), "is_mine": r["user_id"] == user["user_id"]} for r in rows]}
+
+
+@api.post("/quotes/{quote_id}/comments")
+async def add_quote_comment(quote_id: str, body: QuoteCommentBody, user=Depends(get_current_user)):
+    q = await _visible_quote_or_404(quote_id, user)
+    c = {"comment_id": new_id("qc"), "quote_id": quote_id, "user_id": user["user_id"], "text": body.text.strip(), "created_at": now_utc()}
+    await db.quote_comments.insert_one(dict(c))
+    count = await db.quote_comments.count_documents({"quote_id": quote_id})
+    await db.quotes.update_one({"quote_id": quote_id}, {"$set": {"comments_count": count}})
+    if q["user_id"] != user["user_id"]:
+        try:
+            await send_push([q["user_id"]], {"title": "Manent", "message": f"{user.get('pseudo', 'Une lectrice')} a commenté ta citation : « {c['text'][:60]} »",
+                                             "data": {"type": "quote_comment", "quote_id": quote_id}}, idempotency_key=c["comment_id"])
+        except Exception:
+            pass
+    return {**c, "author": {"pseudo": user.get("pseudo"), "handle": user.get("handle"), "picture": user.get("picture")}, "is_mine": True, "comments_count": count}
+
+
+@api.delete("/quotes/{quote_id}/comments/{comment_id}")
+async def delete_quote_comment(quote_id: str, comment_id: str, user=Depends(get_current_user)):
+    """Supprimable par son autrice ou par la propriétaire de la citation."""
+    q = await db.quotes.find_one({"quote_id": quote_id}, {"_id": 0, "user_id": 1})
+    c = await db.quote_comments.find_one({"comment_id": comment_id, "quote_id": quote_id}, {"_id": 0, "user_id": 1})
+    if not q or not c:
+        raise HTTPException(status_code=404, detail="not_found")
+    if c["user_id"] != user["user_id"] and q["user_id"] != user["user_id"] and not user.get("is_admin"):
+        raise HTTPException(status_code=403, detail="forbidden")
+    await db.quote_comments.delete_one({"comment_id": comment_id})
+    count = await db.quote_comments.count_documents({"quote_id": quote_id})
+    await db.quotes.update_one({"quote_id": quote_id}, {"$set": {"comments_count": count}})
+    return {"ok": True, "comments_count": count}
 
 
 @api.patch("/quotes/{quote_id}")
@@ -1141,6 +1349,7 @@ class SettingsBody(BaseModel):
     language: Optional[Literal['fr', 'en']] = None
     default_public: Optional[bool] = None
     profile_public: Optional[bool] = None
+    recos_enabled: Optional[bool] = None
     birthdate: Optional[str] = None
 
 
@@ -1154,9 +1363,10 @@ async def update_settings(body: SettingsBody, user=Depends(get_current_user)):
         upd["birthdate"] = bd
     if upd:
         await db.users.update_one({"user_id": user["user_id"]}, {"$set": upd})
-    u = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "language": 1, "default_public": 1, "profile_public": 1, "birthdate": 1})
+    u = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "language": 1, "default_public": 1, "profile_public": 1, "birthdate": 1, "recos_enabled": 1})
     return {"language": (u or {}).get("language", "fr"), "default_public": (u or {}).get("default_public", False),
-            "profile_public": (u or {}).get("profile_public", True), "birthdate": (u or {}).get("birthdate")}
+            "profile_public": (u or {}).get("profile_public", True), "birthdate": (u or {}).get("birthdate"),
+            "recos_enabled": (u or {}).get("recos_enabled", True)}
 
 
 @api.get("/me/export")
@@ -1285,11 +1495,86 @@ async def create_board(body: BoardCreate, user=Depends(get_current_user)):
         "description": body.description,
         "visibility": body.visibility,
         "share_slug": f"{slug}-{board_id[-6:]}",
+        "invite_code": _club_code(),
         "members": [user["user_id"]],
         "created_at": now_utc(),
     }
     await db.boards.insert_one(doc.copy())
     return clean_doc(doc)
+
+
+async def _board_view(b: dict, uid: str) -> dict:
+    """Vue d'un tableau pour un utilisateur : citations, membres, rôle, code d'invitation (membres seulement)."""
+    if not b.get("invite_code"):
+        b["invite_code"] = _club_code()
+        await db.boards.update_one({"board_id": b["board_id"]}, {"$set": {"invite_code": b["invite_code"]}})
+    member_ids = b.get("members", [])
+    pins = await db.board_quotes.find({"board_id": b["board_id"]}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    quotes = []
+    for p in pins:
+        q = await db.quotes.find_one({"quote_id": p["quote_id"]}, {"_id": 0})
+        if q:
+            if q.get("book_id"):
+                q["book"] = await db.books.find_one({"book_id": q["book_id"]}, {"_id": 0, "title": 1, "author": 1, "type": 1})
+            q["pinned_by"] = p.get("pinned_by")
+            quotes.append(q)
+    users = await db.users.find({"user_id": {"$in": member_ids}}, {"_id": 0, "user_id": 1, "pseudo": 1, "handle": 1, "picture": 1}).to_list(200)
+    b["quotes"] = quotes
+    b["members_info"] = users
+    b["members_count"] = len(member_ids)
+    b["is_owner"] = b.get("user_id") == uid
+    b["is_member"] = uid in member_ids
+    if not b["is_member"]:
+        b.pop("invite_code", None)
+    return b
+
+
+@api.get("/boards/by-slug/{slug}")
+async def get_board_by_slug(slug: str, user=Depends(get_current_user)):
+    """Lien de partage d'un tableau : lisible si public, ou si je suis membre."""
+    b = await db.boards.find_one({"share_slug": slug}, {"_id": 0})
+    if not b:
+        raise HTTPException(status_code=404, detail="not_found")
+    if user["user_id"] not in b.get("members", []) and b["visibility"] == "private":
+        raise HTTPException(status_code=403, detail="private_board")
+    return await _board_view(b, user["user_id"])
+
+
+class BoardJoin(BaseModel):
+    code: str = Field(min_length=4, max_length=12)
+
+
+@api.post("/boards/join")
+async def join_board(body: BoardJoin, user=Depends(get_current_user)):
+    """Rejoindre un tableau avec son code d'invitation (lien partagé par un membre)."""
+    b = await db.boards.find_one({"invite_code": body.code.strip().upper()}, {"_id": 0, "board_id": 1, "members": 1})
+    if not b:
+        raise HTTPException(status_code=404, detail="unknown_code")
+    if user["user_id"] not in b.get("members", []):
+        await db.boards.update_one({"board_id": b["board_id"]}, {"$addToSet": {"members": user["user_id"]}})
+    return {"board_id": b["board_id"]}
+
+
+@api.post("/boards/{board_id}/leave")
+async def leave_board(board_id: str, user=Depends(get_current_user)):
+    b = await db.boards.find_one({"board_id": board_id}, {"_id": 0, "user_id": 1})
+    if not b:
+        raise HTTPException(status_code=404, detail="not_found")
+    if b["user_id"] == user["user_id"]:
+        raise HTTPException(status_code=400, detail="owner_cannot_leave")
+    await db.boards.update_one({"board_id": board_id}, {"$pull": {"members": user["user_id"]}})
+    return {"ok": True}
+
+
+@api.post("/boards/{board_id}/invite-code")
+async def regenerate_board_code(board_id: str, user=Depends(get_current_user)):
+    """Nouveau code : les anciens liens d'invitation cessent de fonctionner."""
+    b = await db.boards.find_one({"board_id": board_id, "user_id": user["user_id"]}, {"_id": 0, "board_id": 1})
+    if not b:
+        raise HTTPException(status_code=403, detail="forbidden")
+    code = _club_code()
+    await db.boards.update_one({"board_id": board_id}, {"$set": {"invite_code": code}})
+    return {"invite_code": code}
 
 
 @api.get("/boards")
@@ -1313,17 +1598,7 @@ async def get_board(board_id: str, user=Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="not_found")
     if user["user_id"] not in b.get("members", []) and b["visibility"] == "private":
         raise HTTPException(status_code=403, detail="forbidden")
-    pins = await db.board_quotes.find({"board_id": board_id}, {"_id": 0}).sort("created_at", -1).to_list(500)
-    quotes = []
-    for p in pins:
-        q = await db.quotes.find_one({"quote_id": p["quote_id"]}, {"_id": 0})
-        if q:
-            if q.get("book_id"):
-                q["book"] = await db.books.find_one({"book_id": q["book_id"]}, {"_id": 0, "title": 1, "author": 1, "type": 1})
-            q["pinned_by"] = p.get("pinned_by")
-            quotes.append(q)
-    b["quotes"] = quotes
-    return b
+    return await _board_view(b, user["user_id"])
 
 
 class PinBody(BaseModel):
@@ -2289,6 +2564,17 @@ async def discover_isbn(isbn: str, user=Depends(get_current_user)):
         meta = {"title": b.get("title"), "author": b.get("author"), "isbn": isbn, "pages": b.get("pages"), "year": b.get("year"), "cover": b.get("cover"), "source": "community"}
     if meta is None:
         raise HTTPException(status_code=404, detail="isbn_not_found")
+    # Lien exact avec le catalogue (upsert sans appel externe) pour l'ajout en un tap
+    try:
+        cb = await upsert_catalog_book(dict(meta) | {"isbn": isbn}, source="isbn")
+        if cb:
+            area_labels = {a["key"]: a["label"] for a in catalog.AREAS}
+            meta = dict(meta) | {"catalog_id": cb["catalog_id"], "cover": meta.get("cover") or cb.get("cover"),
+                                 "summary": cb.get("summary"),
+                                 "area_labels": [area_labels.get(a, a) for a in cb.get("areas") or []],
+                                 "country_labels": [catalog.COUNTRY_FR.get(c, c) for c in cb.get("countries") or []]}
+    except Exception as e:
+        logger.warning("discover isbn catalog link failed: %s", e)
     readers = len({b["user_id"] for b in community_books})
     ratings = [b["rating"] for b in community_books if b.get("rating")]
     avg_rating = round(sum(ratings) / len(ratings), 1) if ratings else None
@@ -2492,21 +2778,31 @@ async def _cached_new_books() -> list:
 async def home_discover(user=Depends(get_current_user)):
     uid = user["user_id"]
     # Reprendre ta lecture
+    # le livre EN COURS le plus récemment touché (page avancée, citation ajoutée, statut changé), pas le plus récemment ajouté
     resume = await db.books.find_one(
         {"user_id": uid, "status": "en_cours"}, {"_id": 0},
-        sort=[("created_at", -1)],
+        sort=[("updated_at", -1), ("created_at", -1)],
     )
     # Livres primés
     awarded = await db.featured_books.find({"cover": {"$ne": None}}, {"_id": 0}).to_list(20)
-    # Les plus lus (agrégés sur toutes les bibliothèques + citations)
-    pipeline = [
+    # Les plus lus cette semaine : livres ajoutés, avancés ou terminés au cours des 7 derniers
+    # jours, comptés en lectrices distinctes. Repli sur l'ensemble des bibliothèques si la
+    # semaine est trop calme (moins de 4 titres), avec popular_scope = "all".
+    week_ago = now_utc() - timedelta(days=7)
+    group_stage = [
         {"$group": {"_id": {"$toLower": "$title"}, "title": {"$first": "$title"}, "author": {"$first": "$author"},
-                    "cover": {"$max": "$cover"}, "readers": {"$addToSet": "$user_id"}}},
-        {"$project": {"_id": 0, "title": 1, "author": 1, "cover": 1, "readers_count": {"$size": "$readers"}}},
+                    "cover": {"$max": "$cover"}, "catalog_id": {"$max": "$catalog_id"}, "readers": {"$addToSet": "$user_id"}}},
+        {"$project": {"_id": 0, "title": 1, "author": 1, "cover": 1, "catalog_id": 1, "readers_count": {"$size": "$readers"}}},
         {"$sort": {"readers_count": -1}},
         {"$limit": 8},
     ]
-    popular = await db.books.aggregate(pipeline).to_list(8)
+    week_match = {"$match": {"type": {"$ne": "etude"}, "$or": [
+        {"created_at": {"$gte": week_ago}}, {"finished_at": {"$gte": week_ago}}, {"updated_at": {"$gte": week_ago}}]}}
+    popular = await db.books.aggregate([week_match] + group_stage).to_list(8)
+    popular_scope = "week"
+    if len(popular) < 4:
+        popular = await db.books.aggregate([{"$match": {"type": {"$ne": "etude"}}}] + group_stage).to_list(8)
+        popular_scope = "all"
     # Couvertures manquantes : jamais résolues pendant la requête (repli affiché, enrichissement en fond)
     # Collections thématiques : thèmes les plus épinglés + couvertures associées
     collections = []
@@ -2533,13 +2829,213 @@ async def home_discover(user=Depends(get_current_user)):
         "resume": resume,
         "awarded": awarded,
         "popular": popular,
+        "popular_scope": popular_scope,
         "new_books": await _cached_new_books(),
         "collections": collections,
         "boards": boards,
+        # Lecture suivante : premier livre de la file « à lire »
+        "next_up": (_queue_sorted(await db.books.find({"user_id": uid, "status": "a_lire", "type": {"$ne": "etude"}}, {"_id": 0}).to_list(200)) or [None])[0],
     }
 
 
 # ============ Home feed (public quotes) ============
+# ============ Recommandations de livres (lectrice → lectrice) ============
+# Pas de messagerie libre : uniquement des recommandations de livres du catalogue.
+class RecommendationBody(BaseModel):
+    to_handle: str = Field(min_length=1, max_length=60)
+    catalog_id: str = Field(min_length=1, max_length=80)
+    message: Optional[str] = Field(None, max_length=140)
+
+
+class RecommendationDecision(BaseModel):
+    accept: bool
+
+
+@api.get("/readers/contacts")
+async def reader_contacts(q: str = "", user=Depends(get_current_user)):
+    """Lectrices que je suis ou qui me suivent (destinataires possibles d'une recommandation)."""
+    uid = user["user_id"]
+    ids = set(f["followed_id"] for f in await db.follows.find({"follower_id": uid}, {"_id": 0, "followed_id": 1}).to_list(500))
+    ids |= set(f["follower_id"] for f in await db.follows.find({"followed_id": uid}, {"_id": 0, "follower_id": 1}).to_list(500))
+    flt: dict = {"user_id": {"$in": list(ids)}}
+    if q.strip():
+        rx = {"$regex": re.escape(q.strip()), "$options": "i"}
+        flt["$or"] = [{"pseudo": rx}, {"handle": rx}]
+    users = await db.users.find(flt, {"_id": 0, "pseudo": 1, "handle": 1, "picture": 1, "recos_enabled": 1}).sort("pseudo", 1).to_list(200)
+    return {"readers": [{"pseudo": u["pseudo"], "handle": u["handle"], "picture": u.get("picture"),
+                         "accepts": u.get("recos_enabled", True) is not False} for u in users]}
+
+
+@api.post("/recommendations")
+async def create_recommendation(body: RecommendationBody, user=Depends(get_current_user)):
+    target = await db.users.find_one({"handle": body.to_handle.lstrip("@")}, {"_id": 0, "user_id": 1, "pseudo": 1, "recos_enabled": 1})
+    if not target:
+        raise HTTPException(status_code=404, detail="reader_not_found")
+    if target["user_id"] == user["user_id"]:
+        raise HTTPException(status_code=400, detail="self_recommendation")
+    if target.get("recos_enabled", True) is False:
+        raise HTTPException(status_code=403, detail="recommendations_disabled")
+    book = await db.catalog_books.find_one({"catalog_id": body.catalog_id}, {"_id": 0, "title": 1, "authors": 1})
+    if not book:
+        raise HTTPException(status_code=404, detail="book_not_found")
+    doc = {
+        "reco_id": new_id("rc"), "from_id": user["user_id"], "to_id": target["user_id"],
+        "catalog_id": body.catalog_id, "message": (body.message or "").strip() or None,
+        "status": "pending", "read": False, "created_at": now_utc(),
+    }
+    await db.recommendations.insert_one(doc.copy())
+    try:
+        await send_push([target["user_id"]], {
+            "title": "Manent",
+            "message": f"{user['pseudo']} te recommande « {book['title']} »",
+            "action_url": "/recommendations",
+        })
+    except Exception as e:
+        logger.warning("push recommendation failed (non-blocking): %s", e)
+    return clean_doc(doc)
+
+
+# ============ Invitations (tableaux et clubs) ============
+class InvitationBody(BaseModel):
+    kind: Literal["board", "club"]
+    target_id: str
+    to_handle: str = Field(min_length=1, max_length=40)
+    message: Optional[str] = Field(default=None, max_length=300)
+
+
+async def _invite_target(kind: str, target_id: str) -> Optional[dict]:
+    if kind == "board":
+        b = await db.boards.find_one({"board_id": target_id}, {"_id": 0, "board_id": 1, "name": 1, "members": 1, "user_id": 1})
+        return {"id": b["board_id"], "name": b["name"], "members": b.get("members", [])} if b else None
+    c = await db.clubs.find_one({"club_id": target_id}, {"_id": 0, "club_id": 1, "name": 1, "members": 1, "owner_id": 1})
+    return {"id": c["club_id"], "name": c["name"], "members": c.get("members", [])} if c else None
+
+
+@api.post("/invitations")
+async def create_invitation(body: InvitationBody, user=Depends(get_current_user)):
+    """Inviter une lectrice (que je suis ou qui me suit) à rejoindre un tableau ou un club dont je suis membre."""
+    target = await _invite_target(body.kind, body.target_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="target_not_found")
+    if user["user_id"] not in target["members"]:
+        raise HTTPException(status_code=403, detail="not_a_member")
+    to = await db.users.find_one({"handle": body.to_handle.lstrip("@")}, {"_id": 0, "user_id": 1, "pseudo": 1})
+    if not to:
+        raise HTTPException(status_code=404, detail="reader_not_found")
+    if to["user_id"] == user["user_id"]:
+        raise HTTPException(status_code=400, detail="self_invitation")
+    if to["user_id"] in target["members"]:
+        return {"ok": True, "already_member": True}
+    existing = await db.invitations.find_one({"kind": body.kind, "target_id": body.target_id, "to_id": to["user_id"], "status": "pending"}, {"_id": 0, "invite_id": 1})
+    if existing:
+        return {"ok": True, "invite_id": existing["invite_id"], "already_sent": True}
+    inv = {"invite_id": new_id("inv"), "kind": body.kind, "target_id": body.target_id, "target_name": target["name"],
+           "from_id": user["user_id"], "to_id": to["user_id"], "message": (body.message or "").strip() or None,
+           "status": "pending", "read": False, "created_at": now_utc()}
+    await db.invitations.insert_one(dict(inv))
+    try:
+        label = "le tableau" if body.kind == "board" else "le club de lecture"
+        await send_push([to["user_id"]], {"title": "Manent", "message": f"{user.get('pseudo', 'Une lectrice')} t'invite à rejoindre {label} « {target['name']} »",
+                                          "data": {"type": "invitation", "invite_id": inv["invite_id"]}}, idempotency_key=inv["invite_id"])
+    except Exception:
+        pass
+    return {"ok": True, "invite_id": inv["invite_id"]}
+
+
+@api.get("/invitations/badge")
+async def invitations_badge(user=Depends(get_current_user)):
+    return {"unread": await db.invitations.count_documents({"to_id": user["user_id"], "status": "pending", "read": False})}
+
+
+@api.get("/invitations")
+async def list_invitations(user=Depends(get_current_user)):
+    rows = await db.invitations.find({"to_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    await db.invitations.update_many({"to_id": user["user_id"], "read": False}, {"$set": {"read": True}})
+    out = []
+    for r in rows:
+        u = await db.users.find_one({"user_id": r["from_id"]}, {"_id": 0, "pseudo": 1, "handle": 1, "picture": 1})
+        out.append({**r, "from": u})
+    return {"invitations": out}
+
+
+@api.post("/invitations/{invite_id}/accept")
+async def accept_invitation(invite_id: str, user=Depends(get_current_user)):
+    inv = await db.invitations.find_one({"invite_id": invite_id, "to_id": user["user_id"]}, {"_id": 0})
+    if not inv:
+        raise HTTPException(status_code=404, detail="not_found")
+    coll = db.boards if inv["kind"] == "board" else db.clubs
+    key = "board_id" if inv["kind"] == "board" else "club_id"
+    await coll.update_one({key: inv["target_id"]}, {"$addToSet": {"members": user["user_id"]}})
+    await db.invitations.update_one({"invite_id": invite_id}, {"$set": {"status": "accepted", "decided_at": now_utc()}})
+    return {"ok": True, "kind": inv["kind"], "target_id": inv["target_id"]}
+
+
+@api.post("/invitations/{invite_id}/decline")
+async def decline_invitation(invite_id: str, user=Depends(get_current_user)):
+    r = await db.invitations.update_one({"invite_id": invite_id, "to_id": user["user_id"], "status": "pending"},
+                                        {"$set": {"status": "declined", "decided_at": now_utc()}})
+    if not r.matched_count:
+        raise HTTPException(status_code=404, detail="not_found")
+    return {"ok": True}
+
+
+@api.get("/recommendations/badge")
+async def recommendations_badge(user=Depends(get_current_user)):
+    unread = await db.recommendations.count_documents({"to_id": user["user_id"], "read": False, "status": "pending"})
+    return {"unread": unread}
+
+
+@api.get("/recommendations")
+async def list_recommendations(user=Depends(get_current_user)):
+    rows = await db.recommendations.find({"to_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    out = []
+    for r in rows:
+        b = await db.catalog_books.find_one({"catalog_id": r["catalog_id"]}, {"_id": 0})
+        u = await db.users.find_one({"user_id": r["from_id"]}, {"_id": 0, "pseudo": 1, "handle": 1, "picture": 1})
+        out.append({**r, "book": catalog._card(b) if b else None, "from": u})
+    # Ouvrir la liste marque tout comme lu (la pastille disparaît)
+    await db.recommendations.update_many({"to_id": user["user_id"], "read": False}, {"$set": {"read": True}})
+    return {"recommendations": out}
+
+
+@api.post("/recommendations/{reco_id}/decide")
+async def decide_recommendation(reco_id: str, body: RecommendationDecision, user=Depends(get_current_user)):
+    r = await db.recommendations.find_one({"reco_id": reco_id, "to_id": user["user_id"]}, {"_id": 0})
+    if not r:
+        raise HTTPException(status_code=404, detail="not_found")
+    book_id = None
+    if body.accept:
+        existing = await db.books.find_one({"user_id": user["user_id"], "catalog_id": r["catalog_id"]}, {"_id": 0, "book_id": 1})
+        if existing:
+            book_id = existing["book_id"]
+        else:
+            cb = await db.catalog_books.find_one({"catalog_id": r["catalog_id"]}, {"_id": 0})
+            if cb:
+                created = await create_book(BookCreate(
+                    type="papier", title=cb["title"], author=", ".join(cb.get("authors") or []) or None,
+                    isbn=cb.get("isbn13"), catalog_id=cb["catalog_id"], cover=cb.get("cover"),
+                    pages=cb.get("pages"), year=cb.get("year"), summary=cb.get("summary"), status="a_lire",
+                ), user)
+                book_id = created.get("book_id")
+    await db.recommendations.update_one({"reco_id": reco_id}, {"$set": {"status": "accepted" if body.accept else "ignored", "read": True, "decided_at": now_utc()}})
+    return {"ok": True, "book_id": book_id}
+
+
+# ============ « Pour toi » — livres recommandés (calcul en fond, voir routes/catalog.py) ============
+class ForYouDismiss(BaseModel):
+    catalog_id: str = Field(min_length=1, max_length=80)
+
+
+@api.get("/catalog/for-you")
+async def catalog_for_you(page: int = 1, size: int = 12, user=Depends(get_current_user)):
+    return await catalog.for_you_cards(user["user_id"], page, size)
+
+
+@api.post("/catalog/for-you/dismiss")
+async def catalog_for_you_dismiss(body: ForYouDismiss, user=Depends(get_current_user)):
+    return await catalog.dismiss_for_you(user["user_id"], body.catalog_id)
+
+
 @api.get("/feed")
 async def feed(theme: Optional[str] = None, user=Depends(get_current_user)):
     followed = [f["followed_id"] for f in await db.follows.find(
@@ -2558,11 +3054,16 @@ async def feed(theme: Optional[str] = None, user=Depends(get_current_user)):
         for qd in quotes:
             qd["is_followed_author"] = qd["user_id"] in fset
         quotes.sort(key=lambda x: (not x.get("is_followed_author"),))
+    liked = {x["quote_id"] for x in await db.quote_likes.find({"user_id": user["user_id"], "quote_id": {"$in": [x["quote_id"] for x in quotes]}},
+                                                               {"_id": 0, "quote_id": 1}).to_list(200)}
     for qd in quotes:
         if qd.get("book_id"):
             qd["book"] = await db.books.find_one({"book_id": qd["book_id"]}, {"_id": 0, "title": 1, "author": 1, "type": 1})
         u = await db.users.find_one({"user_id": qd["user_id"]}, {"_id": 0, "pseudo": 1, "handle": 1, "picture": 1})
         qd["author"] = u
+        qd["likes_count"] = qd.get("likes_count") or 0
+        qd["comments_count"] = qd.get("comments_count") or 0
+        qd["liked_by_me"] = qd["quote_id"] in liked
     return {"quotes": quotes}
 
 
@@ -2727,6 +3228,11 @@ async def on_startup():
     await db.boards.create_index("members")
     await db.follows.create_index([("follower_id", 1), ("followed_id", 1)], unique=True)
     await db.follows.create_index("followed_id")
+    await db.boards.create_index("share_slug")
+    await db.boards.create_index("invite_code")
+    await db.invitations.create_index([("to_id", 1), ("status", 1)])
+    await db.quote_likes.create_index([("quote_id", 1), ("user_id", 1)], unique=True)
+    await db.quote_comments.create_index([("quote_id", 1), ("created_at", 1)])
     asyncio.get_event_loop().create_task(_watch_wattpad())
     asyncio.get_event_loop().create_task(_migrate_covers())
     asyncio.get_event_loop().create_task(_seed_featured())
@@ -2742,6 +3248,9 @@ async def shutdown_db_client():
 
 app.include_router(catalog_router, dependencies=[Depends(get_current_user)])
 app.include_router(catalog_admin_router, dependencies=[Depends(require_admin)])
+app.include_router(catalog.classification.router, dependencies=[Depends(get_current_user)])
+app.include_router(catalog.classification.admin_router, dependencies=[Depends(require_admin)])
+catalog.classification.resolve_user = get_current_user  # identifiant de l'admin dans classification_feedback
 share_pages.db = db
 app.include_router(share_pages.router)
 app.include_router(share_pages.root_router)

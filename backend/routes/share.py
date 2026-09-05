@@ -32,7 +32,7 @@ def _store_buttons() -> str:
     return ios + android
 
 
-def _page(title: str, desc: str, image: str | None, target: str) -> str:
+def _page(title: str, desc: str, image: str | None, target: str, extra: str = "", open_label: str = "Ouvrir dans l’application") -> str:
     t, d = html.escape(title[:120]), html.escape((desc or "")[:220])
     img_meta = (f'<meta property="og:image" content="{html.escape(image)}"/>'
                 f'<meta name="twitter:image" content="{html.escape(image)}"/>') if image else ""
@@ -60,12 +60,18 @@ a.btn{{display:block;background:#79A3C3;color:#F5EDE4;text-decoration:none;borde
 .store{{display:block;font-family:Helvetica,Arial,sans-serif;font-size:12.5px;color:#3A2119;background:#EBCDB7;border-radius:999px;padding:11px;margin-top:10px;text-decoration:none}}
 .store.soon{{opacity:.55}}
 a.alt{{display:block;color:#957662;font-family:Helvetica,Arial,sans-serif;font-size:12.5px;margin-top:16px;text-decoration:none}}
+.grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:0 0 18px}}
+.grid img{{width:100%;aspect-ratio:2/3;object-fit:cover;border-radius:6px;box-shadow:0 3px 10px rgba(58,33,25,.15)}}
+.grid .ph{{aspect-ratio:2/3;border-radius:6px;background:#EBCDB7;display:flex;align-items:center;justify-content:center;font-style:italic;font-size:22px}}
+.avatar{{width:84px;height:84px;border-radius:50%;object-fit:cover;box-shadow:0 4px 16px rgba(58,33,25,.18)}}
+blockquote{{font-style:italic;font-size:14px;line-height:1.45;margin:0 0 10px;color:#3A2119}}
 </style></head>
 <body><div class="card">
 <div class="mark">Manent</div><div class="base">verba volant, scripta manent</div>
 {f'<img class="cover" src="{html.escape(image)}" alt=""/>' if image else ''}
 <h1>{t}</h1><p>{d}</p>
-<a class="btn" href="{scheme}">Ouvrir dans l’application</a>
+{extra}
+<a class="btn" href="{scheme}">{open_label}</a>
 {_store_buttons()}
 <a class="alt" href="{html.escape(url)}">Rejoindre Manent — ce que tes lectures te laissent</a>
 </div></body></html>"""
@@ -93,14 +99,59 @@ async def _profile_page(handle: str):
     handle = handle.lstrip("@")
     u = await db.users.find_one({"handle": handle}, {"_id": 0, "pseudo": 1, "picture": 1, "user_id": 1, "profile_public": 1})
     if not u or u.get("profile_public") is False:
-        return HTMLResponse(_page("Manent", "Ce que tes lectures te laissent.", None, "/"))
+        return HTMLResponse(_page("Manent", "Ce contenu est réservé aux membres.", None, "/"))
     quotes = await db.quotes.find({"user_id": u["user_id"], "is_public": True, "is_hidden": {"$ne": True}},
                                   {"_id": 0, "text": 1}).sort("created_at", -1).to_list(3)
-    desc = "  ·  ".join(f"« {q['text'][:60]} »" for q in quotes) or "Lectrice sur Manent."
+    followers = await db.follows.count_documents({"followed_id": u["user_id"]})
+    desc = f"{followers} abonné{'s' if followers > 1 else ''} sur Manent" if followers else "Lectrice sur Manent."
     pic = u.get("picture")
     if pic and pic.startswith("data:"):
         pic = None
-    return HTMLResponse(_page(f"@{handle} — {u.get('pseudo', '')}", desc, pic, f"/@{handle}"))
+    extra = "".join(f"<blockquote>« {html.escape(q['text'][:140])} »</blockquote>" for q in quotes)
+    # Le bouton Suivre ouvre l'app (ou l'inscription) puis suit automatiquement (follow=1)
+    page = _page(f"{u.get('pseudo', '')} · @{handle}", desc, pic, f"/@{handle}", extra=extra, open_label=f"Suivre @{html.escape(handle)}")
+    page = page.replace(f'href="manent://@{html.escape(handle)}"', f'href="manent://@{html.escape(handle)}?follow=1"')
+    return HTMLResponse(page)
+
+
+async def _library_page(handle: str):
+    """Bibliothèque publique d'une lectrice : mosaïque de couvertures + Rejoindre."""
+    handle = handle.lstrip("@")
+    u = await db.users.find_one({"handle": handle}, {"_id": 0, "pseudo": 1, "user_id": 1, "profile_public": 1})
+    if not u or u.get("profile_public") is False:
+        return HTMLResponse(_page("Manent", "Ce contenu est réservé aux membres.", None, "/"))
+    books = await db.books.find({"user_id": u["user_id"], "type": {"$ne": "etude"}},
+                                {"_id": 0, "title": 1, "cover": 1}).sort("created_at", -1).to_list(12)
+    total = await db.books.count_documents({"user_id": u["user_id"], "type": {"$ne": "etude"}})
+    cells = "".join(
+        f'<img src="{html.escape(b["cover"])}" alt="{html.escape(b["title"][:60])}"/>' if b.get("cover")
+        else f'<div class="ph">{html.escape((b.get("title") or "M")[:1].upper())}</div>'
+        for b in books)
+    extra = f'<div class="grid">{cells}</div>' if cells else ""
+    cover = next((b["cover"] for b in books if b.get("cover")), None)
+    return HTMLResponse(_page(f"La bibliothèque de {u.get('pseudo', '')}", f"{total} livre{'s' if total > 1 else ''} sur Manent", cover,
+                              f"/@{handle}/bibliotheque", extra=extra, open_label=f"Voir dans l’application"))
+
+
+async def _board_page(slug: str, code: str = ""):
+    """Aperçu public d'un tableau de citations (privé : page neutre, le lien invite quand même)."""
+    b = await db.boards.find_one({"share_slug": slug}, {"_id": 0, "board_id": 1, "name": 1, "description": 1, "visibility": 1, "members": 1, "user_id": 1})
+    if not b:
+        return HTMLResponse(_page("Manent", "Ce que tes lectures te laissent.", None, "/"))
+    u = await db.users.find_one({"user_id": b.get("user_id")}, {"_id": 0, "pseudo": 1})
+    n = len(b.get("members") or [])
+    target = f"/t/{slug}" + (f"?code={html.escape(code)}" if code else "")
+    if b.get("visibility") == "private" and not code:
+        return HTMLResponse(_page("Un tableau privé sur Manent", f"{(u or {}).get('pseudo', 'Une lectrice')} garde ses passages ici. Demande-lui une invitation.", None, target))
+    pins = await db.board_quotes.find({"board_id": b["board_id"]}, {"_id": 0, "quote_id": 1}).sort("created_at", -1).limit(3).to_list(3)
+    quotes = []
+    for p in pins:
+        q = await db.quotes.find_one({"quote_id": p["quote_id"], "is_hidden": {"$ne": True}}, {"_id": 0, "text": 1})
+        if q:
+            quotes.append(q)
+    extra = "".join(f"<blockquote>« {html.escape(q['text'][:140])} »</blockquote>" for q in quotes)
+    desc = b.get("description") or f"Un tableau de {(u or {}).get('pseudo', 'une lectrice')} — {n} membre{'s' if n > 1 else ''}."
+    return HTMLResponse(_page(b["name"], desc, None, target, extra=extra, open_label="Rejoindre le tableau" if code else "Voir dans l’application"))
 
 
 async def _club_page(code: str):
@@ -114,19 +165,92 @@ async def _club_page(code: str):
 router.add_api_route("/q/{quote_id}", _quote_page, response_class=HTMLResponse)
 router.add_api_route("/b/{catalog_id}", _book_page, response_class=HTMLResponse)
 router.add_api_route("/u/{handle}", _profile_page, response_class=HTMLResponse)
+router.add_api_route("/u/{handle}/bibliotheque", _library_page, response_class=HTMLResponse)
 router.add_api_route("/c/{code}", _club_page, response_class=HTMLResponse)
+router.add_api_route("/t/{slug}", _board_page, response_class=HTMLResponse)
 
 root_router.add_api_route("/q/{quote_id}", _quote_page, response_class=HTMLResponse)
 root_router.add_api_route("/b/{catalog_id}", _book_page, response_class=HTMLResponse)
 root_router.add_api_route("/c/{code}", _club_page, response_class=HTMLResponse)
+root_router.add_api_route("/t/{slug}", _board_page, response_class=HTMLResponse)
+router.add_api_route("/t/{slug}", _board_page, response_class=HTMLResponse)
 root_router.add_api_route("/@{handle}", _profile_page, response_class=HTMLResponse)
+root_router.add_api_route("/@{handle}/bibliotheque", _library_page, response_class=HTMLResponse)
+
+
+# ---------------------------------------------------------------- Pages légales publiques (exigées par les stores)
+PRIVACY_FR = """Manent respecte le RGPD (Règlement général sur la protection des données).
+
+Ce que nous collectons : ton e-mail, ton pseudo, tes livres, citations, tableaux, clubs, recommandations et statistiques de lecture. Rien d'autre.
+
+Ce que nous en faisons : uniquement faire fonctionner l'app, y compris les propositions « Pour toi », calculées à partir de ta bibliothèque et de tes sujets, jamais partagées. Tes citations restent privées par défaut ; toi seul décides de les rendre publiques.
+
+Ce que nous ne faisons jamais : vendre tes données, les partager avec des annonceurs, ou analyser tes lectures à des fins publicitaires.
+
+Tes droits (articles 15 à 21 du RGPD) : accès, rectification, portabilité (bouton « Télécharger mes données » dans Paramètres) et effacement (bouton « Supprimer mon compte » — suppression immédiate et définitive).
+
+Hébergement : tes données sont stockées de manière sécurisée ; les photos de pages transitent uniquement pour la transcription et ne sont pas conservées par le modèle d'IA.
+
+Contact : bonjour@manentlc.app"""
+
+TERMS_FR = """Conditions d'utilisation — l'essentiel, sans jargon.
+
+1. Manent t'aide à garder ce que tes lectures te laissent. Ton contenu t'appartient, tu nous accordes seulement le droit technique de l'afficher dans l'app.
+
+2. Les citations que tu rends publiques restent de courts extraits relevant du droit de courte citation. Tu t'engages à créditer l'œuvre et à ne pas publier de passages entiers.
+
+3. Respect entre lecteurs : pas de contenu haineux, illégal ou hors sujet dans les clubs, les recommandations et les profils publics. Nous pouvons retirer un contenu signalé.
+
+4. Le Premium est un abonnement facultatif, résiliable à tout moment.
+
+5. Les liens librairies sont affiliés : une commission nous est reversée, sans surcoût pour toi.
+
+6. Nous pouvons faire évoluer l'app ; les changements importants te seront annoncés.
+
+Contact : bonjour@manentlc.app"""
+
+
+def _legal_html(title: str, body: str) -> str:
+    paras = "".join(f"<p>{html.escape(p.strip())}</p>" for p in body.split("\n\n") if p.strip())
+    return f"""<!doctype html><html lang="fr"><head><meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>{html.escape(title)} — Manent</title>
+<meta name="robots" content="index,follow"/>
+<style>
+body{{margin:0;font-family:Georgia,'Times New Roman',serif;background:#D2E2EC;color:#3A2119}}
+.wrap{{max-width:680px;margin:0 auto;padding:40px 24px 64px}}
+.mark{{font-style:italic;font-weight:500;font-size:28px}}
+.base{{font-family:Helvetica,Arial,sans-serif;font-size:10px;letter-spacing:2.5px;text-transform:uppercase;color:#957662;margin-bottom:28px}}
+h1{{font-style:italic;font-weight:500;font-size:30px;margin:0 0 20px}}
+p{{font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.65;background:#F5EDE4;border-radius:12px;padding:14px 18px;margin:0 0 12px}}
+a{{color:#79A3C3}}
+footer{{font-family:Helvetica,Arial,sans-serif;font-size:12px;color:#957662;margin-top:28px}}
+</style></head><body><div class="wrap">
+<div class="mark">Manent</div><div class="base">verba volant, scripta manent</div>
+<h1>{html.escape(title)}</h1>{paras}
+<footer>Manent · <a href="{html.escape(PUBLIC_BASE_URL or '/')}">manentlc.app</a></footer>
+</div></body></html>"""
+
+
+async def _privacy_page():
+    return HTMLResponse(_legal_html("Politique de confidentialité", PRIVACY_FR))
+
+
+async def _terms_page():
+    return HTMLResponse(_legal_html("Conditions d'utilisation", TERMS_FR))
+
+
+router.add_api_route("/confidentialite", _privacy_page, response_class=HTMLResponse)
+router.add_api_route("/conditions", _terms_page, response_class=HTMLResponse)
+root_router.add_api_route("/confidentialite", _privacy_page, response_class=HTMLResponse)
+root_router.add_api_route("/conditions", _terms_page, response_class=HTMLResponse)
 
 
 # ---------------------------------------------------------------- .well-known dynamiques
 def _aasa() -> dict:
     team, bundle = _env("APPLE_TEAM_ID") or "TEAMID", _env("IOS_BUNDLE_ID") or "com.manent.app"
     return {"applinks": {"apps": [], "details": [
-        {"appID": f"{team}.{bundle}", "paths": ["/@*", "/q/*", "/b/*", "/c/*", "/api/s/*"]}]}}
+        {"appID": f"{team}.{bundle}", "paths": ["/@*", "/q/*", "/b/*", "/c/*", "/t/*", "/api/s/*"]}]}}
 
 
 def _assetlinks() -> list:

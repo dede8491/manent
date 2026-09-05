@@ -47,10 +47,16 @@ export default function DiscoverScan() {
         <Text style={styles.help}>{t('Vise le code-barres au dos du livre')}</Text>
       </View>
       <View style={[styles.bottom, { paddingBottom: insets.bottom + spacing.xl }]}>
+        {isWeb && (
+          <Text style={styles.webNote} testID="scan-web-note">{t('Le scan du code-barres fonctionne dans l’app installée (TestFlight ou store). Dans cet aperçu web, saisis l’ISBN ci-dessous.')}</Text>
+        )}
         {!isWeb && !permission?.granted && (
-          <Pressable testID="scan-permission" onPress={requestPermission} style={styles.permBtn}>
-            <Text style={styles.permBtnText}>{t('Autoriser la caméra')}</Text>
-          </Pressable>
+          <>
+            <Text style={styles.webNote}>{permission?.canAskAgain === false ? t('Caméra refusée : autorise Manent dans les réglages de ton téléphone, ou saisis l’ISBN.') : t('Manent a besoin de la caméra pour lire le code-barres.')}</Text>
+            <Pressable testID="scan-permission" onPress={requestPermission} style={styles.permBtn}>
+              <Text style={styles.permBtnText}>{t('Autoriser la caméra')}</Text>
+            </Pressable>
+          </>
         )}
         <View style={styles.manualRow}>
           <TextInput
@@ -77,6 +83,7 @@ export default function DiscoverScan() {
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   band: { alignItems: 'center', paddingHorizontal: spacing.xl },
+  webNote: { fontFamily: fonts.body, fontSize: 13, color: colors.creme, textAlign: 'center', lineHeight: 18, marginBottom: spacing.md, opacity: 0.9 },
   help: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.creme, backgroundColor: 'rgba(58,33,25,0.65)', paddingHorizontal: spacing.md, paddingVertical: 8, borderRadius: radius.pill, overflow: 'hidden' },
   bottom: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: spacing.xl },
   permBtn: { height: 46, borderRadius: radius.md, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.md },
