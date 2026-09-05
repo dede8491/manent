@@ -1,5 +1,5 @@
 """Nettoyage des données de test — logique partagée par scripts/cleanup_test_data.py et la route admin
-POST /api/admin/cleanup-test-data (utilisable sur la base de production depuis l'app déployée).
+DELETE /api/admin/users/{user_id} (suppression d’un compte depuis le Dashboard admin, via plan_accounts).
 
 Détection (un compte est « de test » si l'un des critères est vrai) :
   - e-mail en @example.com, ou demo@manent.app (compte démo « Léa », user_demo_manent) ;
@@ -47,9 +47,26 @@ async def plan_cleanup(db, extra: set, keep: set) -> dict:
             test_users.append(u)
     uids = [u["user_id"] for u in test_users]
     known_uids = {u["user_id"] for u in users}
+    plan, books, quotes = await _collect_plan(db, uids, known_uids, residue=True)
+    plan["users"] = test_users
+    return {"plan": plan, "users": users, "test_users": test_users, "uids": uids, "books": books, "quotes": quotes}
 
-    # ---------------------------------------------------------------- 2. Contenus à supprimer
+
+async def plan_accounts(db, uids: list) -> dict:
+    """Plan de suppression ciblé sur des comptes précis (aucune détection automatique, aucun résidu « TEST_ »).
+    Les comptes admin sont ignorés. Même format de retour que plan_cleanup, utilisable avec report/apply_cleanup."""
+    users = await db.users.find({}, {"_id": 0, "user_id": 1, "email": 1, "pseudo": 1, "handle": 1, "created_at": 1, "is_admin": 1}).to_list(100000)
+    targets = [u for u in users if u["user_id"] in set(uids) and not u.get("is_admin")]
+    tuids = [u["user_id"] for u in targets]
+    plan, books, quotes = await _collect_plan(db, tuids, {u["user_id"] for u in users}, residue=False)
+    plan["users"] = targets
+    return {"plan": plan, "users": users, "test_users": targets, "uids": tuids, "books": books, "quotes": quotes}
+
+
+async def _collect_plan(db, uids: list, known_uids: set, residue: bool):
+    """Tout ce qui appartient aux comptes `uids`. Avec residue=True : aussi les contenus « TEST_ » et les orphelins."""
     plan: dict = {}
+    never = {"user_id": {"$in": []}}  # filtre vide : ne correspond à rien
 
     async def collect(name, flt):
         docs = await db[name].find(flt, {"_id": 0}).to_list(500000)
@@ -57,11 +74,13 @@ async def plan_cleanup(db, extra: set, keep: set) -> dict:
             plan.setdefault(name, []).extend(docs)
         return docs
 
-    # livres et citations des comptes de test + résidus « TEST_ » + orphelins
-    books = await collect("books", {"$or": [{"user_id": {"$in": uids}}, {"title": TEST_TITLE}, {"user_id": {"$nin": list(known_uids)}}]})
+    def titled(field):
+        return {field: TEST_TITLE} if residue else never
+
+    orphan = {"user_id": {"$nin": list(known_uids)}} if residue else never
+    books = await collect("books", {"$or": [{"user_id": {"$in": uids}}, titled("title"), orphan]})
     book_ids = [b["book_id"] for b in books]
-    quotes = await collect("quotes", {"$or": [{"user_id": {"$in": uids}}, {"book_id": {"$in": book_ids}}, {"text": TEST_TITLE},
-                                             {"user_id": {"$nin": list(known_uids)}}]})
+    quotes = await collect("quotes", {"$or": [{"user_id": {"$in": uids}}, {"book_id": {"$in": book_ids}}, titled("text"), orphan]})
     quote_ids = [q["quote_id"] for q in quotes]
     await collect("quote_likes", {"$or": [{"quote_id": {"$in": quote_ids}}, {"user_id": {"$in": uids}}]})
     await collect("quote_comments", {"$or": [{"quote_id": {"$in": quote_ids}}, {"user_id": {"$in": uids}}]})
@@ -69,15 +88,16 @@ async def plan_cleanup(db, extra: set, keep: set) -> dict:
     await collect("book_summaries", {"book_id": {"$in": book_ids}})
     await collect("reading_events", {"$or": [{"user_id": {"$in": uids}}, {"book_id": {"$in": book_ids}}]})
     # tableaux
-    boards = await collect("boards", {"$or": [{"user_id": {"$in": uids}}, {"name": TEST_TITLE}]})
+    boards = await collect("boards", {"$or": [{"user_id": {"$in": uids}}, titled("name")]})
     board_ids = [b["board_id"] for b in boards]
     await collect("board_quotes", {"$or": [{"board_id": {"$in": board_ids}}, {"quote_id": {"$in": quote_ids}}, {"pinned_by": {"$in": uids}}]})
     # clubs (possédés par un compte de test ou nommés TEST_) et tout leur contenu
-    clubs = await collect("clubs", {"$or": [{"owner_id": {"$in": uids}}, {"name": TEST_TITLE}]})
+    clubs = await collect("clubs", {"$or": [{"owner_id": {"$in": uids}}, titled("name")]})
     club_ids = [c["club_id"] for c in clubs]
     for col in ("club_books", "club_posts", "club_comments", "club_messages", "club_polls", "club_events", "club_readers", "club_reviews"):
         await collect(col, {"$or": [{"club_id": {"$in": club_ids}}, {"user_id": {"$in": uids}}, {"author_id": {"$in": uids}}]})
-    await collect("club_books", {"title": TEST_TITLE})
+    if residue:
+        await collect("club_books", {"title": TEST_TITLE})
     # relations sociales, recommandations, invitations, signalements, sessions
     await collect("follows", {"$or": [{"follower_id": {"$in": uids}}, {"followed_id": {"$in": uids}}]})
     await collect("recommendations", {"$or": [{"from_id": {"$in": uids}}, {"to_id": {"$in": uids}}]})
@@ -89,15 +109,14 @@ async def plan_cleanup(db, extra: set, keep: set) -> dict:
     await collect("reco_dismissed", {"user_id": {"$in": uids}})
     await collect("llm_usage", {"user_id": {"$in": uids}})
     # fiches catalogue « TEST_ » que plus aucun vrai livre ne référence
-    test_cb = await db.catalog_books.find({"title": TEST_TITLE}, {"_id": 0, "catalog_id": 1, "title": 1}).to_list(10000)
-    keep_cb = set(await db.books.distinct("catalog_id", {"catalog_id": {"$in": [c["catalog_id"] for c in test_cb]}, "book_id": {"$nin": book_ids}}))
-    cb_del = [c for c in test_cb if c["catalog_id"] not in keep_cb]
-    if cb_del:
-        plan["catalog_books"] = cb_del
-        plan["catalog_tasks"] = await db.catalog_tasks.find({"catalog_id": {"$in": [c["catalog_id"] for c in cb_del]}}, {"_id": 0}).to_list(10000)
-    plan["users"] = test_users
-
-    return {"plan": plan, "users": users, "test_users": test_users, "uids": uids, "books": books, "quotes": quotes}
+    if residue:
+        test_cb = await db.catalog_books.find({"title": TEST_TITLE}, {"_id": 0, "catalog_id": 1, "title": 1}).to_list(10000)
+        keep_cb = set(await db.books.distinct("catalog_id", {"catalog_id": {"$in": [c["catalog_id"] for c in test_cb]}, "book_id": {"$nin": book_ids}}))
+        cb_del = [c for c in test_cb if c["catalog_id"] not in keep_cb]
+        if cb_del:
+            plan["catalog_books"] = cb_del
+            plan["catalog_tasks"] = await db.catalog_tasks.find({"catalog_id": {"$in": [c["catalog_id"] for c in cb_del]}}, {"_id": 0}).to_list(10000)
+    return plan, books, quotes
 
 
 def report(db_name: str, res: dict, apply: bool) -> dict:

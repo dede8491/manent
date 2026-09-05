@@ -246,31 +246,46 @@ async def me(user=Depends(get_current_user)):
     return {"user": user}
 
 
-# ============ Nettoyage des données de test (admin) ============
-class CleanupBody(BaseModel):
-    apply: bool = False
-    keep: List[str] = Field(default_factory=list)
-    remove: List[str] = Field(default_factory=list)
-    confirm: Optional[str] = None  # doit valoir "SUPPRIMER" pour apply=true
+# ============ Comptes (admin) ============
+@api.get("/admin/users")
+async def admin_users(q: str = "", user=Depends(require_admin)):
+    """Tous les comptes, du plus récent au plus ancien, avec leurs compteurs. `q` filtre sur pseudo, handle ou e-mail."""
+    flt: dict = {}
+    if q.strip():
+        rx = {"$regex": re.escape(q.strip().lstrip("@")), "$options": "i"}
+        flt = {"$or": [{"pseudo": rx}, {"handle": rx}, {"email": rx}]}
+    users = await db.users.find(flt, {"_id": 0, "user_id": 1, "pseudo": 1, "handle": 1, "email": 1, "picture": 1, "is_admin": 1, "created_at": 1}) \
+        .sort("created_at", -1).to_list(5000)
+    uids = [u["user_id"] for u in users]
+
+    async def counts(col):
+        rows = await db[col].aggregate([{"$match": {"user_id": {"$in": uids}}}, {"$group": {"_id": "$user_id", "n": {"$sum": 1}}}]).to_list(10000)
+        return {r["_id"]: r["n"] for r in rows}
+    nb, nq = await counts("books"), await counts("quotes")
+    last = {r["_id"]: r["t"] for r in await db.user_sessions.aggregate(
+        [{"$match": {"user_id": {"$in": uids}}}, {"$group": {"_id": "$user_id", "t": {"$max": "$created_at"}}}]).to_list(10000)}
+    for u in users:
+        u["books"] = nb.get(u["user_id"], 0)
+        u["quotes"] = nq.get(u["user_id"], 0)
+        u["last_login"] = last.get(u["user_id"])
+        u["is_me"] = u["user_id"] == user["user_id"]
+    return {"users": [clean_doc(u) for u in users], "total": len(users)}
 
 
-@api.post("/admin/cleanup-test-data")
-async def admin_cleanup_test_data(body: CleanupBody, user=Depends(require_admin)):
-    """Répétition à blanc par défaut (rapport complet, rien n'est supprimé). Avec apply=true et confirm="SUPPRIMER" :
-    sauvegarde JSON sur le serveur puis suppression. Même logique que backend/scripts/cleanup_test_data.py."""
+@api.delete("/admin/users/{user_id}")
+async def admin_delete_user(user_id: str, user=Depends(require_admin)):
+    """Supprime un compte et tout ce qui lui appartient (livres, citations, tableaux, clubs possédés, abonnements…),
+    après sauvegarde JSON sur le serveur. Les comptes admin ne peuvent pas être supprimés."""
     import cleanup
-    extra = {x.strip().lstrip("@").lower() for x in body.remove if x.strip()}
-    keep = {x.strip().lstrip("@").lower() for x in body.keep if x.strip()}
-    keep |= {str(user.get("email") or "").lower(), str(user.get("handle") or "").lower()}  # l'admin qui lance n'est jamais supprimé
-    res = await cleanup.plan_cleanup(db, extra, keep)
-    rep = cleanup.report(DB_NAME, res, body.apply)
-    if not body.apply:
-        return rep
-    if body.confirm != "SUPPRIMER":
-        raise HTTPException(status_code=400, detail="confirm_required")
+    target = await db.users.find_one({"user_id": user_id}, {"_id": 0, "is_admin": 1, "handle": 1})
+    if not target:
+        raise HTTPException(status_code=404, detail="user_not_found")
+    if target.get("is_admin") or user_id == user["user_id"]:
+        raise HTTPException(status_code=400, detail="admin_protected")
+    res = await cleanup.plan_accounts(db, [user_id])
     out = await cleanup.apply_cleanup(db, res, os.path.join(ROOT_DIR, "cleanup_backups"))
-    logger.warning("cleanup-test-data applied by %s: %s documents deleted, backup %s", user.get("handle"), out["deleted"], out["backup"])
-    return {**rep, "result": out}
+    logger.warning("account @%s deleted by admin @%s: %s documents, backup %s", target.get("handle"), user.get("handle"), out["deleted"], out["backup"])
+    return {"ok": True, "deleted": out["deleted"], "per_collection": out["per_collection"]}
 
 
 @api.get("/admin/badge")

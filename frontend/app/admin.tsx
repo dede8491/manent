@@ -9,7 +9,7 @@ import { api } from '@/src/api';
 import ManentLoader from '@/src/components/ManentLoader';
 import { ClassificationAdmin } from '@/src/components/ClassificationAdmin';
 import { ClassificationDashboard } from '@/src/components/ClassificationDashboard';
-import { CleanupAdmin } from '@/src/components/CleanupAdmin';
+import { UsersAdmin } from '@/src/components/UsersAdmin';
 import { timeAgo } from '@/src/timeago';
 import { useT, useLang } from '@/src/i18n';
 
@@ -104,7 +104,7 @@ export default function AdminDashboard() {
           ))}
           <ClassificationDashboard onOpenBook={setOpenBook} />
           <ClassificationAdmin openId={openBook} onOpened={() => setOpenBook(null)} />
-          <CleanupAdmin />
+          <UsersAdmin />
         </ScrollView>
       )}
     </View>
