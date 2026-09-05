@@ -355,6 +355,13 @@ Testé e2e via curl (création publique, discover, join, correspondance titre in
 - Domaine : rattachement custom non supporté pour déploiements mobiles (réponse support) ; PUBLIC_BASE_URL vidé, URLs dérivées dynamiquement.
 - Fusion branche claude/sillage-mobile-app-4hvnle : BottomSheet/BookHero/AreaCard/ClubCard partagés, liste de lecture (queue + réordonnancement), écran Lecture suivante, Pour toi (moteur + worker), Recommandations entre lectrices (+badge), Partager ma bibliothèque, pages publiques profil (Suivre) et bibliothèque, refonte onboarding/accueil/bibliothèque/fiches. Conflits résolus : share.py (fusion base dynamique + extra/open_label), _layout.tsx (deep link fiable + follow=1). Fix post-fusion : /readers/contacts déclaré avant /readers/{handle}.
 
+## Fusion 1939737 — Nettoyage des données de test via route admin (juin 2026)
+- Fusion de claude/sillage-mobile-app-4hvnle (commit 1939737) : backend/cleanup.py (logique partagée plan/report/apply), route POST /api/admin/cleanup-test-data (admin uniquement, répétition à blanc par défaut, apply=true + confirm="SUPPRIMER" requis, sauvegarde JSON dans backend/cleanup_backups/), scripts/cleanup_test_data.py allégé (réutilise cleanup.py).
+- Smoke test local (base aperçu manent_db) : dry-run 200 OK, apply sans confirm → 400 confirm_required, admin requis.
+- Fusion c96c054 : section « Données de test » dans le Dashboard admin (CleanupAdmin.tsx : Analyser, champs Protéger/Ajouter, suppression après saisie « SUPPRIMER » dans une BottomSheet, rapport complet affiché). Vérifié e2e sur l'aperçu (login admin → /admin → Analyser → rapport OK).
+- L'utilisatrice publie et lance elle-même l'analyse puis la suppression depuis le Dashboard admin en production. Aucun identifiant/URL de prod partagé (choix définitif de l'utilisatrice).
+- Contexte : la base de PROD n'est pas accessible depuis le pod (environnements isolés, confirmé support). Workflow validé avec l'utilisatrice : Publish → appel de la route sur le backend déployé (dry-run) → validation utilisatrice → apply. NE JAMAIS lancer apply sans validation explicite.
+
 ## Fusion 3e0c3e3 — Moteur IA de classification (sept. 2026)
 - Fusion Git de claude/sillage-mobile-app-4hvnle (4 commits) : taxonomy.py, ai_provider.py, routes/classification.py, filters.tsx, browse.tsx, intent.tsx, Classification*.tsx + notation, visite guidée, pages légales, genres Babelio.
 - Conflit unique (_layout.tsx) : deep link fiable conservé + paramètre edit=1 de la branche.
