@@ -246,6 +246,33 @@ async def me(user=Depends(get_current_user)):
     return {"user": user}
 
 
+# ============ Nettoyage des données de test (admin) ============
+class CleanupBody(BaseModel):
+    apply: bool = False
+    keep: List[str] = Field(default_factory=list)
+    remove: List[str] = Field(default_factory=list)
+    confirm: Optional[str] = None  # doit valoir "SUPPRIMER" pour apply=true
+
+
+@api.post("/admin/cleanup-test-data")
+async def admin_cleanup_test_data(body: CleanupBody, user=Depends(require_admin)):
+    """Répétition à blanc par défaut (rapport complet, rien n'est supprimé). Avec apply=true et confirm="SUPPRIMER" :
+    sauvegarde JSON sur le serveur puis suppression. Même logique que backend/scripts/cleanup_test_data.py."""
+    import cleanup
+    extra = {x.strip().lstrip("@").lower() for x in body.remove if x.strip()}
+    keep = {x.strip().lstrip("@").lower() for x in body.keep if x.strip()}
+    keep |= {str(user.get("email") or "").lower(), str(user.get("handle") or "").lower()}  # l'admin qui lance n'est jamais supprimé
+    res = await cleanup.plan_cleanup(db, extra, keep)
+    rep = cleanup.report(DB_NAME, res, body.apply)
+    if not body.apply:
+        return rep
+    if body.confirm != "SUPPRIMER":
+        raise HTTPException(status_code=400, detail="confirm_required")
+    out = await cleanup.apply_cleanup(db, res, os.path.join(ROOT_DIR, "cleanup_backups"))
+    logger.warning("cleanup-test-data applied by %s: %s documents deleted, backup %s", user.get("handle"), out["deleted"], out["backup"])
+    return {**rep, "result": out}
+
+
 @api.get("/admin/badge")
 async def admin_badge(user=Depends(require_admin)):
     """Pastille du Dashboard admin : ce qui attend une action."""
