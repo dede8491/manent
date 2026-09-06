@@ -14,11 +14,12 @@ const TOUR_KEY = 'manent_tour_done_v2';
 type Step = { icon: React.ComponentProps<typeof Feather>['name'] | null; title: string; text: string };
 
 const STEPS: Step[] = [
-  { icon: null, title: 'Bienvenue sur Manent', text: 'Lis. Retiens. Partage. Voici un tour des lieux — une minute, promis.' },
-  { icon: 'grid', title: "L'accueil", text: "Reprends ta lecture en cours, découvre « Pour toi », des livres choisis d'après tes sujets, les origines de tes auteurs et les lectrices que tu suis, puis les clubs publics à rejoindre et le fil des citations." },
+  { icon: null, title: 'Bienvenue sur Manent', text: 'Garde une trace de tout ce que tu lis et ressens. Voici un tour des lieux — une minute, promis.' },
+  { icon: 'home', title: "L'accueil", text: "Ton livre en cours et sa progression, puis « Écrire mon entrée du jour » : une page, une humeur, quelques mots. Ta dernière entrée et tes jours de lecture restent sous les yeux." },
+  { icon: 'edit-3', title: 'Le journal', text: "Chaque session de lecture devient une entrée datée : humeur, page atteinte, citation, un prompt pour t'aider à démarrer. Privé par défaut ; publie ce que tu veux. Ça marche même sans réseau." },
   { icon: 'book-open', title: 'La bibliothèque', text: "Le « + » ouvre l'ajout d'une lecture par titre, ISBN ou Wattpad. Ta liste de lecture s'ordonne dans « Lecture suivante » : le prochain livre en tête, comme une file d'attente." },
-  { icon: 'maximize', title: 'En librairie', text: "Un livre te plaît ? Scanne son code-barres depuis l'accueil : un seul bouton l'ajoute à ta liste de lecture, avec sa couverture et son résumé." },
-  { icon: 'feather', title: 'Les citations', text: "L'onglet plume rassemble tes citations. Son « + » photographie une page (l'IA transcrit le passage) ou te laisse écrire. Depuis une citation, tu retrouves le livre et sa page." },
+  { icon: 'compass', title: 'Découvrir', text: "« Pour toi », les origines des auteurs, les clubs publics, le fil des lectrices et tes citations : tout ce qui nourrit tes prochaines lectures. Le scan de code-barres y ajoute un livre en librairie." },
+  { icon: 'feather', title: 'Les citations', text: "Photographie une page (l'IA transcrit le passage) ou écris-la. Chaque citation peut devenir une entrée de journal avec ton ressenti, et la fiche de fin de livre rassemble tes préférées." },
   { icon: 'send', title: 'Partager', text: "Depuis une fiche livre : recommande-le à une lectrice avec un petit mot, propose-le à ton club, ou envoie le lien. Tu reçois les recommandations des autres dans ton profil." },
   { icon: 'users', title: 'La communauté', text: "Épingle tes citations dans des tableaux par thème. Crée ton club de lecture (Premium) ou rejoins-en un : lectures communes, sondages, événements et messages." },
   { icon: 'user', title: 'Ton profil', text: "Tes statistiques, ta série de jours, tes badges. Partage ton profil ou ta bibliothèque en image. Et si tu te poses une question, les petits « i » t'expliquent chaque écran. Bonne lecture." },
