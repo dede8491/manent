@@ -1,4 +1,4 @@
-"""Nettoyage des données de test — ligne de commande (même logique que la route admin POST /api/admin/cleanup-test-data).
+"""Nettoyage des données de test — ligne de commande (la suppression compte par compte se fait depuis le Dashboard admin de l’app).
 
 Usage (depuis backend/, avec MONGO_URL et DB_NAME de l'environnement) :
     python3 scripts/cleanup_test_data.py                          # répétition à blanc : rien n'est supprimé

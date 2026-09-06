@@ -29,6 +29,7 @@ import routes.catalog as catalog
 from routes.catalog import router as catalog_router, admin_router as catalog_admin_router, upsert_catalog_book
 import routes.share as share_pages
 from routes.club import router as club_router, event_reminder_loop
+import routes.journal as journal
 
 client = AsyncIOMotorClient(MONGO_URL)
 db = client[DB_NAME]
@@ -250,31 +251,46 @@ async def me(user=Depends(get_current_user)):
     return {"user": user}
 
 
-# ============ Nettoyage des données de test (admin) ============
-class CleanupBody(BaseModel):
-    apply: bool = False
-    keep: List[str] = Field(default_factory=list)
-    remove: List[str] = Field(default_factory=list)
-    confirm: Optional[str] = None  # doit valoir "SUPPRIMER" pour apply=true
+# ============ Comptes (admin) ============
+@api.get("/admin/users")
+async def admin_users(q: str = "", user=Depends(require_admin)):
+    """Tous les comptes, du plus récent au plus ancien, avec leurs compteurs. `q` filtre sur pseudo, handle ou e-mail."""
+    flt: dict = {}
+    if q.strip():
+        rx = {"$regex": re.escape(q.strip().lstrip("@")), "$options": "i"}
+        flt = {"$or": [{"pseudo": rx}, {"handle": rx}, {"email": rx}]}
+    users = await db.users.find(flt, {"_id": 0, "user_id": 1, "pseudo": 1, "handle": 1, "email": 1, "picture": 1, "is_admin": 1, "created_at": 1}) \
+        .sort("created_at", -1).to_list(5000)
+    uids = [u["user_id"] for u in users]
+
+    async def counts(col):
+        rows = await db[col].aggregate([{"$match": {"user_id": {"$in": uids}}}, {"$group": {"_id": "$user_id", "n": {"$sum": 1}}}]).to_list(10000)
+        return {r["_id"]: r["n"] for r in rows}
+    nb, nq = await counts("books"), await counts("quotes")
+    last = {r["_id"]: r["t"] for r in await db.user_sessions.aggregate(
+        [{"$match": {"user_id": {"$in": uids}}}, {"$group": {"_id": "$user_id", "t": {"$max": "$created_at"}}}]).to_list(10000)}
+    for u in users:
+        u["books"] = nb.get(u["user_id"], 0)
+        u["quotes"] = nq.get(u["user_id"], 0)
+        u["last_login"] = last.get(u["user_id"])
+        u["is_me"] = u["user_id"] == user["user_id"]
+    return {"users": [clean_doc(u) for u in users], "total": len(users)}
 
 
-@api.post("/admin/cleanup-test-data")
-async def admin_cleanup_test_data(body: CleanupBody, user=Depends(require_admin)):
-    """Répétition à blanc par défaut (rapport complet, rien n'est supprimé). Avec apply=true et confirm="SUPPRIMER" :
-    sauvegarde JSON sur le serveur puis suppression. Même logique que backend/scripts/cleanup_test_data.py."""
+@api.delete("/admin/users/{user_id}")
+async def admin_delete_user(user_id: str, user=Depends(require_admin)):
+    """Supprime un compte et tout ce qui lui appartient (livres, citations, tableaux, clubs possédés, abonnements…),
+    après sauvegarde JSON sur le serveur. Les comptes admin ne peuvent pas être supprimés."""
     import cleanup
-    extra = {x.strip().lstrip("@").lower() for x in body.remove if x.strip()}
-    keep = {x.strip().lstrip("@").lower() for x in body.keep if x.strip()}
-    keep |= {str(user.get("email") or "").lower(), str(user.get("handle") or "").lower()}  # l'admin qui lance n'est jamais supprimé
-    res = await cleanup.plan_cleanup(db, extra, keep)
-    rep = cleanup.report(DB_NAME, res, body.apply)
-    if not body.apply:
-        return rep
-    if body.confirm != "SUPPRIMER":
-        raise HTTPException(status_code=400, detail="confirm_required")
+    target = await db.users.find_one({"user_id": user_id}, {"_id": 0, "is_admin": 1, "handle": 1})
+    if not target:
+        raise HTTPException(status_code=404, detail="user_not_found")
+    if target.get("is_admin") or user_id == user["user_id"]:
+        raise HTTPException(status_code=400, detail="admin_protected")
+    res = await cleanup.plan_accounts(db, [user_id])
     out = await cleanup.apply_cleanup(db, res, os.path.join(ROOT_DIR, "cleanup_backups"))
-    logger.warning("cleanup-test-data applied by %s: %s documents deleted, backup %s", user.get("handle"), out["deleted"], out["backup"])
-    return {**rep, "result": out}
+    logger.warning("account @%s deleted by admin @%s: %s documents, backup %s", target.get("handle"), user.get("handle"), out["deleted"], out["backup"])
+    return {"ok": True, "deleted": out["deleted"], "per_collection": out["per_collection"]}
 
 
 @api.get("/admin/badge")
@@ -669,8 +685,22 @@ async def _migrate_covers():
     logger.info("cover migration done: %s covers found", found)
 
 
+async def _check_in_progress_limit(user: dict, exclude_book_id: Optional[str] = None):
+    """Gratuit : un seul livre « en cours » à la fois. Les livres déjà en cours (testeurs) ne sont jamais bloqués :
+    la limite ne s'applique qu'au passage d'un nouveau livre en cours."""
+    if user.get("is_premium"):
+        return
+    flt = {"user_id": user["user_id"], "status": "en_cours"}
+    if exclude_book_id:
+        flt["book_id"] = {"$ne": exclude_book_id}
+    if await db.books.count_documents(flt) >= journal.FREE_BOOKS_IN_PROGRESS:
+        raise HTTPException(status_code=402, detail="books_in_progress_limit")
+
+
 @api.post("/books")
 async def create_book(body: BookCreate, user=Depends(get_current_user)):
+    if body.status == "en_cours":
+        await _check_in_progress_limit(user)
     book_id = new_id("bk")
     doc = {
         "book_id": book_id,
@@ -856,7 +886,9 @@ async def patch_book(book_id: str, body: BookPatch, user=Depends(get_current_use
             last = await db.books.find_one({"user_id": user["user_id"], "status": "a_lire", "queue_position": {"$ne": None}},
                                            {"_id": 0, "queue_position": 1}, sort=[("queue_position", -1)])
             upd["queue_position"] = ((last or {}).get("queue_position") or 0) + 1
-    elif new_status == "en_cours" and book.get("status") == "termine":
+    if new_status == "en_cours" and book.get("status") != "en_cours":
+        await _check_in_progress_limit(user, book_id)
+    if new_status == "en_cours" and book.get("status") == "termine":
         # Relecture : l'historique (finished_at, read_count) est conservé, on repart de 0
         upd["is_rereading"] = True
         upd.setdefault(prog_key, 0)
@@ -961,12 +993,15 @@ async def premium_status_for(user_id: str) -> dict:
     ) or {}
     mk = month_key()
     used = u.get("captures_used", 0) if u.get("captures_month") == mk else 0
+    is_premium = bool(u.get("is_premium"))
     return {
-        "is_premium": bool(u.get("is_premium")),
+        "is_premium": is_premium,
         "plan": u.get("premium_plan"),
         "captures_used": used,
         "captures_limit": FREE_CAPTURE_LIMIT,
         "month": mk,
+        "journal": journal.quota_for(await journal._week_used(user_id), is_premium),
+        "books_in_progress_limit": None if is_premium else journal.FREE_BOOKS_IN_PROGRESS,
     }
 
 
@@ -3283,6 +3318,7 @@ async def on_startup():
     await db.invitations.create_index([("to_id", 1), ("status", 1)])
     await db.quote_likes.create_index([("quote_id", 1), ("user_id", 1)], unique=True)
     await db.quote_comments.create_index([("quote_id", 1), ("created_at", 1)])
+    await journal.init()
     asyncio.get_event_loop().create_task(_watch_wattpad())
     asyncio.get_event_loop().create_task(_migrate_covers())
     asyncio.get_event_loop().create_task(_seed_featured())
@@ -3307,6 +3343,8 @@ app.include_router(share_pages.root_router)
 app.include_router(share_pages.wk_router)
 app.include_router(push_router)
 app.include_router(club_router)
+app.include_router(journal.router)
+app.include_router(journal.admin_router, dependencies=[Depends(require_admin)])
 app.include_router(api)
 app.add_middleware(
     CORSMiddleware,

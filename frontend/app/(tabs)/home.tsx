@@ -1,47 +1,47 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, Pressable, useWindowDimensions, Modal, TextInput } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, Pressable, Modal, TextInput } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
-import { QuoteCard, Quote } from '@/src/components/QuoteCard';
 import { api } from '@/src/api';
 import { useAuth } from '@/src/auth';
 import { Wordmark } from '@/src/components/Wordmark';
-import { BookCardFeed, AwardCard, CollectionCard, ResumeCard, NextUpCard } from '@/src/components/FeedCards';
+import { BookCover } from '@/src/components/BookCover';
 import ManentLoader from '@/src/components/ManentLoader';
 import { InfoTooltip } from '@/src/components/InfoTooltip';
 import { WelcomeTour } from '@/src/components/WelcomeTour';
-import { AreaCard } from '@/src/components/AreaCard';
-import { ClubCard } from '@/src/components/ClubCard';
-import { useT } from '@/src/i18n';
+import { useT, useLang } from '@/src/i18n';
+import { dayLabel, JournalHome, moodOf, useOutbox } from '@/src/journal';
 
 const BIRTH_PROMPT_KEY = 'manent_birth_prompted';
 
+// Accueil recentré : le livre en cours, « Écrire mon entrée du jour » (1 tap), la dernière entrée, une série douce.
+// La découverte (fil, Pour toi, collections, clubs) vit dans l'onglet Découvrir.
 export default function Home() {
   const t = useT();
+  const lang = useLang();
   const colors = useColors();
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { width } = useWindowDimensions();
   const { user, refresh } = useAuth();
-  const [quotes, setQuotes] = useState<Quote[]>([]);
-  const [themes, setThemes] = useState<string[]>([]);
-  const [areas, setAreas] = useState<any[]>([]);
-  const [pubClubs, setPubClubs] = useState<any[]>([]);
-  const [joiningClub, setJoiningClub] = useState<string | null>(null);
-  const [forYou, setForYou] = useState<any[]>([]);
-  const [forYouTotal, setForYouTotal] = useState(0);
-  const [daily, setDaily] = useState<Quote | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { pending, flush } = useOutbox();
+  const [home, setHome] = useState<JournalHome | null>(null);
+  const [nextUp, setNextUp] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [discover, setDiscover] = useState<any>(null);
   const [birthModal, setBirthModal] = useState(false);
   const [birth, setBirth] = useState('');
   const [birthSaving, setBirthSaving] = useState(false);
+
+  const load = useCallback(async () => {
+    try { setHome(await api<JournalHome>('/journal/home')); } catch {}
+    try { const d = await api<any>('/home/discover'); setNextUp(d?.next_up || null); } catch {}
+  }, []);
+  useFocusEffect(useCallback(() => { flush().then(load); }, [load, flush]));
+  const onRefresh = async () => { setRefreshing(true); await flush(); await load(); setRefreshing(false); };
 
   // Comptes existants sans date de naissance : demandée une seule fois
   useEffect(() => {
@@ -51,7 +51,6 @@ export default function Home() {
       if (!prompted) setBirthModal(true);
     })();
   }, [user]);
-
   const onBirthChange = (v: string) => {
     const digits = v.replace(/\D/g, '').slice(0, 8);
     let out = digits;
@@ -59,7 +58,6 @@ export default function Home() {
     else if (digits.length > 2) out = `${digits.slice(0, 2)}/${digits.slice(2)}`;
     setBirth(out);
   };
-
   const birthIso = (() => {
     const m = birth.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
     if (!m) return null;
@@ -68,7 +66,6 @@ export default function Home() {
     if (isNaN(dt.getTime()) || dt.getUTCDate() !== parseInt(d, 10) || dt > new Date() || parseInt(y, 10) < 1900) return null;
     return `${y}-${mo}-${d}`;
   })();
-
   const saveBirth = async () => {
     if (!birthIso) return;
     setBirthSaving(true);
@@ -79,301 +76,150 @@ export default function Home() {
       setBirthModal(false);
     } finally { setBirthSaving(false); }
   };
+  const skipBirth = async () => { await AsyncStorage.setItem(BIRTH_PROMPT_KEY, '1').catch(() => {}); setBirthModal(false); };
 
-  const skipBirth = async () => {
-    await AsyncStorage.setItem(BIRTH_PROMPT_KEY, '1').catch(() => {});
-    setBirthModal(false);
-  };
-
-  const load = useCallback(async () => {
-    try {
-      const r = await api<{ quotes: Quote[] }>('/feed');
-      setQuotes(r.quotes);
-    } catch {}
-    try {
-      const d = await api<{ quote: Quote | null }>('/quotes/daily');
-      setDaily(d.quote);
-    } catch {}
-    try {
-      setDiscover(await api<any>('/home/discover'));
-    } catch {}
-    try {
-      const pc = await api<{ clubs: any[] }>('/clubs/discover');
-      setPubClubs(pc.clubs || []);
-    } catch {}
-    try {
-      const fy = await api<{ books: any[]; total: number }>('/catalog/for-you?page=1&size=10');
-      setForYou(fy.books || []);
-      setForYouTotal(fy.total || 0);
-    } catch {}
-  }, []);
-
-  const likeQuote = async (quoteId: string) => {
-    setQuotes(prev => prev.map(q => q.quote_id === quoteId ? { ...q, liked_by_me: !q.liked_by_me, likes_count: (q.likes_count || 0) + (q.liked_by_me ? -1 : 1) } : q));
-    try { const r = await api<{ liked: boolean; likes_count: number }>(`/quotes/${quoteId}/like`, { method: 'POST' }); setQuotes(prev => prev.map(q => q.quote_id === quoteId ? { ...q, liked_by_me: r.liked, likes_count: r.likes_count } : q)); } catch {}
-  };
-
-  const dismissForYou = async (catalogId: string) => {
-    setForYou(prev => prev.filter(b => b.catalog_id !== catalogId));
-    try { await api('/catalog/for-you/dismiss', { method: 'POST', body: JSON.stringify({ catalog_id: catalogId }) }); } catch {}
-  };
-
-  const joinPublicClub = async (cid: string) => {
-    if (joiningClub) return;
-    setJoiningClub(cid);
-    try {
-      await api(`/clubs/${cid}/join`, { method: 'POST' });
-      setPubClubs(prev => prev.filter(c => c.club_id !== cid));
-      router.push({ pathname: '/club/[id]', params: { id: cid } });
-    } catch {}
-    finally { setJoiningClub(null); }
-  };
-
-  useEffect(() => {
-    (async () => {
-      try {
-        // Sujets choisis par l'utilisateur d'abord, référentiel sinon
-        const me = await api<any>('/auth/me');
-        const mine = ((me.user || me).themes || []).filter(Boolean);
-        if (mine.length) setThemes(mine);
-        else setThemes((await api<{ themes: string[] }>('/themes')).themes);
-      } catch {
-        try { setThemes((await api<{ themes: string[] }>('/themes')).themes); } catch {}
-      }
-      try {
-        const ar = await api<{ areas: any[] }>('/catalog/areas');
-        setAreas(ar.areas || []);
-      } catch {}
-      await load();
-      setLoading(false);
-    })();
-  }, [load]);
-
-  useFocusEffect(useCallback(() => { load(); }, [load]));
-
-  const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
-
-  // masonry: split into 2 columns
-  const colWidth = (width - spacing.xl * 2 - spacing.md) / 2;
-  const shown = quotes;
-  const col1: Quote[] = [], col2: Quote[] = [];
-  shown.forEach((x, i) => (i % 2 === 0 ? col1 : col2).push(x));
+  const book = home?.current_book;
+  const entry = home?.latest_entry;
+  const mood = moodOf(entry?.mood);
+  const firstName = (user?.pseudo || '').split(' ')[0];
+  const hour = new Date().getHours();
+  const greeting = hour < 5 ? t('Bonne nuit') : hour < 12 ? t('Bonjour') : hour < 18 ? t('Bon après-midi') : t('Bonsoir');
+  const streakText = (() => {
+    if (!home) return '';
+    if (home.streak >= 2) return t('{n} jours de lecture d’affilée.', { n: home.streak });
+    if (home.active_days_week >= 2) return t('{n} jours de lecture cette semaine.', { n: home.active_days_week });
+    if (home.active_days_week === 1) return t('Un jour de lecture cette semaine. Chaque page compte.');
+    return t('Une page suffit pour commencer aujourd’hui.');
+  })();
+  const writeEntry = () => router.push({ pathname: '/journal/new', params: book ? { book_id: book.book_id, from: 'home' } : { from: 'home' } });
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.glacier }} testID="screen-home">
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-        <View style={{ paddingHorizontal: spacing.xl, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Wordmark size={19} variant="horizontal" />
+        <Wordmark size={19} variant="horizontal" />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <Pressable testID="home-search" onPress={() => router.push('/search')} style={styles.iconBtn} hitSlop={6}>
+            <Feather name="search" size={19} color={colors.espresso} />
+          </Pressable>
           <InfoTooltip
             testID="info-home"
-            title={t('Comment ça marche')}
-            text={t("Reprends ta lecture en cours, ou commence la suivante. « Pour toi » te propose des livres d'après tes sujets, les origines de tes auteurs, tes clubs et les lectrices que tu suis : « Pas pour moi » affine les prochaines propositions. Plus bas, les origines, les clubs publics, ta citation du matin et le fil des lectrices. L'icône de scan identifie un livre par son code-barres.")}
+            title={t('Ton journal de lecture')}
+            text={t('Manent garde une trace de tout ce que tu lis et ressens. Chaque jour : ton livre en cours, une entrée de journal en un geste, ta dernière note. La découverte, les citations des autres lectrices et les clubs sont dans l’onglet Découvrir.')}
           />
         </View>
-        <View style={[styles.searchRow, { flexDirection: 'row', gap: 8, alignItems: 'center' }]}>
-          <Pressable testID="home-search" onPress={() => router.push('/search')} style={[styles.search, { flex: 1 }]}>
-            <Feather name="search" size={16} color={colors.clay} />
-            <Text style={styles.searchPlaceholder}>{t('Cherche une citation, un livre, un lecteur…')}</Text>
-          </Pressable>
-          <Pressable testID="home-scan" onPress={() => router.push('/discover/scan')} style={styles.scanBtn}>
-            <Feather name="maximize" size={17} color={colors.espresso} />
-          </Pressable>
-        </View>
-        <View style={styles.chipRow}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: spacing.xl }}>
-            <View style={[styles.chip, styles.chipActive]}>
-              <Text style={[styles.chipText, styles.chipTextActive]}>{t('Pour toi')}</Text>
-            </View>
-            {themes.map(t => (
-              <Pressable key={t} testID={`home-chip-${t}`} onPress={() => router.push({ pathname: '/theme/[name]', params: { name: t } })} style={styles.chip}>
-                <Text style={styles.chipText}>{t}</Text>
-              </Pressable>
-            ))}
-            <Pressable testID="home-chip-add" onPress={() => router.push('/onboarding/themes?edit=1')} style={styles.chip}>
-              <Text style={styles.chipText}>+</Text>
-            </Pressable>
-          </ScrollView>
-        </View>
-        <Pressable testID="home-intent" onPress={() => router.push('/intent')} style={({ pressed }) => [styles.intentCard, pressed && { opacity: 0.9 }]}>
-          <View style={styles.intentIcon}><Feather name="feather" size={16} color={colors.creme} /></View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.intentTitle}>{t('Je cherche un livre qui…')}</Text>
-            <Text style={styles.intentSub} numberOfLines={1}>{t('Décris ton envie, Manent trouve le livre.')}</Text>
-          </View>
-          <Pressable testID="home-filters" onPress={() => router.push('/filters')} hitSlop={8} style={styles.intentFilters}>
-            <Feather name="sliders" size={14} color={colors.espresso} />
-          </Pressable>
-        </Pressable>
       </View>
-      <ScrollView
-        contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + 80 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.chambray} />}
-      >
-        {areas.length > 0 && (
-          <View style={{ marginBottom: spacing.lg }} testID="home-areas">
-            <Text style={styles.areasLabel}>{t('Par origine')}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>
-              {areas.map((a: any) => (
-                <AreaCard key={a.key} testID={`area-card-${a.key}`} label={a.label} count={a.count} onPress={() => router.push({ pathname: '/browse', params: { f: JSON.stringify({ continent: [a.key] }), title: a.label } })} />
-              ))}
-            </ScrollView>
-          </View>
-        )}
-        {pubClubs.length > 0 && (
-          <View style={{ marginBottom: spacing.lg }} testID="home-public-clubs">
-            <Text style={styles.areasLabel}>{t('Clubs publics à rejoindre')}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>
-              {pubClubs.slice(0, 8).map((c: any) => (
-                <ClubCard key={c.club_id} testID={`home-club-${c.club_id}`} club={c} joining={joiningClub === c.club_id} onJoin={() => joinPublicClub(c.club_id)} />
-              ))}
-            </ScrollView>
-          </View>
-        )}
-        {discover?.resume ? (
-          <View style={{ marginBottom: spacing.lg }}>
-            <ResumeCard
-              testID="resume-card"
-              book={discover.resume}
-              t={t}
-              nextTitle={discover.next_up?.title}
-              onNext={() => router.push('/queue')}
-              onPress={() => router.push({ pathname: '/book/[id]', params: { id: discover.resume.book_id } })}
-              onPhoto={() => router.push({ pathname: '/book/[id]', params: { id: discover.resume.book_id } })}
-            />
-          </View>
-        ) : discover?.next_up ? (
-          <View style={{ marginBottom: spacing.lg }}>
-            <NextUpCard
-              testID="next-up-card"
-              book={discover.next_up}
-              t={t}
-              onStart={() => router.push({ pathname: '/book/[id]', params: { id: discover.next_up.book_id } })}
-              onOpenQueue={() => router.push('/queue')}
-            />
-          </View>
-        ) : null}
-        {forYou.length > 0 && (
-          <View style={{ marginBottom: spacing.lg }} testID="home-for-you">
-            <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
-              <Text style={styles.areasLabel}>{t('Pour toi')}</Text>
-              {forYouTotal > forYou.length && (
-                <Pressable testID="home-for-you-more" onPress={() => router.push('/for-you')} hitSlop={8}>
-                  <Text style={styles.seeAll}>{t('Voir plus')}</Text>
-                </Pressable>
-              )}
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.md }}>
-              {forYou.map((b: any) => (
-                <View key={b.catalog_id} style={{ width: 130 }}>
-                  <BookCardFeed
-                    testID={`for-you-${b.catalog_id}`} title={b.title} author={b.author} cover={b.cover} width={130}
-                    onPress={() => router.push({ pathname: '/discover/book', params: { title: b.title, author: b.author || '', cover: b.cover || '', year: b.year || '', summary: b.summary || '', catalog_id: b.catalog_id } })}
-                  />
-                  {!!b.reason && <Text style={styles.reason} numberOfLines={2}>{b.reason}</Text>}
-                  <Pressable testID={`for-you-dismiss-${b.catalog_id}`} onPress={() => dismissForYou(b.catalog_id)} hitSlop={6} style={{ marginTop: 4 }}>
-                    <Text style={styles.dismiss}>{t('Pas pour moi')}</Text>
+
+      {!home ? (
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ManentLoader size={56} /></View>
+      ) : (
+        <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingTop: spacing.sm, paddingBottom: insets.bottom + 90 }}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.chambray} />}>
+          <Text style={styles.greeting}>{firstName ? `${greeting}, ${firstName}.` : `${greeting}.`}</Text>
+          <Text style={styles.streak} testID="home-streak">{streakText}</Text>
+
+          {pending > 0 && (
+            <Pressable testID="home-outbox" onPress={() => flush().then(load)} style={styles.outbox}>
+              <Feather name="cloud-off" size={14} color={colors.espresso} />
+              <Text style={styles.outboxText}>{t(pending > 1 ? '{n} entrées attendent le réseau.' : 'Une entrée attend le réseau.', { n: pending })}</Text>
+              <Text style={styles.outboxAction}>{t('Réessayer')}</Text>
+            </Pressable>
+          )}
+
+          {/* Livre en cours */}
+          {book ? (
+            <Pressable testID="home-current-book" onPress={() => router.push({ pathname: '/book/[id]', params: { id: book.book_id } })} style={({ pressed }) => [styles.bookCard, pressed && { opacity: 0.92 }]}>
+              <BookCover uri={book.cover || undefined} title={book.title} width={92} height={134} radius={8} initialSize={30} />
+              <View style={{ flex: 1, justifyContent: 'space-between' }}>
+                <View>
+                  <Text style={styles.kicker}>{t('En cours')}</Text>
+                  <Text style={styles.bookTitle} numberOfLines={3}>{book.title}</Text>
+                  {!!book.author && <Text style={styles.bookAuthor} numberOfLines={1}>{book.author}</Text>}
+                </View>
+                <View>
+                  {book.progress?.pct != null ? (
+                    <>
+                      <View style={styles.barBg}><View style={[styles.barFg, { width: `${Math.max(2, Math.min(100, book.progress.pct))}%` }]} /></View>
+                      <Text style={styles.progressText}>{t('{p} % · {u} {c} sur {n}', { p: book.progress.pct, u: book.progress.unit, c: book.progress.current, n: book.progress.total ?? 0 })}</Text>
+                    </>
+                  ) : (
+                    <Text style={styles.progressText}>{book.progress?.current ? t('{u} {c}', { u: book.progress.unit === 'chapitre' ? t('Chapitre') : t('Page'), c: book.progress.current }) : t('Indique le nombre de pages pour suivre ta progression.')}</Text>
+                  )}
+                  {home.books_in_progress > 1 && <Text style={styles.moreBooks}>{t('+ {n} autres en cours', { n: home.books_in_progress - 1 })}</Text>}
+                </View>
+              </View>
+            </Pressable>
+          ) : (
+            <View style={styles.bookCard} testID="home-no-book">
+              <View style={styles.emptyCover}><Feather name="book-open" size={26} color={colors.chambray} /></View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.kicker}>{t('Aucun livre en cours')}</Text>
+                <Text style={styles.bookTitle}>{nextUp ? t('Commencer « {t} » ?', { t: nextUp.title }) : t('Quel livre lis-tu en ce moment ?')}</Text>
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: spacing.sm, flexWrap: 'wrap' }}>
+                  {nextUp && (
+                    <Pressable testID="home-start-next" onPress={() => router.push({ pathname: '/book/[id]', params: { id: nextUp.book_id } })} style={styles.smallBtn}>
+                      <Text style={styles.smallBtnText}>{t('Commencer')}</Text>
+                    </Pressable>
+                  )}
+                  <Pressable testID="home-add-book" onPress={() => router.push('/book/add')} style={styles.smallGhost}>
+                    <Feather name="plus" size={13} color={colors.espresso} /><Text style={styles.smallGhostText}>{t('Ajouter un livre')}</Text>
                   </Pressable>
                 </View>
-              ))}
-            </ScrollView>
-          </View>
-        )}
-        {daily && (
-          <View style={{ marginBottom: spacing.lg }} testID="daily-quote">
-            <Text style={styles.dailyLabel}>{t('Ta citation du matin')}</Text>
-            <QuoteCard quote={daily} onPress={() => router.push({ pathname: '/quote/[id]', params: { id: daily.quote_id } })} />
-          </View>
-        )}
-        {loading ? (
-          <View style={{ alignItems: 'center', paddingVertical: spacing.xl }}><ManentLoader size={56} /></View>
-        ) : shown.length === 0 ? (
-          <View style={{ paddingVertical: spacing.xxxl, alignItems: 'center' }}>
-            <Text style={styles.emptyTitle}>{t('Le fil est encore silencieux.')}</Text>
-            <Text style={styles.emptySub}>{t('Ta première citation illuminera cet écran.')}</Text>
-          </View>
-        ) : (
-          <View style={{ flexDirection: 'row', gap: spacing.md }}>
-            {[col1, col2].map((col, ci) => (
-              <View key={ci} style={{ width: colWidth, gap: spacing.md }}>
-                {col.map(x => (
-                  <View key={x.quote_id}>
-                    {(x as any).is_followed_author ? (
-                      <View style={styles.followTag}>
-                        <Feather name="user-check" size={10} color={colors.chambray} />
-                        <Text style={styles.followTagText}>{t('Suivi')}</Text>
-                      </View>
-                    ) : null}
-                    <QuoteCard quote={x} compact onLike={() => likeQuote(x.quote_id)} onPress={() => router.push({ pathname: '/quote/[id]', params: { id: x.quote_id } })} onPressAuthor={x.author?.handle ? () => router.push({ pathname: '/reader/[handle]', params: { handle: x.author!.handle! } }) : undefined} />
-                  </View>
-                ))}
               </View>
-            ))}
-          </View>
-        )}
+            </View>
+          )}
 
-        {discover?.awarded?.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>{t('Livres primés')}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.md }}>
-              {discover.awarded.map((b: any, i: number) => (
-                <AwardCard key={i} testID={`award-${i}`} {...b}
-                  onPress={() => router.push({ pathname: '/discover/book', params: { title: b.title, author: b.author || '', cover: b.cover || '', year: b.year || '', prize: `${b.prize} ${b.year}` } })} />
-              ))}
-            </ScrollView>
-          </View>
-        )}
+          {/* Écrire */}
+          <Pressable testID="home-write" onPress={writeEntry} style={({ pressed }) => [styles.writeBtn, pressed && { opacity: 0.9 }]}>
+            <View style={styles.writeIcon}><Feather name="feather" size={18} color={colors.chambray} /></View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.writeTitle}>{t('Écrire mon entrée du jour')}</Text>
+              <Text style={styles.writeSub} numberOfLines={2}>{home.prompt?.text || t('Une phrase, une humeur, une page : ça suffit.')}</Text>
+            </View>
+            <Feather name="chevron-right" size={18} color={colors.creme} />
+          </Pressable>
+          {home.quota.limit != null && (
+            <Text style={styles.quota} testID="home-quota">
+              {home.quota.remaining === 0 ? t('Tes trois entrées de la semaine sont écrites. Premium pour continuer.') : t(home.quota.remaining === 1 ? 'Encore une entrée cette semaine.' : 'Encore {n} entrées cette semaine.', { n: home.quota.remaining ?? 0 })}
+            </Text>
+          )}
 
-        {discover?.popular?.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>{discover.popular_scope === 'all' ? t('Les plus lus sur Manent') : t('Les plus lus cette semaine')}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.md }}>
-              {discover.popular.map((b: any, i: number) => (
-                <BookCardFeed key={i} testID={`popular-${i}`} {...b}
-                  onPress={() => router.push({ pathname: '/discover/book', params: { title: b.title, author: b.author || '', cover: b.cover || '', catalog_id: b.catalog_id || '' } })} />
-              ))}
-            </ScrollView>
-          </View>
-        )}
+          {/* Dernière entrée */}
+          <Text style={styles.sectionLabel}>{t('Dernière entrée')}</Text>
+          {entry ? (
+            <Pressable testID="home-last-entry" onPress={() => router.push({ pathname: '/journal/[id]', params: { id: entry.entry_id } })} style={styles.entryCard}>
+              <View style={styles.entryMeta}>
+                {mood && <View style={[styles.moodDot, { backgroundColor: mood.color }]} />}
+                <Text style={styles.entryDate}>{dayLabel(entry.date, lang)}{mood ? ` · ${t(mood.label)}` : ''}{entry.page ? ` · p. ${entry.page}` : ''}</Text>
+              </View>
+              {!!entry.book?.title && entry.book.book_id !== book?.book_id && <Text style={styles.entryBook} numberOfLines={1}>{entry.book.title}</Text>}
+              {entry.content ? <Text style={styles.entryText} numberOfLines={4}>{entry.content}</Text>
+                : entry.quotes?.[0] ? <Text style={styles.entryQuote} numberOfLines={3}>« {entry.quotes[0].text} »</Text>
+                : <Text style={styles.entryText}>{t('Une humeur notée, sans mots.')}</Text>}
+            </Pressable>
+          ) : (
+            <View style={styles.entryCard} testID="home-no-entry">
+              <Text style={styles.entryText}>{t('Ton journal est encore vide. La première entrée est souvent la plus courte.')}</Text>
+            </View>
+          )}
 
-        {discover?.collections?.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>{t('Collections thématiques')}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.md }}>
-              {discover.collections.map((c: any) => (
-                <CollectionCard key={c.theme} testID={`collection-${c.theme}`} theme={c.theme} covers={c.covers}
-                  label={t(c.quotes > 1 ? '{n} citations' : '{n} citation', { n: c.quotes })}
-                  onPress={() => router.push({ pathname: '/theme/[name]', params: { name: c.theme } })} />
-              ))}
-            </ScrollView>
+          <View style={styles.links}>
+            <Pressable testID="home-open-journal" onPress={() => router.push('/(tabs)/journal')} style={styles.linkBtn}>
+              <Feather name="book-open" size={15} color={colors.espresso} /><Text style={styles.linkText}>{t('Mon journal')}</Text>
+              {home.entries_total > 0 && <Text style={styles.linkCount}>{home.entries_total}</Text>}
+            </Pressable>
+            <Pressable testID="home-open-discover" onPress={() => router.push('/(tabs)/discover')} style={styles.linkBtn}>
+              <Feather name="compass" size={15} color={colors.espresso} /><Text style={styles.linkText}>{t('Découvrir')}</Text>
+            </Pressable>
           </View>
-        )}
-
-        {discover?.new_books?.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>{t('Nouveautés')}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.md }}>
-              {discover.new_books.map((b: any, i: number) => (
-                <BookCardFeed key={i} testID={`new-${i}`} {...b}
-                  onPress={() => router.push({ pathname: '/discover/book', params: { title: b.title, author: b.author || '', cover: b.cover || '', year: b.year || '', summary: b.summary || '' } })} />
-              ))}
-            </ScrollView>
-          </View>
-        )}
-      </ScrollView>
+        </ScrollView>
+      )}
 
       <Modal visible={birthModal} transparent animationType="fade" onRequestClose={skipBirth}>
         <View style={styles.birthOverlay}>
           <View style={styles.birthModal} testID="birthdate-modal">
             <Text style={styles.birthTitle}>{t('Ta date de naissance')}</Text>
             <Text style={styles.birthSub}>{t('Elle sert uniquement à filtrer les contenus sensibles selon ton âge. Sans elle, ils resteront masqués.')}</Text>
-            <TextInput
-              testID="birthdate-input"
-              value={birth} onChangeText={onBirthChange}
-              placeholder={t('JJ/MM/AAAA')}
-              placeholderTextColor={colors.clay}
-              keyboardType="number-pad" maxLength={10}
-              style={styles.birthInput}
-            />
+            <TextInput testID="birthdate-input" value={birth} onChangeText={onBirthChange} placeholder={t('JJ/MM/AAAA')} placeholderTextColor={colors.clay} keyboardType="number-pad" maxLength={10} style={styles.birthInput} />
             <Pressable testID="birthdate-save" onPress={saveBirth} disabled={!birthIso || birthSaving} style={[styles.birthBtn, (!birthIso || birthSaving) && { opacity: 0.5 }]}>
               <Text style={styles.birthBtnText}>{t('Enregistrer')}</Text>
             </Pressable>
@@ -383,40 +229,49 @@ export default function Home() {
           </View>
         </View>
       </Modal>
-
       {!birthModal && <WelcomeTour />}
     </View>
   );
 }
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
-  header: { paddingHorizontal: 0, paddingBottom: spacing.sm, backgroundColor: colors.glacier, gap: spacing.md },
-  searchRow: { paddingHorizontal: spacing.xl },
-  search: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 44, paddingHorizontal: spacing.md, backgroundColor: colors.creme, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft },
-  searchPlaceholder: { flex: 1, fontFamily: fonts.body, fontSize: 14, color: colors.clay },
-  scanBtn: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: colors.creme, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center' },
-  dailyLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: spacing.sm },
-  chipRow: { height: 44 },
-  intentCard: { marginHorizontal: spacing.xl, flexDirection: 'row', alignItems: 'center', gap: 12, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.bisque },
-  intentIcon: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },
-  intentTitle: { fontFamily: fonts.displayMedium, fontSize: 17, color: colors.espresso },
-  intentSub: { fontFamily: fonts.body, fontSize: 12, color: colors.clay, marginTop: 1 },
-  intentFilters: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.creme, alignItems: 'center', justifyContent: 'center' },
-  areasLabel: { fontFamily: fonts.displayMedium, fontSize: 21, color: colors.espresso, marginBottom: spacing.md },
-  seeAll: { fontFamily: fonts.bodyMedium, fontSize: 12.5, color: colors.chambray },
-  reason: { fontFamily: fonts.body, fontSize: 10.5, color: colors.chambray, marginTop: 3, lineHeight: 14 },
-  dismiss: { fontFamily: fonts.body, fontSize: 10.5, color: colors.clay, textDecorationLine: 'underline' },
-  chip: { height: 36, paddingHorizontal: 14, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  chipActive: { backgroundColor: colors.chambray, borderColor: colors.chambray },
-  chipText: { fontFamily: fonts.body, fontSize: 13, color: colors.espresso },
-  chipTextActive: { color: colors.creme, fontFamily: fonts.bodyMedium },
-  empty: { fontFamily: fonts.body, color: colors.clay, textAlign: 'center', paddingTop: spacing.xxxl },
-  emptyTitle: { fontFamily: fonts.displayMedium, fontSize: 22, color: colors.espresso, textAlign: 'center' },
-  emptySub: { fontFamily: fonts.body, fontSize: 14, color: colors.clay, textAlign: 'center', marginTop: spacing.sm },
-  followTag: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 },
-  followTagText: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.chambray, letterSpacing: 1, textTransform: 'uppercase' },
-  section: { marginTop: spacing.xl },
-  sectionTitle: { fontFamily: fonts.displayMedium, fontSize: 21, color: colors.espresso, marginBottom: spacing.md },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingBottom: spacing.sm },
+  iconBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  greeting: { fontFamily: fonts.displayMedium, fontSize: 28, color: colors.espresso },
+  streak: { fontFamily: fonts.body, fontSize: 13.5, color: colors.clay, marginTop: 2, marginBottom: spacing.lg },
+  outbox: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.bisque, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.md },
+  outboxText: { flex: 1, fontFamily: fonts.body, fontSize: 12.5, color: colors.espresso },
+  outboxAction: { fontFamily: fonts.bodyMedium, fontSize: 12.5, color: colors.chambray },
+  bookCard: { flexDirection: 'row', gap: spacing.lg, backgroundColor: colors.creme, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.lg },
+  emptyCover: { width: 92, height: 134, borderRadius: 8, backgroundColor: colors.glacier, alignItems: 'center', justifyContent: 'center' },
+  kicker: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.chambray, letterSpacing: 1.6, textTransform: 'uppercase', marginBottom: 4 },
+  bookTitle: { fontFamily: fonts.displayMedium, fontSize: 22, color: colors.espresso, lineHeight: 27 },
+  bookAuthor: { fontFamily: fonts.body, fontSize: 13, color: colors.clay, marginTop: 3 },
+  barBg: { height: 5, borderRadius: 3, backgroundColor: colors.glacier, overflow: 'hidden', marginTop: spacing.sm },
+  barFg: { height: 5, borderRadius: 3, backgroundColor: colors.chambray },
+  progressText: { fontFamily: fonts.body, fontSize: 12, color: colors.clay, marginTop: 6 },
+  moreBooks: { fontFamily: fonts.body, fontSize: 11, color: colors.chambray, marginTop: 3 },
+  smallBtn: { height: 34, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },
+  smallBtnText: { fontFamily: fonts.bodyMedium, fontSize: 12.5, color: colors.creme },
+  smallGhost: { height: 34, paddingHorizontal: 12, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, flexDirection: 'row', alignItems: 'center', gap: 5 },
+  smallGhostText: { fontFamily: fonts.bodyMedium, fontSize: 12.5, color: colors.espresso },
+  writeBtn: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: colors.chambray, borderRadius: radius.lg, padding: spacing.lg, marginTop: spacing.md },
+  writeIcon: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.creme, alignItems: 'center', justifyContent: 'center' },
+  writeTitle: { fontFamily: fonts.displayMedium, fontSize: 20, color: colors.creme },
+  writeSub: { fontFamily: fonts.body, fontSize: 12.5, color: colors.creme, opacity: 0.85, marginTop: 2, lineHeight: 17 },
+  quota: { fontFamily: fonts.body, fontSize: 11.5, color: colors.clay, marginTop: 6, textAlign: 'center' },
+  sectionLabel: { fontFamily: fonts.bodyMedium, fontSize: 10.5, color: colors.clay, letterSpacing: 1.4, textTransform: 'uppercase', marginTop: spacing.xl, marginBottom: spacing.sm },
+  entryCard: { backgroundColor: colors.creme, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.lg },
+  entryMeta: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
+  moodDot: { width: 10, height: 10, borderRadius: 5 },
+  entryDate: { fontFamily: fonts.bodyMedium, fontSize: 11.5, color: colors.clay, textTransform: 'capitalize' },
+  entryBook: { fontFamily: fonts.bodyMedium, fontSize: 12, color: colors.chambray, marginBottom: 4 },
+  entryText: { fontFamily: fonts.body, fontSize: 14.5, color: colors.espresso, lineHeight: 22 },
+  entryQuote: { fontFamily: fonts.display, fontSize: 17, color: colors.espresso, lineHeight: 24 },
+  links: { flexDirection: 'row', gap: 8, marginTop: spacing.lg },
+  linkBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 42, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, backgroundColor: colors.creme },
+  linkText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.espresso },
+  linkCount: { fontFamily: fonts.body, fontSize: 12, color: colors.clay },
   birthOverlay: { flex: 1, backgroundColor: 'rgba(58,33,25,0.4)', justifyContent: 'center', padding: spacing.xl },
   birthModal: { backgroundColor: colors.glacier, borderRadius: 20, padding: spacing.xl },
   birthTitle: { fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso },

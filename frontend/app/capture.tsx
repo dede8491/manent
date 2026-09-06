@@ -20,7 +20,7 @@ export default function CaptureModal() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   // mode=camera : la caméra s'ouvre tout de suite (bouton central) ; mode=write : on écrit ou colle (« + » des citations)
-  const { mode } = useLocalSearchParams<{ mode?: string }>();
+  const { mode, book_id: bookParam } = useLocalSearchParams<{ mode?: string; book_id?: string }>();
   const writeMode = mode === 'write';
   const autoCamera = React.useRef(false);
   const [imageUri, setImageUri] = useState<string | null>(null);
@@ -28,6 +28,7 @@ export default function CaptureModal() {
   const [text, setText] = useState('');
   const [page, setPage] = useState('');
   const [progressPrompt, setProgressPrompt] = useState<{ quoteId: string; page: number; key: string; unit: string } | null>(null);
+  const [journalPrompt, setJournalPrompt] = useState<{ quoteId: string; page: number } | null>(null);
   const [note, setNote] = useState('');
   const [visibility, setVisibility] = useState<'private' | 'followers' | 'public'>('private');
   const [isSensitive, setIsSensitive] = useState(false);
@@ -53,7 +54,11 @@ export default function CaptureModal() {
 
   React.useEffect(() => {
     (async () => {
-      try { const r = await api<{ books: any[] }>('/books'); setBooks(r.books.map(b => ({ book_id: b.book_id, title: b.title, type: b.type }))); } catch {}
+      try {
+        const r = await api<{ books: any[] }>('/books');
+        setBooks(r.books.map(b => ({ book_id: b.book_id, title: b.title, type: b.type })));
+        if (bookParam && r.books.some(b => b.book_id === bookParam)) setBookId(bookParam);
+      } catch {}
       try { setPremium(await api('/premium/status')); } catch {}
       try { const t = await api<{ themes: string[] }>('/themes/mine'); setThemes(t.themes); } catch {}
       try {
@@ -61,7 +66,7 @@ export default function CaptureModal() {
         if (s.default_public) setVisibility('public');
       } catch {}
     })();
-  }, []);
+  }, [bookParam]);
 
   const addCustomTheme = () => {
     const t = customTheme.trim().toLowerCase();
@@ -125,8 +130,18 @@ export default function CaptureModal() {
           }
         } catch {}
       }
+      if (bookId) { setJournalPrompt({ quoteId: q.quote_id, page: pageNum }); return; }
       router.replace({ pathname: '/quote/[id]', params: { id: q.quote_id } });
     } finally { setSaving(false); }
+  };
+
+  // Après la citation : « Envie d'écrire ce que tu en penses ? » → entrée de journal datée, citation rattachée
+  const answerJournal = (yes: boolean) => {
+    const jp = journalPrompt;
+    if (!jp) return;
+    setJournalPrompt(null);
+    if (yes) router.replace({ pathname: '/journal/new', params: { book_id: bookId || '', quote_id: jp.quoteId, ...(jp.page ? { page: String(jp.page) } : {}) } });
+    else router.replace({ pathname: '/quote/[id]', params: { id: jp.quoteId } });
   };
 
   const confirmProgress = async (yes: boolean) => {
@@ -136,6 +151,7 @@ export default function CaptureModal() {
     if (yes && bookId) {
       try { await api(`/books/${bookId}`, { method: 'PATCH', body: JSON.stringify({ [p.key]: p.page }) }); } catch {}
     }
+    if (bookId) { setJournalPrompt({ quoteId: p.quoteId, page: yes ? p.page : 0 }); return; }
     router.replace({ pathname: '/quote/[id]', params: { id: p.quoteId } });
   };
 
@@ -355,6 +371,20 @@ export default function CaptureModal() {
             </Pressable>
             <Pressable testID="progress-prompt-no" onPress={() => confirmProgress(false)} style={{ alignSelf: 'center', padding: spacing.sm }}>
               <Text style={styles.promptNo}>{t('Non, pas encore')}</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+      <Modal visible={!!journalPrompt} transparent animationType="fade" onRequestClose={() => answerJournal(false)}>
+        <View style={styles.promptOverlay}>
+          <View style={styles.promptBox} testID="journal-prompt">
+            <Text style={styles.promptTitle}>{t('Envie d’écrire ce que tu en penses ?')}</Text>
+            <Text style={styles.promptSub}>{t('La citation est gardée. Ajoute ton ressenti du jour : elle devient une entrée de ton journal.')}</Text>
+            <Pressable testID="journal-prompt-yes" onPress={() => answerJournal(true)} style={styles.promptYes}>
+              <Text style={styles.promptYesText}>{t('Oui, écrire une entrée')}</Text>
+            </Pressable>
+            <Pressable testID="journal-prompt-no" onPress={() => answerJournal(false)} style={{ alignSelf: 'center', padding: spacing.sm }}>
+              <Text style={styles.promptNo}>{t('Pas maintenant')}</Text>
             </Pressable>
           </View>
         </View>

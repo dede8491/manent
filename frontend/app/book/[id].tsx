@@ -17,6 +17,7 @@ import { BookCover } from '@/src/components/BookCover';
 import { useT, useI18n } from '@/src/i18n';
 import { InfoTooltip } from '@/src/components/InfoTooltip';
 import ManentLoader from '@/src/components/ManentLoader';
+import { JournalBookSection } from '@/src/components/JournalBookSection';
 import { BookHero, AreaLine } from '@/src/components/BookHero';
 import { BottomSheet } from '@/src/components/BottomSheet';
 import { ShareBookSheet } from '@/src/components/ShareBookSheet';
@@ -38,6 +39,9 @@ export default function BookDetail() {
   const [lessons, setLessons] = useState<string[]>([]);
   const [detecting, setDetecting] = useState(false);
   const [detectedPage, setDetectedPage] = useState<number | null>(null);
+  const [photoDone, setPhotoDone] = useState<number | null>(null);
+  const [limitSheet, setLimitSheet] = useState(false);
+  const guardLimit = (e: any) => { if (e?.status === 402) { setLimitSheet(true); return true; } return false; };
   const [exportingPdf, setExportingPdf] = useState(false);
   const [fc, setFc] = useState<{ total: number; due: number } | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -86,8 +90,8 @@ export default function BookDetail() {
     }
     if (next === 'en_cours' && book.status === 'termine') {
       const doIt = async () => {
-        const b = await api<any>(`/books/${id}`, { method: 'PATCH', body: JSON.stringify({ status: 'en_cours' }) });
-        setBook(b);
+        try { setBook(await api<any>(`/books/${id}`, { method: 'PATCH', body: JSON.stringify({ status: 'en_cours' }) })); }
+        catch (e) { if (!guardLimit(e)) throw e; }
       };
       if (Platform.OS === 'web') { doIt(); return; }
       Alert.alert(t('Relecture ?'), t('Ta progression repart de zéro, ton historique de lecture est conservé.'), [
@@ -119,7 +123,9 @@ export default function BookDetail() {
       if (totalN && n >= totalN) patch.status = 'termine';
       else if (book.status === 'a_lire') patch.status = 'en_cours';
     }
-    const b = await api<any>(`/books/${id}`, { method: 'PATCH', body: JSON.stringify(patch) });
+    let b: any;
+    try { b = await api<any>(`/books/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }); }
+    catch (e) { setPageModal(null); if (guardLimit(e)) return; throw e; }
     setBook(b);
     if (patch.status === 'termine') setFinishedBanner(true);
     setPageModal(null);
@@ -268,6 +274,8 @@ export default function BookDetail() {
     const b = await api<any>(`/books/${id}`, { method: 'PATCH', body: JSON.stringify(patch) });
     setBook(b);
     setDetectedPage(null);
+    setPhotoDone(detectedPage);  // la photo de page devient le déclencheur du journal
+    if (patch.status === 'termine') setFinishedBanner(true);
   };
 
   // ---- Export PDF de la fiche (Premium) ----
@@ -484,6 +492,22 @@ export default function BookDetail() {
           </View>
         )}
 
+        {photoDone !== null && (
+          <View style={[styles.detectBox, { marginTop: spacing.sm }]} testID="journal-after-photo">
+            <Text style={styles.detectText}>{t('Page {n} enregistrée. Envie d’écrire ce que tu en penses ?', { n: photoDone })}</Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: spacing.sm }}>
+              <Pressable testID="journal-after-photo-yes" onPress={() => { setPhotoDone(null); router.push({ pathname: '/journal/new', params: { book_id: String(id), page: String(photoDone) } }); }} style={styles.detectConfirm}>
+                <Text style={styles.photoBtnText}>{t('Écrire une entrée')}</Text>
+              </Pressable>
+              <Pressable testID="journal-after-photo-no" onPress={() => setPhotoDone(null)} style={styles.detectGhost}>
+                <Text style={styles.detectGhostText}>{t('Plus tard')}</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+
+        <JournalBookSection bookId={String(id)} status={book.status} refreshKey={`${book.updated_at || ''}-${book.status}`} />
+
         <Pressable testID="btn-fiche" onPress={() => router.push({ pathname: '/fiche/[bookId]', params: { bookId: id } })} style={styles.ficheBtn}>
           <Feather name="edit-3" size={17} color={colors.chambray} />
           <View style={{ flex: 1 }}>
@@ -674,6 +698,9 @@ export default function BookDetail() {
             <Pressable testID="summary-modal-cancel" onPress={() => setSumModal(false)} style={[styles.cancelBtn, { marginTop: spacing.sm }]}>
               <Text style={styles.cancelBtnText}>{t('Annuler')}</Text>
             </Pressable>
+      </BottomSheet>
+      <BottomSheet visible={limitSheet} onClose={() => setLimitSheet(false)} title={t('Un livre en cours à la fois')} subtitle={t('En gratuit, Manent suit un livre en cours à la fois, pour un journal concentré. Termine ou mets en pause l’autre, ou passe en Premium.')} testID="sheet-books-limit" scroll={false}>
+        <Pressable testID="books-limit-premium" onPress={() => { setLimitSheet(false); router.push('/premium'); }} style={styles.detectConfirm}><Text style={styles.photoBtnText}>{t('Découvrir Premium')}</Text></Pressable>
       </BottomSheet>
     </View>
   );

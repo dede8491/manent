@@ -11,6 +11,7 @@ import { PrimaryButton, GhostButton } from '@/src/components/Button';
 import { api } from '@/src/api';
 import ManentLoader from '@/src/components/ManentLoader';
 import { useT } from '@/src/i18n';
+import { BottomSheet } from '@/src/components/BottomSheet';
 
 type Method = 'title' | 'isbn' | 'wattpad';
 
@@ -170,7 +171,7 @@ export default function AddBook() {
     setManualBook(false);
   };
 
-  const add = async () => {
+  const add = async (forceStatus?: 'a_lire') => {
     if (!selected) return;
     setSaving(true);
     try {
@@ -188,12 +189,16 @@ export default function AddBook() {
           pages: selected.pages,
           year: selected.year,
           chapters: selected.chapters,
-          status, mode,
+          status: forceStatus || status, mode,
         }),
       });
       router.replace({ pathname: '/book/[id]', params: { id: b.book_id } });
+    } catch (e: any) {
+      if (e?.status === 402) setLimitSheet(true);
     } finally { setSaving(false); }
   };
+  const [limitSheet, setLimitSheet] = useState(false);
+  const addToQueue = () => { setLimitSheet(false); setStatus('a_lire'); add('a_lire'); };
 
   const isWattpadSel = selected?.type === 'wattpad';
 
@@ -411,11 +416,19 @@ export default function AddBook() {
           </View>
         </View>
       )}
+      <BottomSheet visible={limitSheet} onClose={() => setLimitSheet(false)} title={t('Un livre en cours à la fois')} subtitle={t('En gratuit, Manent suit un livre en cours à la fois, pour un journal concentré. Ajoute celui-ci à ta liste de lecture, ou passe en Premium.')} testID="sheet-books-limit" scroll={false}>
+        <Pressable testID="books-limit-queue" onPress={addToQueue} style={styles.limitBtn}><Text style={styles.limitBtnText}>{t('Ajouter à ma liste de lecture')}</Text></Pressable>
+        <Pressable testID="books-limit-premium" onPress={() => { setLimitSheet(false); router.push('/premium'); }} style={styles.limitGhost}><Text style={styles.limitGhostText}>{t('Découvrir Premium')}</Text></Pressable>
+      </BottomSheet>
     </KeyboardAvoidingView>
   );
 }
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
+  limitBtn: { height: 48, borderRadius: radius.pill, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },
+  limitBtnText: { fontFamily: fonts.bodyMedium, fontSize: 15, color: colors.creme },
+  limitGhost: { height: 44, alignItems: 'center', justifyContent: 'center', marginTop: spacing.sm },
+  limitGhostText: { fontFamily: fonts.bodyMedium, fontSize: 13.5, color: colors.chambray },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSoft },
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   h1: { fontFamily: fonts.displayMedium, fontSize: 20, color: colors.espresso },

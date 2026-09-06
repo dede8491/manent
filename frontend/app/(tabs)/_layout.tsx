@@ -5,6 +5,8 @@ import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/src/themeCtx';
 
+// Barre : Accueil (journal du jour), Journal, Bibliothèque, Découvrir, Profil.
+// Citations et Communauté restent des écrans de l'app (accessibles depuis Découvrir) sans bouton dans la barre.
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
@@ -26,13 +28,13 @@ export default function TabsLayout() {
         sceneStyle: { backgroundColor: colors.glacier },
       }}
     >
-      <Tabs.Screen name="home" options={{ tabBarIcon: ({ color, focused }) => (
-        <Feather name={focused ? 'grid' : 'grid'} size={22} color={color} />) }} />
+      <Tabs.Screen name="home" options={{ tabBarIcon: ({ color }) => <Feather name="home" size={22} color={color} /> }} />
+      <Tabs.Screen name="journal" options={{ tabBarIcon: ({ color }) => <Feather name="edit-3" size={22} color={color} /> }} />
       <Tabs.Screen name="library" options={{ tabBarIcon: ({ color }) => <Feather name="book" size={22} color={color} /> }} />
-      <Tabs.Screen name="quotes" options={{ tabBarIcon: ({ color }) => <Feather name="feather" size={22} color={color} /> }} />
-      <Tabs.Screen name="community" options={{ tabBarIcon: ({ color }) => <Feather name="bookmark" size={22} color={color} /> }} />
+      <Tabs.Screen name="discover" options={{ tabBarIcon: ({ color }) => <Feather name="compass" size={22} color={color} /> }} />
       <Tabs.Screen name="profile" options={{ tabBarIcon: ({ color }) => <Feather name="user" size={22} color={color} /> }} />
+      <Tabs.Screen name="quotes" options={{ href: null }} />
+      <Tabs.Screen name="community" options={{ href: null }} />
     </Tabs>
   );
 }
-
