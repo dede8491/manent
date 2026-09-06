@@ -362,6 +362,15 @@ Testé e2e via curl (création publique, discover, join, correspondance titre in
 - L'utilisatrice publie et lance elle-même l'analyse puis la suppression depuis le Dashboard admin en production. Aucun identifiant/URL de prod partagé (choix définitif de l'utilisatrice).
 - Contexte : la base de PROD n'est pas accessible depuis le pod (environnements isolés, confirmé support). Workflow validé avec l'utilisatrice : Publish → appel de la route sur le backend déployé (dry-run) → validation utilisatrice → apply. NE JAMAIS lancer apply sans validation explicite.
 
+## Fusion journal de lecture — commits 373227e→1d4929e (juin 2026)
+- Fusion de claude/sillage-mobile-app-4hvnle jusqu'à 1d4929e (fast-forward, aucun conflit) :
+  - 373227e (parent requis, inclus) : UsersAdmin.tsx remplace CleanupAdmin.tsx (liste des comptes + suppression directe), cleanup.py refactoré (_collect_plan/titled).
+  - 6264dfd : backend/routes/journal.py (journal_entries + journal_prompts, 12 prompts insérés au démarrage si collection vide, création idempotente client_id, /journal/home, humeurs, quotas gratuit 3 entrées/semaine + 1 nouveau livre en cours), cascade cleanup journal_entries, tests_unit/test_journal.py.
+  - 82f9417 : app/journal/new.tsx + [id].tsx, src/journal.ts (brouillon local + file hors ligne).
+  - a3f5c10 : accueil recentré journal, onglets Accueil/Journal/Bibliothèque/Découvrir/Profil (quotes et community masqués href:null, PAS supprimés), discover.tsx, WelcomeTour mis à jour.
+  - 1d4929e : intégrations photo/citation, JournalBookSection, MoodTimeline, wrapup/[bookId] (fiche de fin export image Stories), paywall premium réécrit, PromptsAdmin dans le Dashboard.
+- Vérifications : tsc --noEmit 0 erreur, expo lint 0 erreur (10 warnings), pytest tests_unit 20/20, backend démarre, prompts seedés (12), e2e aperçu : login → tour → accueil journal + 5 onglets OK. Contraintes respectées : pas de quotes.tsx/capture-tab.tsx recréés, redirections area/genre gardées, gating applinks intact, .env intacts.
+
 ## Fusion 3e0c3e3 — Moteur IA de classification (sept. 2026)
 - Fusion Git de claude/sillage-mobile-app-4hvnle (4 commits) : taxonomy.py, ai_provider.py, routes/classification.py, filters.tsx, browse.tsx, intent.tsx, Classification*.tsx + notation, visite guidée, pages légales, genres Babelio.
 - Conflit unique (_layout.tsx) : deep link fiable conservé + paramètre edit=1 de la branche.
