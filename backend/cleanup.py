@@ -87,6 +87,7 @@ async def _collect_plan(db, uids: list, known_uids: set, residue: bool):
     await collect("flashcards", {"$or": [{"user_id": {"$in": uids}}, {"book_id": {"$in": book_ids}}]})
     await collect("book_summaries", {"book_id": {"$in": book_ids}})
     await collect("reading_events", {"$or": [{"user_id": {"$in": uids}}, {"book_id": {"$in": book_ids}}]})
+    await collect("journal_entries", {"$or": [{"user_id": {"$in": uids}}, {"book_id": {"$in": book_ids}}]})
     # tableaux
     boards = await collect("boards", {"$or": [{"user_id": {"$in": uids}}, titled("name")]})
     board_ids = [b["board_id"] for b in boards]
@@ -157,7 +158,8 @@ async def apply_cleanup(db, res: dict, backup_dir: str) -> dict:
         json.dump(plan, f, default=_json_default, ensure_ascii=False)
     keys = {"users": "user_id", "books": "book_id", "quotes": "quote_id", "boards": "board_id", "clubs": "club_id",
             "catalog_books": "catalog_id", "quote_comments": "comment_id", "invitations": "invite_id", "recommendations": "reco_id",
-            "club_books": "cb_id", "club_posts": "post_id", "club_polls": "poll_id", "club_events": "event_id", "flashcards": "flashcard_id"}
+            "club_books": "cb_id", "club_posts": "post_id", "club_polls": "poll_id", "club_events": "event_id", "flashcards": "flashcard_id",
+            "journal_entries": "entry_id"}
     total, per = 0, {}
     for name, docs in plan.items():
         key = keys.get(name)

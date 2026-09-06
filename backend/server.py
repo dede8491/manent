@@ -32,6 +32,7 @@ import routes.catalog as catalog
 from routes.catalog import router as catalog_router, admin_router as catalog_admin_router, upsert_catalog_book
 import routes.share as share_pages
 from routes.club import router as club_router, event_reminder_loop
+import routes.journal as journal
 
 client = AsyncIOMotorClient(MONGO_URL)
 db = client[DB_NAME]
@@ -657,8 +658,22 @@ async def _migrate_covers():
     logger.info("cover migration done: %s covers found", found)
 
 
+async def _check_in_progress_limit(user: dict, exclude_book_id: Optional[str] = None):
+    """Gratuit : un seul livre « en cours » à la fois. Les livres déjà en cours (testeurs) ne sont jamais bloqués :
+    la limite ne s'applique qu'au passage d'un nouveau livre en cours."""
+    if user.get("is_premium"):
+        return
+    flt = {"user_id": user["user_id"], "status": "en_cours"}
+    if exclude_book_id:
+        flt["book_id"] = {"$ne": exclude_book_id}
+    if await db.books.count_documents(flt) >= journal.FREE_BOOKS_IN_PROGRESS:
+        raise HTTPException(status_code=402, detail="books_in_progress_limit")
+
+
 @api.post("/books")
 async def create_book(body: BookCreate, user=Depends(get_current_user)):
+    if body.status == "en_cours":
+        await _check_in_progress_limit(user)
     book_id = new_id("bk")
     doc = {
         "book_id": book_id,
@@ -844,7 +859,9 @@ async def patch_book(book_id: str, body: BookPatch, user=Depends(get_current_use
             last = await db.books.find_one({"user_id": user["user_id"], "status": "a_lire", "queue_position": {"$ne": None}},
                                            {"_id": 0, "queue_position": 1}, sort=[("queue_position", -1)])
             upd["queue_position"] = ((last or {}).get("queue_position") or 0) + 1
-    elif new_status == "en_cours" and book.get("status") == "termine":
+    if new_status == "en_cours" and book.get("status") != "en_cours":
+        await _check_in_progress_limit(user, book_id)
+    if new_status == "en_cours" and book.get("status") == "termine":
         # Relecture : l'historique (finished_at, read_count) est conservé, on repart de 0
         upd["is_rereading"] = True
         upd.setdefault(prog_key, 0)
@@ -949,12 +966,15 @@ async def premium_status_for(user_id: str) -> dict:
     ) or {}
     mk = month_key()
     used = u.get("captures_used", 0) if u.get("captures_month") == mk else 0
+    is_premium = bool(u.get("is_premium"))
     return {
-        "is_premium": bool(u.get("is_premium")),
+        "is_premium": is_premium,
         "plan": u.get("premium_plan"),
         "captures_used": used,
         "captures_limit": FREE_CAPTURE_LIMIT,
         "month": mk,
+        "journal": journal.quota_for(await journal._week_used(user_id), is_premium),
+        "books_in_progress_limit": None if is_premium else journal.FREE_BOOKS_IN_PROGRESS,
     }
 
 
@@ -3233,6 +3253,7 @@ async def on_startup():
     await db.invitations.create_index([("to_id", 1), ("status", 1)])
     await db.quote_likes.create_index([("quote_id", 1), ("user_id", 1)], unique=True)
     await db.quote_comments.create_index([("quote_id", 1), ("created_at", 1)])
+    await journal.init()
     asyncio.get_event_loop().create_task(_watch_wattpad())
     asyncio.get_event_loop().create_task(_migrate_covers())
     asyncio.get_event_loop().create_task(_seed_featured())
@@ -3257,6 +3278,8 @@ app.include_router(share_pages.root_router)
 app.include_router(share_pages.wk_router)
 app.include_router(push_router)
 app.include_router(club_router)
+app.include_router(journal.router)
+app.include_router(journal.admin_router, dependencies=[Depends(require_admin)])
 app.include_router(api)
 app.add_middleware(
     CORSMiddleware,
