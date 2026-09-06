@@ -12,6 +12,7 @@ import { api } from '@/src/api';
 import { shareUrl } from '@/src/share';
 import { useT } from '@/src/i18n';
 import ManentLoader from '@/src/components/ManentLoader';
+import { Entry, dayLabel, moodOf } from '@/src/journal';
 
 type Profile = {
   user: { pseudo: string; handle: string; picture?: string };
@@ -33,6 +34,7 @@ export default function ReaderProfile() {
   const { width } = useWindowDimensions();
   const { handle, follow, section } = useLocalSearchParams<{ handle: string; follow?: string; section?: string }>();
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [journal, setJournal] = useState<Entry[]>([]);
   const [notFound, setNotFound] = useState(false);
   const [feedback, setFeedback] = useState('');
   const [followBusy, setFollowBusy] = useState(false);
@@ -64,6 +66,7 @@ export default function ReaderProfile() {
           } catch {}
         }
         setProfile(r);
+        try { setJournal((await api<{ entries: Entry[] }>(`/journal/readers/${encodeURIComponent(handle)}/entries?size=10`)).entries || []); } catch {}
       } catch {
         setNotFound(true);
       }
@@ -175,6 +178,24 @@ export default function ReaderProfile() {
             ))}
           </View>
 
+          {journal.length > 0 && (
+            <View style={{ marginTop: spacing.xl, paddingHorizontal: spacing.xl }} testID="reader-journal">
+              <Text style={styles.sectionLabel}>{t('Son journal')}</Text>
+              {journal.map(e => {
+                const mood = moodOf(e.mood);
+                return (
+                  <View key={e.entry_id} style={styles.journalCard} testID={`reader-journal-${e.entry_id}`}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                      {mood && <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: mood.color }} />}
+                      <Text style={styles.journalMeta} numberOfLines={1}>{e.book?.title || ''}{e.page ? ` · p. ${e.page}` : ''} · {dayLabel(e.date)}</Text>
+                    </View>
+                    <Text style={styles.journalText} numberOfLines={5}>{e.content || (e.quotes?.[0] ? `« ${e.quotes[0].text} »` : mood ? t(mood.label) : '')}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
           {(profile.library || []).length > 0 && (
             <View style={{ marginTop: spacing.xl }} testID="reader-library">
               <Text style={[styles.sectionLabel, { paddingHorizontal: spacing.xl }]}>{t('Sa bibliothèque')}</Text>
@@ -268,6 +289,9 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   emptyTitle: { fontFamily: fonts.displayMedium, fontSize: 22, color: colors.espresso, textAlign: 'center' },
   privateBox: { margin: spacing.xl, backgroundColor: colors.creme, borderRadius: 20, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.xl, alignItems: 'center', gap: spacing.sm },
   privateTitle: { fontFamily: fonts.displayMedium, fontSize: 22, color: colors.espresso },
+  journalCard: { backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md, marginBottom: 8 },
+  journalMeta: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, flexShrink: 1 },
+  journalText: { fontFamily: fonts.body, fontSize: 14, color: colors.espresso, lineHeight: 20 },
   libTitle: { fontFamily: fonts.body, fontSize: 10.5, color: colors.clay, textAlign: 'center', marginTop: 4 },
   ficheCard: { flexDirection: 'row', gap: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },
   libFicheTitle: { fontFamily: fonts.displayMedium, fontSize: 16, color: colors.espresso },

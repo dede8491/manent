@@ -247,7 +247,7 @@ export default function Profile() {
             {adminBadge > 0 && <View style={styles.badgeDot} testID="admin-badge"><Text style={styles.badgeDotText}>{adminBadge > 99 ? '99+' : adminBadge}</Text></View>}
           </Pressable>
         )}
-        <Pressable testID="row-carnet" onPress={() => router.push('/carnet')} style={styles.row}><Feather name="book-open" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Carnet de lecture')}</Text><View style={styles.premiumTag}><Text style={styles.premiumTagText}>PREMIUM</Text></View></Pressable>
+        <Pressable testID="row-carnet" onPress={() => router.push('/carnet')} style={styles.row}><Feather name="book-open" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Fiches d’études (PDF)')}</Text><View style={styles.premiumTag}><Text style={styles.premiumTagText}>PREMIUM</Text></View></Pressable>
         <Pressable testID="row-settings" onPress={() => router.push('/settings')} style={styles.row}><Feather name="settings" size={18} color={colors.espresso} /><Text style={styles.rowLabel}>{t('Paramètres')}</Text></Pressable>
         <Pressable testID="row-signout" onPress={signOut} style={styles.row}><Feather name="log-out" size={18} color={colors.espresso} /><Text style={styles.rowLabel}>{t('Se déconnecter')}</Text></Pressable>
       </View>

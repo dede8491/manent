@@ -254,6 +254,13 @@ async def moods():
     return {"moods": MOODS}
 
 
+@router.get("/prompts")
+async def prompts_active(user=Depends(get_current_user)):
+    """Tous les prompts actifs (l'app en fait tourner un « Un autre » sans rappeler le serveur)."""
+    rows = [p for p in await _prompts() if p.get("active", True)]
+    return {"prompts": [{"prompt_id": p["prompt_id"], "text": p["text_fr"], "category": p.get("category")} for p in rows]}
+
+
 @router.get("/prompts/next")
 async def prompt_next(user=Depends(get_current_user)):
     return {"prompt": await _next_prompt(user["user_id"])}
