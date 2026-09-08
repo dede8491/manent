@@ -37,7 +37,7 @@ export function IntentPanel({ initial }: { initial?: string }) {
     if (q) setText(q);
     setLoading(true); setError(null); setRes(null);
     try { setRes(await api('/catalog/intent', { method: 'POST', body: JSON.stringify({ text: v }) })); }
-    catch { setError(t('Impossible d’interpréter ta demande pour l’instant. Réessaie dans un instant.')); }
+    catch (e: any) { setError(e?.status === 429 ? t('Tu as utilisé tes recherches par envie du jour. Reviens demain, ou passe par les filtres.') : t('Impossible d’interpréter ta demande pour l’instant. Réessaie dans un instant.')); }
     setLoading(false);
   };
 

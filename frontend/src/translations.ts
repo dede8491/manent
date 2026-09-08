@@ -1312,4 +1312,5 @@ export const EN: Record<string, string> = {
   'Comme le téléphone': 'Same as phone',
   'Clair': 'Light',
   'Sombre': 'Dark',
+  'Tu as utilisé tes recherches par envie du jour. Reviens demain, ou passe par les filtres.': 'You have used today’s mood searches. Come back tomorrow, or use the filters.',
 };

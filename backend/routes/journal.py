@@ -21,6 +21,8 @@ from pydantic import BaseModel, Field
 from pymongo.errors import DuplicateKeyError
 
 from deps import db, get_current_user, now_utc, new_id
+import reading
+from reading import compute_streak  # noqa: F401  (réexporté pour les tests et l'accueil)
 
 logger = logging.getLogger("journal")
 router = APIRouter(prefix="/api/journal")
@@ -83,17 +85,6 @@ def pick_prompt(prompts: list, entries_count: int, last_prompt_id: Optional[str]
     return p
 
 
-def compute_streak(active_days: set, today) -> int:
-    """Jours consécutifs d'activité ; la série tient encore si la dernière activité date d'hier."""
-    streak, d = 0, today
-    if d.strftime("%Y-%m-%d") not in active_days:
-        d = today - timedelta(days=1)
-    while d.strftime("%Y-%m-%d") in active_days:
-        streak += 1
-        d -= timedelta(days=1)
-    return streak
-
-
 def mood_series(entries: list) -> list:
     """Frise d'humeurs d'un livre, dans l'ordre chronologique (entrées sans humeur ignorées)."""
     pts = [{"date": e.get("date"), "mood": e.get("mood"), "page": e.get("page") or e.get("chapter"), "entry_id": e.get("entry_id")}
@@ -149,8 +140,7 @@ async def _quota(user_id: str) -> dict:
 
 
 async def _log_event(user_id: str, pages: int = 0):
-    await db.reading_events.update_one({"user_id": user_id, "day": now_utc().strftime("%Y-%m-%d")},
-                                       {"$inc": {"pages": max(0, pages), "actions": 1}}, upsert=True)
+    await reading.log_event(db, user_id, pages)
 
 
 async def _prompts() -> list:
@@ -200,19 +190,8 @@ def _progress(book: dict) -> dict:
 
 
 async def _advance_book(user_id: str, book: dict, page: Optional[int], chapter: Optional[int]) -> None:
-    """Une page (ou un chapitre) atteinte fait avancer le livre, jamais reculer ; un livre « à lire » passe « en cours »."""
-    wp = book.get("type") == "wattpad"
-    key, val, total = ("progress_chapter", chapter, book.get("chapters")) if wp else ("progress_page", page, book.get("pages"))
-    upd = {"updated_at": now_utc()}
-    if book.get("status") == "a_lire":
-        upd["status"] = "en_cours"
-    delta = 0
-    if val is not None and val > (book.get(key) or 0):
-        val = min(int(total), val) if total else val
-        delta = val - (book.get(key) or 0)
-        upd[key] = val
-    await db.books.update_one({"book_id": book["book_id"], "user_id": user_id}, {"$set": upd})
-    await _log_event(user_id, delta if not wp else 0)
+    """Règle unique (reading.advance_book) : ne recule jamais, borne au total, « à lire » → « en cours », journalise."""
+    await reading.advance_book(db, user_id, book, page, chapter)
 
 
 # ------------------------------------------------------------------------------------------------ modèles

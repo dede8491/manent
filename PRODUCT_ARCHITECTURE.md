@@ -26,10 +26,11 @@ Monétisation : Premium via RevenueCat (App Store / Google Play). Pas de paiemen
 | i18n | `src/i18n.tsx` : les clés sont les phrases françaises, `src/translations.ts` porte l'anglais |
 | Données mobile | `src/api.ts` (`api()` avec Bearer), pas de cache global ; hors ligne pour le journal dans `src/journal.ts` |
 | Backend | FastAPI + Motor sur MongoDB (hébergé par Emergent). `backend/server.py` (historique) + `backend/routes/*` (modules) |
-| Helpers partagés | `backend/deps.py` : `db`, `now_utc`, `new_id`, `get_current_user` (les routes modulaires importent d'ici) |
+| Helpers partagés | `backend/deps.py` : `db`, `now_utc`, `new_id`, `get_current_user` (server.py et les routes importent d'ici, une seule connexion Mongo) |
+| Règles de lecture | `backend/reading.py` : progression (ne recule jamais, bornée, termine le livre), événements de lecture, série de jours, visibilité d'une citation. **Toute nouvelle route qui touche à la progression ou à la visibilité passe par là.** |
 | IA | Clé Emergent (`EMERGENT_LLM_KEY`) via `ai_provider.py` pour la classification ; appels directs ailleurs (vision, résumés) |
 | Fichiers | Supabase Storage pour les photos, repli base64 en base si non configuré |
-| Tests | `backend/tests_unit` (purs, sans base) ; `backend/tests` (intégration sur base réelle, à ne pas lancer par défaut) |
+| Tests | `backend/tests_unit` : helpers purs + routes en mémoire (mongomock, httpx) ; `pytest` seul ne lance que ceux-là. `backend/tests` = anciens tests d'intégration sur base réelle, à ne pas lancer |
 
 Commandes de vérification avant tout commit :
 `cd frontend && npx tsc --noEmit && npx expo lint` (0 erreur) · `cd backend && python3 -m pytest tests_unit -q`.
@@ -129,15 +130,17 @@ les listes longues sont virtualisées (`FlatList` / `SectionList`).
 
 ## 9. Problèmes connus
 
-- `server.py` reste monolithique (106 routes) ; la migration vers `routes/*` est progressive.
-- Les tests d'intégration (`backend/tests`) écrivent sur la base réelle ; à remplacer par des tests de routes en mémoire.
-- Pas de cache de réponses côté mobile : chaque focus d'onglet recharge.
-- Le mode sombre est un choix manuel ; le suivi du réglage système est prévu.
+- `server.py` reste monolithique (106 routes) ; la migration vers `routes/*` est progressive (journal, catalogue, classification, club, partage, push sont modulaires ; livres, citations, tableaux, clubs privés, social, premium et admin restent dans server.py).
+- Pas de cache de réponses côté mobile : chaque focus d'onglet recharge (les requêtes d'un écran sont en parallèle).
+- Les quotas IA sont par compte et par jour (`llm_usage`) : résumés 20, numéro de page 40, fiche 10, sensibilité 30, intention 20 ; la transcription reste limitée par le quota mensuel de captures.
+- La progression via `PATCH /books/{id}` garde sa logique complète (relecture, retour « à lire », file) ; citation et journal passent par `reading.advance_book`.
 
 ## 10. Feuille de route
 
 1. Solidité du cœur (index, parallélisme, états d'erreur, accessibilité de base, jetons). **Fait.**
-2. Navigation et Premium honnêtes (Journal + Citations, export PDF, rétrospective, boîte Reçus).
-3. Découvrir et recherche simplifiés (une porte, cinq sections, un écran de détail catalogue, un flux d'ajout).
-4. Design system appliqué (ScreenHeader, IconButton, Button pilule, Chip, listes virtualisées, cache image, thème système).
-5. Backend consolidé (module `reading`, déduplication, quotas IA par compte, validation, tests de routes).
+2. Navigation et Premium honnêtes (Journal + Citations, export PDF, rétrospective, boîte Reçus). **Fait.**
+3. Découvrir et recherche simplifiés (une porte, cinq sections, un écran de détail catalogue, un flux d'ajout). **Fait.**
+4. Design system appliqué (ScreenHeader, IconButton, Button pilule, Chip, listes virtualisées, cache image, thème système). **Fait** ; reste à migrer écran par écran les en-têtes et boutons des écrans anciens (fiche livre, club, capture, citation, paramètres).
+5. Backend consolidé (module `reading`, déduplication, quotas IA par compte, force brute en base, validation, upload vérifié, lifespan, tests de routes). **Fait** ; reste le découpage de `server.py` en modules.
+
+Suivants : cache de réponses mobile (react-query est déjà installé), découpage de `server.py`, recherche dans le journal, réglage des notifications.
