@@ -107,7 +107,7 @@ export default function Home() {
           <InfoTooltip
             testID="info-home"
             title={t('Ton journal de lecture')}
-            text={t('Manent garde une trace de tout ce que tu lis et ressens. Chaque jour : ton livre en cours, une entrée de journal en un geste, ta dernière note. La découverte, les citations des autres lectrices et les clubs sont dans l’onglet Découvrir.')}
+            text={t('Manent garde une trace de tout ce que tu lis et ressens. Chaque jour : ton livre en cours, une entrée de journal en un geste, ta dernière note. Tes citations sont dans Journal ; la découverte, le fil des lectrices et les clubs dans Découvrir.')}
           />
         </View>
       </View>

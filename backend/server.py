@@ -2971,11 +2971,8 @@ async def invitations_badge(user=Depends(get_current_user)):
 async def list_invitations(user=Depends(get_current_user)):
     rows = await db.invitations.find({"to_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
     await db.invitations.update_many({"to_id": user["user_id"], "read": False}, {"$set": {"read": True}})
-    out = []
-    for r in rows:
-        u = await db.users.find_one({"user_id": r["from_id"]}, {"_id": 0, "pseudo": 1, "handle": 1, "picture": 1})
-        out.append({**r, "from": u})
-    return {"invitations": out}
+    users = {u["user_id"]: u for u in await db.users.find({"user_id": {"$in": [r["from_id"] for r in rows]}}, {"_id": 0, "user_id": 1, "pseudo": 1, "handle": 1, "picture": 1}).to_list(200)}
+    return {"invitations": [{**r, "from": users.get(r["from_id"])} for r in rows]}
 
 
 @api.post("/invitations/{invite_id}/accept")
@@ -3008,11 +3005,9 @@ async def recommendations_badge(user=Depends(get_current_user)):
 @api.get("/recommendations")
 async def list_recommendations(user=Depends(get_current_user)):
     rows = await db.recommendations.find({"to_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
-    out = []
-    for r in rows:
-        b = await db.catalog_books.find_one({"catalog_id": r["catalog_id"]}, {"_id": 0})
-        u = await db.users.find_one({"user_id": r["from_id"]}, {"_id": 0, "pseudo": 1, "handle": 1, "picture": 1})
-        out.append({**r, "book": catalog._card(b) if b else None, "from": u})
+    books = {b["catalog_id"]: b for b in await db.catalog_books.find({"catalog_id": {"$in": [r["catalog_id"] for r in rows]}}, {"_id": 0}).to_list(200)}
+    users = {u["user_id"]: u for u in await db.users.find({"user_id": {"$in": [r["from_id"] for r in rows]}}, {"_id": 0, "user_id": 1, "pseudo": 1, "handle": 1, "picture": 1}).to_list(200)}
+    out = [{**r, "book": catalog._card(books[r["catalog_id"]]) if r["catalog_id"] in books else None, "from": users.get(r["from_id"])} for r in rows]
     # Ouvrir la liste marque tout comme lu (la pastille disparaît)
     await db.recommendations.update_many({"to_id": user["user_id"], "read": False}, {"$set": {"read": True}})
     return {"recommendations": out}

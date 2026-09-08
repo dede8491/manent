@@ -101,7 +101,7 @@ export default function Profile() {
         <InfoTooltip
           testID="info-profile"
           title={t('Comment ça marche')}
-          text={t("Tes statistiques, ta série de jours, ton objectif de l'année et tes badges. « Recommandations » rassemble les livres que des lectrices t'ont envoyés ; « Partager ma bibliothèque » crée un lien ou une image pour tes réseaux. Tape sur ton avatar pour changer ta photo, et sur Paramètres pour la langue, le mode sombre et la confidentialité.")}
+          text={t("Tes statistiques, ta série de jours, ton objectif de l'année et tes badges. « Reçus » rassemble les invitations et les livres que des lectrices t'ont envoyés ; « Partager ma bibliothèque » crée un lien ou une image pour tes réseaux. Tape sur ton avatar pour changer ta photo, et sur Paramètres pour la langue, le mode sombre et la confidentialité.")}
         />
       </View>
       <View style={styles.header}>
@@ -181,6 +181,14 @@ export default function Profile() {
       )}
 
       {reading && (
+        <Pressable testID="row-retrospective" onPress={() => router.push({ pathname: '/journal/retrospective', params: { year: String(reading.year) } })} accessibilityRole="button" style={styles.retroRow}>
+          <Feather name="calendar" size={16} color={colors.chambray} />
+          <Text style={styles.retroText}>{t('Ma rétrospective {year}', { year: reading.year })}</Text>
+          <Feather name="chevron-right" size={16} color={colors.clay} />
+        </Pressable>
+      )}
+
+      {reading && (
         <View style={styles.goalCard} testID="goal-card">
           <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
             <Text style={styles.readingTitle}>{t('Objectif {year}', { year: reading.year })}</Text>
@@ -239,13 +247,9 @@ export default function Profile() {
       </View>
 
       <View style={{ paddingHorizontal: spacing.xl, gap: spacing.sm, marginTop: spacing.lg }}>
-        <Pressable testID="row-recommendations" onPress={() => router.push('/recommendations')} style={styles.row}>
-          <Feather name="gift" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Recommandations')}</Text>
-          {recoBadge > 0 && <View style={styles.badgeDot} testID="reco-badge"><Text style={styles.badgeDotText}>{recoBadge > 99 ? '99+' : recoBadge}</Text></View>}
-        </Pressable>
-        <Pressable testID="row-invitations" onPress={() => router.push('/invitations')} style={styles.row}>
-          <Feather name="mail" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Invitations')}</Text>
-          {invBadge > 0 && <View style={styles.badgeDot} testID="inv-badge"><Text style={styles.badgeDotText}>{invBadge > 99 ? '99+' : invBadge}</Text></View>}
+        <Pressable testID="row-inbox" onPress={() => router.push('/inbox')} accessibilityRole="button" style={styles.row}>
+          <Feather name="inbox" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Reçus')}</Text>
+          {(recoBadge + invBadge) > 0 && <View style={styles.badgeDot} testID="inbox-badge"><Text style={styles.badgeDotText}>{(recoBadge + invBadge) > 99 ? '99+' : recoBadge + invBadge}</Text></View>}
         </Pressable>
         <Pressable testID="row-share-profile" onPress={shareProfile} style={styles.row}><Feather name="user-plus" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Partager mon profil')}</Text></Pressable>
         <Pressable testID="row-share-library" onPress={() => router.push('/share-library')} style={styles.row}><Feather name="share-2" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Partager ma bibliothèque')}</Text></Pressable>
@@ -307,6 +311,8 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   followNum: { fontFamily: fonts.bodyMedium, color: colors.espresso },
   followDot: { fontFamily: fonts.body, fontSize: 13, color: colors.clay },
   statLbl: { fontFamily: fonts.bodyMedium, fontSize: 8.5, color: colors.clay, letterSpacing: 0.4, textTransform: 'uppercase', marginTop: 2, textAlign: 'center' },
+  retroRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: spacing.xl, marginTop: spacing.sm, paddingVertical: 10, paddingHorizontal: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft },
+  retroText: { flex: 1, fontFamily: fonts.bodyMedium, fontSize: 13.5, color: colors.espresso },
   readingCard: { marginHorizontal: spacing.xl, marginTop: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },
   clubCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginHorizontal: spacing.xl, marginTop: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },
   clubIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },

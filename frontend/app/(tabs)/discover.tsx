@@ -156,7 +156,7 @@ export default function Discover() {
         {loadError && !loading && <View style={{ marginBottom: spacing.lg }}><ErrorState compact onRetry={() => { setLoading(true); load().finally(() => setLoading(false)); }} testID="discover-error" /></View>}
         <View style={styles.shortcuts} testID="discover-shortcuts">
           {([['quotes', 'feather', 'Citations'], ['community', 'bookmark', 'Communauté'], ['queue', 'list', 'Lecture suivante']] as const).map(([key, icon, label]) => (
-            <Pressable key={key} testID={`discover-shortcut-${key}`} onPress={() => router.push(key === 'queue' ? '/queue' : `/(tabs)/${key}`)} style={styles.shortcut}>
+            <Pressable key={key} testID={`discover-shortcut-${key}`} onPress={() => router.push(key === 'queue' ? '/queue' : key === 'quotes' ? { pathname: '/(tabs)/journal', params: { segment: 'citations' } } : '/(tabs)/community')} style={styles.shortcut}>
               <Feather name={icon} size={16} color={colors.espresso} />
               <Text style={styles.shortcutText}>{t(label)}</Text>
             </Pressable>

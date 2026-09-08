@@ -442,6 +442,63 @@ async def public_entries(handle: str, size: int = Query(20, ge=1, le=50), user=D
     return {"entries": await _decorate(u["user_id"], rows)}
 
 
+@router.get("/retrospective")
+async def retrospective(year: Optional[int] = None, user=Depends(get_current_user)):
+    """Rétrospective annuelle (Premium) : livres terminés, pages, entrées, humeurs, auteurs de l'année.
+    En gratuit : les compteurs seulement (aperçu), le détail est verrouillé."""
+    uid = user["user_id"]
+    now = now_utc()
+    y = year or now.year
+    start, end = datetime(y, 1, 1, tzinfo=timezone.utc), datetime(y + 1, 1, 1, tzinfo=timezone.utc)
+    premium = await _is_premium(uid)
+    books = await db.books.find({"user_id": uid, "status": "termine", "finished_at": {"$gte": start, "$lt": end}},
+                                {**_BOOK_FIELDS, "author": 1, "pages": 1}).sort("finished_at", 1).to_list(500)
+    entries = await db.journal_entries.find({"user_id": uid, "date": {"$gte": f"{y}-01-01", "$lte": f"{y}-12-31"}},
+                                            {"_id": 0, "mood": 1, "book_id": 1, "date": 1}).to_list(10000)
+    quotes_count = await db.quotes.count_documents({"user_id": uid, "created_at": {"$gte": start, "$lt": end}})
+    events = await db.reading_events.find({"user_id": uid, "day": {"$gte": f"{y}-01-01", "$lte": f"{y}-12-31"}},
+                                          {"_id": 0, "day": 1, "pages": 1}).to_list(400)
+    days = sorted(e["day"] for e in events)
+    longest, run, prev = 0, 0, None
+    for d in days:
+        cur = datetime.strptime(d, "%Y-%m-%d").date()
+        run = run + 1 if prev and (cur - prev).days == 1 else 1
+        longest = max(longest, run)
+        prev = cur
+    out = {
+        "year": y, "is_premium": premium, "locked": not premium,
+        "books_count": len(books), "entries_count": len(entries), "quotes_count": quotes_count,
+        "pages_total": sum(e.get("pages", 0) for e in events), "active_days": len(days), "longest_streak": longest,
+        "years": sorted({int(b["finished_at"].year) for b in await db.books.find({"user_id": uid, "status": "termine", "finished_at": {"$exists": True}}, {"_id": 0, "finished_at": 1}).to_list(2000) if isinstance(b.get("finished_at"), datetime)} | {now.year}, reverse=True),
+    }
+    if not premium:
+        return out
+    moods = [e["mood"] for e in entries if e.get("mood")]
+    dist = {str(v): moods.count(v) for v in range(1, 6)}
+    authors: dict = {}
+    for b in books:
+        for a in [x.strip() for x in (b.get("author") or "").split(",") if x.strip()]:
+            authors[a] = authors.get(a, 0) + 1
+    months = [0] * 12
+    for e in entries:
+        try:
+            months[int(e["date"][5:7]) - 1] += 1
+        except (ValueError, TypeError):
+            pass
+    best = max(books, key=lambda b: (b.get("rating") or 0, b.get("finished_at") or start), default=None)
+    out.update({
+        "books": [{"book_id": b["book_id"], "title": b.get("title"), "author": b.get("author"), "cover": b.get("cover"),
+                   "rating": b.get("rating") or 0, "finished_at": b["finished_at"].strftime("%Y-%m-%d") if isinstance(b.get("finished_at"), datetime) else None} for b in books],
+        "mood_distribution": dist,
+        "mood_dominant": MOOD_BY_VALUE.get(max(set(moods), key=moods.count)) if moods else None,
+        "top_authors": [{"name": a, "count": n} for a, n in sorted(authors.items(), key=lambda x: (-x[1], x[0]))[:5]],
+        "months": months,
+        "best_book": {"book_id": best["book_id"], "title": best.get("title"), "author": best.get("author"), "cover": best.get("cover"), "rating": best.get("rating") or 0} if best and (best.get("rating") or 0) > 0 else None,
+        "moods_scale": MOODS,
+    })
+    return out
+
+
 @router.get("/quota")
 async def journal_quota(user=Depends(get_current_user)):
     return await _quota(user["user_id"])

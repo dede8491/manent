@@ -5,6 +5,9 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
+import * as Print from 'expo-print';
+import { buildJournalHtml } from '@/src/journalPdf';
+import { useAuth } from '@/src/auth';
 import { api } from '@/src/api';
 import { fonts, radius, spacing, colors as brand } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
@@ -36,6 +39,26 @@ export default function WrapUp() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const cardRef = useRef<View>(null);
+  const { user } = useAuth();
+  const [pdfBusy, setPdfBusy] = useState(false);
+
+  const exportPdf = async () => {
+    if (!w || pdfBusy) return;
+    if (!w.is_premium) { router.push('/premium'); return; }
+    setPdfBusy(true); setMsg(null);
+    try {
+      const j = await api<any>(`/journal/books/${bookId}`);
+      const html = buildJournalHtml(w.book, j.entries || [], user?.pseudo);
+      if (Platform.OS === 'web') {
+        const win = window.open('', '_blank');
+        if (win) { win.document.write(html); win.document.close(); win.focus(); setTimeout(() => win.print(), 600); }
+      } else {
+        const { uri } = await Print.printToFileAsync({ html });
+        if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: t('Mon journal en PDF') });
+      }
+    } catch { setMsg(t('La génération du PDF a échoué. Réessaie.')); }
+    finally { setPdfBusy(false); }
+  };
 
   useEffect(() => { api<Wrap>(`/journal/books/${bookId}/wrapup`).then(setW).catch(() => setMsg(t('Fiche indisponible.'))); }, [bookId, t]);
 
@@ -122,6 +145,11 @@ export default function WrapUp() {
           <Pressable testID="wrapup-share" onPress={share} disabled={busy} style={[styles.shareBtn, busy && { opacity: 0.6 }]}>
             {busy ? <ManentLoader size={18} variant="sombre" /> : <Feather name="share" size={16} color={colors.creme} />}
             <Text style={styles.shareText}>{t('Partager en image (Stories)')}</Text>
+          </Pressable>
+          <Pressable testID="wrapup-pdf" onPress={exportPdf} disabled={pdfBusy} accessibilityRole="button" style={[styles.ghostBtn, pdfBusy && { opacity: 0.6 }]}>
+            <Feather name="file-text" size={15} color={colors.espresso} />
+            <Text style={styles.ghostText}>{pdfBusy ? t('Génération…') : t('Exporter mon journal en PDF')}</Text>
+            {!w.is_premium && <Text style={styles.premiumTag}>PREMIUM</Text>}
           </Pressable>
           {!w.is_premium && (
             <Pressable testID="wrapup-premium" onPress={() => router.push('/premium')} style={{ alignSelf: 'center', marginTop: spacing.sm }}>
@@ -219,6 +247,9 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   lesson: { fontFamily: fonts.body, fontSize: 14, color: colors.espresso, lineHeight: 21 },
   shareBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 50, borderRadius: radius.pill, backgroundColor: colors.chambray, marginTop: spacing.xl },
   shareText: { fontFamily: fonts.bodyMedium, fontSize: 15, color: colors.creme },
+  ghostBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 46, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, backgroundColor: colors.creme, marginTop: spacing.sm },
+  ghostText: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.espresso },
+  premiumTag: { fontFamily: fonts.bodyMedium, fontSize: 9, color: colors.espresso, letterSpacing: 1, backgroundColor: colors.bisque, paddingHorizontal: 6, paddingVertical: 2, borderRadius: radius.pill },
   premiumHint: { fontFamily: fonts.body, fontSize: 12.5, color: colors.chambray, textDecorationLine: 'underline' },
   msg: { fontFamily: fonts.body, fontSize: 13, color: colors.clay, textAlign: 'center', marginTop: spacing.md, lineHeight: 19 },
   // carte 1080×1920 — palette de marque fixe (indépendante du mode sombre)

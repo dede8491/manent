@@ -7,7 +7,7 @@ import { useColors } from '@/src/themeCtx';
 import { useT } from '@/src/i18n';
 
 // Barre : Accueil (journal du jour), Journal, Bibliothèque, Découvrir, Profil.
-// Citations et Communauté restent des écrans de l'app (accessibles depuis Découvrir) sans bouton dans la barre.
+// Les citations vivent dans Journal (segment). Communauté reste un écran masqué de la barre (Découvrir, Profil).
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
