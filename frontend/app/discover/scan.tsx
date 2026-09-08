@@ -22,7 +22,7 @@ export default function DiscoverScan() {
   const go = (isbn: string) => {
     const code = isbn.replace(/[^0-9Xx]/g, '');
     if (code.length < 10) return;
-    router.replace({ pathname: '/discover/[isbn]', params: { isbn: code } });
+    router.replace({ pathname: '/discover/book', params: { isbn: code } });
   };
 
   const onBarcode = ({ data }: { data: string }) => {

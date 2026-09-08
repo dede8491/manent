@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
@@ -10,6 +10,7 @@ import { api } from '@/src/api';
 import { useT } from '@/src/i18n';
 import ManentLoader from '@/src/components/ManentLoader';
 import { ClassificationLines } from '@/src/components/ClassificationLines';
+import { IntentPanel } from '@/src/components/IntentPanel';
 
 type Scope = 'all' | 'quotes' | 'books';
 
@@ -19,7 +20,9 @@ export default function SearchScreen() {
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const [q, setQ] = useState('');
+  const params = useLocalSearchParams<{ mode?: string; q?: string }>();
+  const [mode, setMode] = useState<'mots' | 'envie'>(params.mode === 'envie' ? 'envie' : 'mots');
+  const [q, setQ] = useState(params.q || '');
   const [scope, setScope] = useState<Scope>('all');
   const [results, setResults] = useState<{ quotes: Quote[]; books: any[]; readers: any[] }>({ quotes: [], books: [], readers: [] });
   const [catalog, setCatalog] = useState<any[]>([]);
@@ -98,44 +101,55 @@ export default function SearchScreen() {
           <Pressable onPress={() => router.back()} testID="search-back" style={styles.iconBtn}>
             <Feather name="chevron-left" size={22} color={colors.espresso} />
           </Pressable>
-          <View style={styles.searchBox}>
-            <Feather name="search" size={16} color={colors.clay} />
-            <TextInput
-              testID="search-input"
-              value={q} onChangeText={setQ}
-              autoFocus
-              placeholder={t('Une phrase, un livre, un lecteur…')}
-              placeholderTextColor={colors.clay}
-              style={styles.searchInput}
-              returnKeyType="search"
-            />
-            {q ? (
-              <Pressable testID="search-clear" onPress={() => setQ('')} hitSlop={8}>
-                <Feather name="x" size={16} color={colors.clay} />
-              </Pressable>
-            ) : null}
-          </View>
+          {mode === 'mots' ? (
+            <View style={styles.searchBox}>
+              <Feather name="search" size={16} color={colors.clay} />
+              <TextInput
+                testID="search-input"
+                value={q} onChangeText={setQ}
+                autoFocus
+                placeholder={t('Une phrase, un livre, un lecteur…')}
+                placeholderTextColor={colors.clay}
+                style={styles.searchInput}
+                returnKeyType="search"
+                accessibilityLabel={t('Rechercher')}
+              />
+              {q ? (
+                <Pressable testID="search-clear" onPress={() => setQ('')} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('Effacer')}>
+                  <Feather name="x" size={16} color={colors.clay} />
+                </Pressable>
+              ) : null}
+            </View>
+          ) : <Text style={styles.modeTitle}>{t('Recherche par envie')}</Text>}
         </View>
 
-        <View style={styles.segmentRow}>
-          {([['all', 'Tout'], ['quotes', 'Citations'], ['books', 'Livres']] as [Scope, string][]).map(([s, label]) => (
-            <Pressable key={s} testID={`search-scope-${s}`} onPress={() => setScope(s)} style={[styles.segment, scope === s && styles.segmentActive]}>
-              <Text style={[styles.segmentText, scope === s && styles.segmentTextActive]}>{t(label)}</Text>
+        {/* Une seule porte, deux façons de chercher : des mots (titres, citations, lectrices, catalogue) ou une envie (IA) */}
+        <View style={styles.modeRow} accessibilityRole="tablist">
+          {([['mots', 'Par mots'], ['envie', 'Par envie']] as const).map(([m, label]) => (
+            <Pressable key={m} testID={`search-mode-${m}`} onPress={() => setMode(m)} accessibilityRole="tab" accessibilityState={{ selected: mode === m }} style={[styles.modeChip, mode === m && styles.modeChipOn]}>
+              <Feather name={m === 'mots' ? 'type' : 'feather'} size={13} color={mode === m ? colors.creme : colors.espresso} />
+              <Text style={[styles.modeText, mode === m && styles.modeTextOn]}>{t(label)}</Text>
             </Pressable>
           ))}
         </View>
+
+        {mode === 'mots' && (
+          <View style={styles.segmentRow}>
+            {([['all', 'Tout'], ['quotes', 'Citations'], ['books', 'Livres']] as [Scope, string][]).map(([s, label]) => (
+              <Pressable key={s} testID={`search-scope-${s}`} onPress={() => setScope(s)} accessibilityRole="tab" accessibilityState={{ selected: scope === s }} style={[styles.segment, scope === s && styles.segmentActive]}>
+                <Text style={[styles.segmentText, scope === s && styles.segmentTextActive]}>{t(label)}</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
       </View>
 
+      {mode === 'envie' ? (
+        <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xxl }} keyboardShouldPersistTaps="handled">
+          <IntentPanel />
+        </ScrollView>
+      ) : (
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xxl }} keyboardShouldPersistTaps="handled">
-        <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: spacing.xl, marginTop: spacing.md }}>
-          <Pressable testID="search-intent" onPress={() => router.push('/intent')} style={[styles.chip, { flex: 1, maxWidth: undefined, backgroundColor: colors.bisque, borderColor: colors.bisque }]}>
-            <Text style={styles.chipText} numberOfLines={1}>✨ {t('Je cherche un livre qui…')}</Text>
-          </Pressable>
-          <Pressable testID="search-filters" onPress={() => router.push({ pathname: '/filters', params: { q: q.trim() } })} style={[styles.chip, { flexDirection: 'row', gap: 6 }]}>
-            <Feather name="sliders" size={13} color={colors.espresso} />
-            <Text style={styles.chipText}>{t('Filtres')}</Text>
-          </Pressable>
-        </View>
         {matched.length > 0 && q.trim().length >= 2 && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.chipScroll, { marginTop: spacing.sm }]}>
             {matched.map((c: any) => (
@@ -164,7 +178,8 @@ export default function SearchScreen() {
           ) : total === 0 && catalog.length === 0 && !catalogLoading ? (
             <View style={{ paddingVertical: spacing.xxl, alignItems: 'center' }}>
               <Text style={styles.emptyTitle}>{t('Rien pour l’instant.')}</Text>
-              <Text style={styles.emptySub}>{t('Essaie un autre mot, ou ouvre les filtres.')}</Text>
+              <Text style={styles.emptySub}>{t('Essaie un autre mot, ou décris ton envie.')}</Text>
+              <Pressable testID="search-to-envie" onPress={() => setMode('envie')} accessibilityRole="button" style={[styles.chip, { marginTop: spacing.md, backgroundColor: colors.bisque, borderColor: colors.bisque }]}><Text style={styles.chipText}>{t('Je cherche un livre qui…')}</Text></Pressable>
             </View>
           ) : (
             <>
@@ -253,6 +268,7 @@ export default function SearchScreen() {
           )}
         </View>
       </ScrollView>
+      )}
     </View>
   );
 }
@@ -263,7 +279,13 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, height: 44, paddingHorizontal: spacing.md, backgroundColor: colors.creme, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft },
   searchInput: { flex: 1, fontFamily: fonts.body, fontSize: 14, color: colors.espresso, paddingVertical: 0 },
-  segmentRow: { flexDirection: 'row', gap: 8, paddingHorizontal: spacing.xl, marginTop: spacing.md },
+  segmentRow: { flexDirection: 'row', gap: 8, paddingHorizontal: spacing.xl, marginTop: spacing.sm },
+  modeRow: { flexDirection: 'row', gap: 8, paddingHorizontal: spacing.xl, marginTop: spacing.md },
+  modeChip: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 36, paddingHorizontal: 14, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, backgroundColor: colors.creme },
+  modeChipOn: { backgroundColor: colors.chambray, borderColor: colors.chambray },
+  modeText: { fontFamily: fonts.body, fontSize: 13, color: colors.espresso },
+  modeTextOn: { color: colors.creme, fontFamily: fonts.bodyMedium },
+  modeTitle: { flex: 1, fontFamily: fonts.displayMedium, fontSize: 20, color: colors.espresso, paddingLeft: spacing.sm },
   segment: { flex: 1, height: 36, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center' },
   segmentActive: { backgroundColor: colors.espresso, borderColor: colors.espresso },
   segmentText: { fontFamily: fonts.body, fontSize: 13, color: colors.espresso },

@@ -103,7 +103,7 @@ export default function BrowseScreen() {
             <View style={{ paddingVertical: spacing.xxl, alignItems: 'center' }}>
               <Text style={styles.emptyTitle}>{t('Rien pour ces filtres.')}</Text>
               <Text style={styles.emptySub}>{t('Retire un filtre, ou essaie « Je cherche un livre qui… » pour formuler ton envie.')}</Text>
-              <Pressable testID="browse-intent" onPress={() => router.push('/intent')} style={styles.moreBtn}>
+              <Pressable testID="browse-intent" onPress={() => router.push({ pathname: '/search', params: { mode: 'envie' } })} style={styles.moreBtn}>
                 <Text style={styles.moreBtnText}>✨ {t('Je cherche un livre qui…')}</Text>
               </Pressable>
             </View>
