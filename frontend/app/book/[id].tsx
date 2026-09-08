@@ -738,7 +738,7 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   ficheBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md, marginTop: spacing.lg },
   ficheTitle: { fontFamily: fonts.displayMedium, fontSize: 18, color: colors.espresso },
   ficheSub: { fontFamily: fonts.body, fontSize: 12, color: colors.clay, marginTop: 1 },
-  iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   top: { flexDirection: 'row', gap: spacing.lg },
   badge: { fontFamily: fonts.bodyMedium, fontSize: 9, color: colors.creme, backgroundColor: colors.clay, alignSelf: 'flex-start', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 3, letterSpacing: 1 },
   year: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1.5 },

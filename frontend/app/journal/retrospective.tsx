@@ -10,6 +10,7 @@ import { useT } from '@/src/i18n';
 import { BookCover } from '@/src/components/BookCover';
 import { ErrorState } from '@/src/components/ErrorState';
 import ManentLoader from '@/src/components/ManentLoader';
+import { ScreenHeader } from '@/src/components/ScreenHeader';
 import { MOODS, Mood } from '@/src/journal';
 
 type Retro = {
@@ -34,7 +35,7 @@ export default function Retrospective() {
   const [error, setError] = useState(false);
 
   const load = () => { setR(null); setError(false); api<Retro>(`/journal/retrospective?year=${year}`).then(setR).catch(() => setError(true)); };
-  useEffect(load, [year]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(load, [year]);
 
   const MONTHS = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
   const maxMonth = Math.max(1, ...(r?.months || [0]));
@@ -42,11 +43,7 @@ export default function Retrospective() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.glacier }} testID="screen-retrospective">
-      <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-        <Pressable onPress={() => router.back()} testID="retro-back" accessibilityRole="button" accessibilityLabel={t('Retour')} style={styles.iconBtn}><Feather name="chevron-left" size={22} color={colors.espresso} /></Pressable>
-        <Text style={styles.headerLabel}>{t('Rétrospective')}</Text>
-        <View style={{ width: 44 }} />
-      </View>
+      <ScreenHeader title={t('Rétrospective')} backTestID="retro-back" />
       {error ? <ErrorState onRetry={load} testID="retro-error" /> : !r ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ManentLoader size={56} /></View>
       ) : (

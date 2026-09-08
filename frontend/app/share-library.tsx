@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Platform, Share } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
@@ -12,6 +11,7 @@ import { useAuth } from '@/src/auth';
 import { shareUrl } from '@/src/share';
 import { BookCover } from '@/src/components/BookCover';
 import ManentLoader from '@/src/components/ManentLoader';
+import { ScreenHeader } from '@/src/components/ScreenHeader';
 import { useT } from '@/src/i18n';
 
 type Book = { book_id: string; title: string; cover?: string | null; type?: string };
@@ -24,7 +24,6 @@ export default function ShareLibrary() {
   const colors = useColors();
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
-  const router = useRouter();
   const { user } = useAuth();
   const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
@@ -114,13 +113,7 @@ export default function ShareLibrary() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.glacier }} testID="screen-share-library">
-      <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-        <Pressable onPress={() => router.back()} testID="share-library-back" style={styles.iconBtn}>
-          <Feather name="chevron-left" size={22} color={colors.espresso} />
-        </Pressable>
-        <Text style={styles.headerLabel}>{t('Partager')}</Text>
-        <View style={{ width: 40 }} />
-      </View>
+      <ScreenHeader title={t('Partager')} backTestID="share-library-back" />
       {loading ? (
         <View style={{ paddingTop: spacing.xxl, alignItems: 'center' }}><ManentLoader size={48} /></View>
       ) : (
@@ -167,7 +160,7 @@ export default function ShareLibrary() {
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.md, paddingBottom: spacing.sm },
-  iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   headerLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 2, textTransform: 'uppercase' },
   title: { fontFamily: fonts.displayMedium, fontSize: 28, color: colors.espresso },
   sub: { fontFamily: fonts.body, fontSize: 13.5, color: colors.clay, lineHeight: 19, marginTop: 4, marginBottom: spacing.lg },

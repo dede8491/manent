@@ -12,6 +12,7 @@ import { BookCover } from '@/src/components/BookCover';
 import { Toast } from '@/src/components/Toast';
 import { ErrorState } from '@/src/components/ErrorState';
 import ManentLoader from '@/src/components/ManentLoader';
+import { ScreenHeader } from '@/src/components/ScreenHeader';
 
 type Reco = { reco_id: string; status: 'pending' | 'accepted' | 'ignored'; message?: string | null; created_at: string;
   book?: { catalog_id: string; title: string; author?: string; cover?: string | null; summary?: string | null } | null;
@@ -122,11 +123,7 @@ export default function Inbox() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.glacier }} testID="screen-inbox">
-      <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-        <Pressable onPress={() => router.back()} testID="inbox-back" accessibilityRole="button" accessibilityLabel={t('Retour')} style={styles.iconBtn}><Feather name="chevron-left" size={22} color={colors.espresso} /></Pressable>
-        <Text style={styles.headerLabel}>{t('Reçus')}</Text>
-        <View style={{ width: 44 }} />
-      </View>
+      <ScreenHeader title={t('Reçus')} backTestID="inbox-back" />
       <View style={styles.segments} accessibilityRole="tablist">
         {([['all', 'Tout'], ['reco', 'Livres'], ['inv', 'Invitations']] as const).map(([k, label]) => (
           <Pressable key={k} testID={`inbox-filter-${k}`} onPress={() => setFilter(k)} accessibilityRole="tab" accessibilityState={{ selected: filter === k }} style={[styles.seg, filter === k && styles.segOn]}>

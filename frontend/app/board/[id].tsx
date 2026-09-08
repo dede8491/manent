@@ -67,7 +67,7 @@ export default function BoardDetail() {
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSoft, backgroundColor: colors.glacier },
-  iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   h1: { fontFamily: fonts.displayMedium, fontSize: 20, color: colors.espresso, flex: 1, textAlign: 'center', marginHorizontal: spacing.md },
   meta: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase' },
   desc: { fontFamily: fonts.body, fontSize: 14, color: colors.espresso, marginTop: spacing.sm, lineHeight: 22 },

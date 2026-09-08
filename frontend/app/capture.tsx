@@ -415,7 +415,7 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   pickerEmpty: { fontFamily: fonts.body, fontSize: 13.5, color: colors.clay, textAlign: 'center', paddingVertical: spacing.lg },
   pickerClose: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.chambray },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSoft, backgroundColor: colors.glacier },
-  iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   h1: { fontFamily: fonts.displayMedium, fontSize: 20, color: colors.espresso },
   pickRow: { flexDirection: 'row', gap: spacing.md },
   pickBtn: { flex: 1, height: 120, backgroundColor: colors.creme, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1, borderColor: colors.borderSoft },

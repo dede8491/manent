@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl, SectionList } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -102,47 +102,52 @@ export default function JournalTab() {
       {entries === null ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ManentLoader size={56} /></View>
       ) : (
-        <ScrollView contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: insets.bottom + 90 }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await flush(); await load(); setRefreshing(false); }} tintColor={colors.chambray} />}>
-          {loadError && all.length > 0 && <View style={{ marginTop: spacing.sm }}><ErrorState compact onRetry={load} testID="journal-error" /></View>}
-          {loadError && all.length === 0 ? (
+        <SectionList
+          sections={days.map(d => ({ title: dayLabel(d.day, lang), data: d.items }))}
+          keyExtractor={e => e.entry_id}
+          stickySectionHeadersEnabled={false}
+          contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: insets.bottom + 90 }}
+          initialNumToRender={12}
+          windowSize={7}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await flush(); await load(); setRefreshing(false); }} tintColor={colors.chambray} />}
+          ListHeaderComponent={loadError && all.length > 0 ? <View style={{ marginTop: spacing.sm }}><ErrorState compact onRetry={load} testID="journal-error" /></View> : null}
+          ListEmptyComponent={loadError ? (
             <ErrorState onRetry={load} testID="journal-error" />
-          ) : all.length === 0 ? (
+          ) : (
             <View style={{ paddingVertical: spacing.xxxl, alignItems: 'center' }}>
               <Text style={styles.emptyTitle}>{t('Ton journal commence ici.')}</Text>
               <Text style={styles.emptySub}>{t('Une page lue, une humeur, une phrase qui reste : note-les au fil des jours.')}</Text>
-              <Pressable testID="journal-empty-write" onPress={() => router.push('/journal/new')} style={[styles.writeBtn, { marginTop: spacing.lg }]}>
+              <Pressable testID="journal-empty-write" onPress={() => router.push('/journal/new')} accessibilityRole="button" style={[styles.writeBtn, { marginTop: spacing.lg }]}>
                 <Feather name="feather" size={15} color={colors.creme} /><Text style={styles.writeText}>{t('Écrire ma première entrée')}</Text>
               </Pressable>
             </View>
-          ) : days.map(d => (
-            <View key={d.day} style={{ marginBottom: spacing.md }}>
-              <Text style={styles.day}>{dayLabel(d.day, lang)}</Text>
-              {d.items.map(e => {
-                const mood = moodOf(e.mood);
-                return (
-                  <Pressable key={e.entry_id} testID={`journal-entry-${e.entry_id}`} disabled={e.pending} onPress={() => router.push({ pathname: '/journal/[id]', params: { id: e.entry_id } })} style={[styles.card, e.pending && { opacity: 0.7 }]}>
-                    <BookCover uri={e.book?.cover || undefined} title={e.book?.title || ''} width={34} height={48} />
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                        {mood && <View style={[styles.moodDot, { backgroundColor: mood.color }]} />}
-                        <Text style={styles.cardMeta} numberOfLines={1}>{e.book?.title || t('Livre')}{e.page ? ` · p. ${e.page}` : ''}{e.pending ? ` · ${t('en attente du réseau')}` : e.is_public ? ` · ${t('publiée')}` : ''}</Text>
-                      </View>
-                      {e.content ? <Text style={styles.cardText} numberOfLines={3}>{e.content}</Text>
-                        : e.quotes?.[0] ? <Text style={styles.cardQuote} numberOfLines={2}>« {e.quotes[0].text} »</Text>
-                        : <Text style={styles.cardText}>{mood ? t(mood.label) : ''}</Text>}
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </View>
-          ))}
-          {hasMore && (
-            <Pressable testID="journal-more" onPress={loadMore} style={styles.moreBtn}>
+          )}
+          renderSectionHeader={({ section }) => <Text style={styles.day}>{section.title}</Text>}
+          renderItem={({ item: e }) => {
+            const mood = moodOf(e.mood);
+            return (
+              <Pressable testID={`journal-entry-${e.entry_id}`} disabled={e.pending} onPress={() => router.push({ pathname: '/journal/[id]', params: { id: e.entry_id } })} accessibilityRole="button" style={[styles.card, e.pending && { opacity: 0.7 }]}>
+                <BookCover uri={e.book?.cover || undefined} title={e.book?.title || ''} width={34} height={48} />
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    {mood && <View style={[styles.moodDot, { backgroundColor: mood.color }]} />}
+                    <Text style={styles.cardMeta} numberOfLines={1}>{e.book?.title || t('Livre')}{e.page ? ` · p. ${e.page}` : ''}{e.pending ? ` · ${t('en attente du réseau')}` : e.is_public ? ` · ${t('publiée')}` : ''}</Text>
+                  </View>
+                  {e.content ? <Text style={styles.cardText} numberOfLines={3}>{e.content}</Text>
+                    : e.quotes?.[0] ? <Text style={styles.cardQuote} numberOfLines={2}>« {e.quotes[0].text} »</Text>
+                    : <Text style={styles.cardText}>{mood ? t(mood.label) : ''}</Text>}
+                </View>
+              </Pressable>
+            );
+          }}
+          ListFooterComponent={hasMore ? (
+            <Pressable testID="journal-more" onPress={loadMore} accessibilityRole="button" style={styles.moreBtn}>
               <Text style={styles.moreText}>{more ? '…' : t('Voir plus')}</Text>
             </Pressable>
-          )}
-        </ScrollView>
+          ) : null}
+          onEndReached={() => { if (hasMore) loadMore(); }}
+          onEndReachedThreshold={0.6}
+        />
       )}
       </>
       )}

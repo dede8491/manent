@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, FlatList } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -8,6 +8,7 @@ import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
 import { useT } from '@/src/i18n';
 import ManentLoader from '@/src/components/ManentLoader';
+import { ScreenHeader } from '@/src/components/ScreenHeader';
 import { BottomSheet } from '@/src/components/BottomSheet';
 import { CatalogBookRow } from '@/src/components/CatalogBookRow';
 import { SORTS, Sel, countSel, labelOf, parseSel, selToQuery, toggleSel, useTaxonomy } from '@/src/classification';
@@ -55,13 +56,7 @@ export default function BrowseScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.glacier }} testID="screen-browse">
-      <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-        <Pressable onPress={() => router.back()} testID="browse-back" style={styles.iconBtn}>
-          <Feather name="chevron-left" size={22} color={colors.espresso} />
-        </Pressable>
-        <Text style={styles.headerLabel}>{params.title || t('Livres')}</Text>
-        <View style={{ width: 40 }} />
-      </View>
+      <ScreenHeader title={params.title || t('Livres')} backTestID="browse-back" />
 
       <View style={styles.toolbar}>
         <Pressable testID="browse-filters" onPress={() => router.push({ pathname: '/filters', params: { f: params.f || '', sort, q: params.q || '', from: 'browse' } })} style={styles.toolBtn}>
@@ -93,25 +88,36 @@ export default function BrowseScreen() {
       {loading ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ManentLoader /></View>
       ) : (
-        <ScrollView contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: insets.bottom + spacing.xxl }}>
-          <Text style={styles.total} testID="browse-total">
-            {total === 0 ? t('Aucun livre')
-              : exactTotal !== null && exactTotal < total ? t('{e} correspondances exactes · {n} livres proches', { e: exactTotal, n: total - exactTotal })
-              : t(total > 1 ? '{n} livres' : '{n} livre', { n: total })}
-          </Text>
-          {books.length === 0 ? (
+        <FlatList
+          data={books}
+          keyExtractor={(b: any, i) => b.catalog_id || String(i)}
+          contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: insets.bottom + spacing.xxl }}
+          initialNumToRender={12}
+          windowSize={7}
+          removeClippedSubviews
+          onEndReached={() => { if (books.length < total) loadMore(); }}
+          onEndReachedThreshold={0.6}
+          ListHeaderComponent={(
+            <Text style={styles.total} testID="browse-total">
+              {total === 0 ? t('Aucun livre')
+                : exactTotal !== null && exactTotal < total ? t('{e} correspondances exactes · {n} livres proches', { e: exactTotal, n: total - exactTotal })
+                : t(total > 1 ? '{n} livres' : '{n} livre', { n: total })}
+            </Text>
+          )}
+          ListEmptyComponent={(
             <View style={{ paddingVertical: spacing.xxl, alignItems: 'center' }}>
               <Text style={styles.emptyTitle}>{t('Rien pour ces filtres.')}</Text>
               <Text style={styles.emptySub}>{t('Retire un filtre, ou essaie « Je cherche un livre qui… » pour formuler ton envie.')}</Text>
-              <Pressable testID="browse-intent" onPress={() => router.push({ pathname: '/search', params: { mode: 'envie' } })} style={styles.moreBtn}>
-                <Text style={styles.moreBtnText}>✨ {t('Je cherche un livre qui…')}</Text>
+              <Pressable testID="browse-intent" onPress={() => router.push({ pathname: '/search', params: { mode: 'envie' } })} accessibilityRole="button" style={styles.moreBtn}>
+                <Text style={styles.moreBtnText}>{t('Je cherche un livre qui…')}</Text>
               </Pressable>
             </View>
-          ) : books.map((b: any, i: number) => {
+          )}
+          renderItem={({ item: b, index: i }: { item: any; index: number }) => {
             const partial = typeof b.match_of === 'number' && b.match_score < b.match_of;
             const firstPartial = partial && (i === 0 || !(typeof books[i - 1].match_of === 'number' && books[i - 1].match_score < books[i - 1].match_of));
             return (
-              <View key={b.catalog_id || i}>
+              <View>
                 {firstPartial && (
                   <View style={styles.sep} testID="browse-partial-sep">
                     <Text style={styles.sepText}>{t('Proches de ta recherche')}</Text>
@@ -121,14 +127,14 @@ export default function BrowseScreen() {
                 <CatalogBookRow book={b} testID={`browse-book-${i}`} />
               </View>
             );
-          })}
-          {books.length < total && (
-            <Pressable testID="browse-see-more" onPress={loadMore} style={styles.moreBtn}>
+          }}
+          ListFooterComponent={books.length < total ? (
+            <Pressable testID="browse-see-more" onPress={loadMore} accessibilityRole="button" style={styles.moreBtn}>
               <Feather name="plus" size={15} color={colors.chambray} />
               <Text style={styles.moreBtnText}>{more ? '…' : t('Voir plus de livres')}</Text>
             </Pressable>
-          )}
-        </ScrollView>
+          ) : null}
+        />
       )}
 
       <BottomSheet visible={sortSheet} onClose={() => setSortSheet(false)} title={t('Trier par')} testID="browse-sort-sheet">
@@ -145,7 +151,7 @@ export default function BrowseScreen() {
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.md, paddingBottom: spacing.xs },
-  iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   headerLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 2, textTransform: 'uppercase', flex: 1, textAlign: 'center' },
   toolbar: { flexDirection: 'row', gap: 8, paddingHorizontal: spacing.xl, paddingVertical: spacing.sm },
   toolBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 38, paddingHorizontal: 14, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, backgroundColor: colors.creme, flexShrink: 1 },

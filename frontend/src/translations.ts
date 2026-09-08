@@ -1309,4 +1309,7 @@ export const EN: Record<string, string> = {
   'Scanner un code-barres': 'Scan a barcode',
   'Une histoire Wattpad': 'A Wattpad story',
   'Voir la file': 'See the queue',
+  'Comme le téléphone': 'Same as phone',
+  'Clair': 'Light',
+  'Sombre': 'Dark',
 };

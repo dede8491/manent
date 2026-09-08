@@ -211,7 +211,7 @@ export default function QuoteDetail() {
         <Text style={styles.h1}>{t('Citation')}</Text>
         {quote.is_owner !== false ? (
           <Pressable onPress={del} testID="q-delete" style={styles.iconBtn}><Feather name="trash-2" size={20} color={colors.espresso} /></Pressable>
-        ) : <View style={{ width: 40 }} />}
+        ) : <View style={{ width: 44 }} />}
       </View>
       <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + spacing.xxl }}>
         <View style={[styles.card, { backgroundColor: bg }]} testID="quote-card-hero">
@@ -364,7 +364,7 @@ export default function QuoteDetail() {
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSoft, backgroundColor: colors.glacier },
-  iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   h1: { fontFamily: fonts.displayMedium, fontSize: 20, color: colors.espresso },
   card: { borderRadius: radius.md, padding: spacing.xl },
   mark: { fontFamily: fonts.displayMedium, fontSize: 80, lineHeight: 72, marginBottom: -14, marginLeft: -6 },

@@ -14,6 +14,7 @@ import { useColors, useStyles } from '@/src/themeCtx';
 import { useT } from '@/src/i18n';
 import { BookCover } from '@/src/components/BookCover';
 import ManentLoader from '@/src/components/ManentLoader';
+import { ScreenHeader } from '@/src/components/ScreenHeader';
 import { MoodTimeline, MoodPoint } from '@/src/components/MoodTimeline';
 import { Mood, moodOf } from '@/src/journal';
 
@@ -80,11 +81,7 @@ export default function WrapUp() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.glacier }} testID="screen-wrapup">
-      <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-        <Pressable onPress={() => router.back()} testID="wrapup-back" style={styles.iconBtn}><Feather name="chevron-left" size={22} color={colors.espresso} /></Pressable>
-        <Text style={styles.headerLabel}>{t('Fiche de fin de livre')}</Text>
-        <View style={{ width: 40 }} />
-      </View>
+      <ScreenHeader title={t('Fiche de fin de livre')} backTestID="wrapup-back" />
       {!w ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>{msg ? <Text style={styles.msg}>{msg}</Text> : <ManentLoader size={56} />}</View>
       ) : (
@@ -226,7 +223,7 @@ function CardStat({ label, value, styles, color }: { label: string; value: strin
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.md, paddingBottom: spacing.xs },
-  iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   headerLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 2, textTransform: 'uppercase' },
   hero: { flexDirection: 'row', gap: spacing.lg, alignItems: 'center' },
   kicker: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.chambray, letterSpacing: 1.6, textTransform: 'uppercase' },

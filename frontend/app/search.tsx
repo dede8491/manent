@@ -7,6 +7,7 @@ import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
 import { QuoteCard, Quote } from '@/src/components/QuoteCard';
 import { api } from '@/src/api';
+import { Avatar } from '@/src/components/Avatar';
 import { useT } from '@/src/i18n';
 import ManentLoader from '@/src/components/ManentLoader';
 import { ClassificationLines } from '@/src/components/ClassificationLines';
@@ -189,7 +190,7 @@ export default function SearchScreen() {
                   {results.readers.map((r: any) => (
                     <Pressable key={r.handle} testID={`search-reader-${r.handle}`} onPress={() => router.push({ pathname: '/reader/[handle]', params: { handle: r.handle } })} style={styles.bookRow}>
                       <View style={styles.readerAvatar}>
-                        {r.picture ? <Image source={{ uri: r.picture }} style={{ width: 40, height: 40, borderRadius: 20 }} /> : <Text style={styles.bookInitial}>{(r.pseudo?.[0] || 'M').toUpperCase()}</Text>}
+                        <Avatar uri={r.picture} name={r.pseudo} size={40} />
                       </View>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.bookTitle} numberOfLines={1}>{r.pseudo}</Text>
@@ -276,7 +277,7 @@ export default function SearchScreen() {
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   header: { paddingBottom: spacing.sm, backgroundColor: colors.glacier, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSoft },
   searchRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, gap: 4 },
-  iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, height: 44, paddingHorizontal: spacing.md, backgroundColor: colors.creme, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft },
   searchInput: { flex: 1, fontFamily: fonts.body, fontSize: 14, color: colors.espresso, paddingVertical: 0 },
   segmentRow: { flexDirection: 'row', gap: 8, paddingHorizontal: spacing.xl, marginTop: spacing.sm },

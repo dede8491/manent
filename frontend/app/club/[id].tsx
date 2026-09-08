@@ -564,7 +564,7 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   cSubmit: { height: 40, borderRadius: radius.pill, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
   cSubmitText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.creme },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSoft, backgroundColor: colors.glacier },
-  iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontFamily: fonts.displayMedium, fontSize: 19, color: colors.espresso, flex: 1, textAlign: 'center', marginHorizontal: spacing.sm },
   desc: { fontFamily: fonts.body, fontSize: 14, color: colors.clay, marginBottom: spacing.md, lineHeight: 20 },
   codeRow: { backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md, alignItems: 'center' },

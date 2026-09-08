@@ -2,7 +2,7 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { fonts, radius, spacing } from '@/src/theme';
+import { fonts } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
 import { BottomSheet } from '@/src/components/BottomSheet';
 import { useT } from '@/src/i18n';

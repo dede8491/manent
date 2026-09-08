@@ -29,8 +29,8 @@ export const type = {
   subtitle: { fontFamily: fonts.display, fontSize: 20, color: colors.espresso },
   body: { fontFamily: fonts.body, fontSize: 15, color: colors.espresso, lineHeight: 22 },
   bodySmall: { fontFamily: fonts.body, fontSize: 13, color: colors.espresso },
-  meta: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1.6, textTransform: 'uppercase' as const },
-  metaLarge: { fontFamily: fonts.bodyMedium, fontSize: 12, color: colors.clay, letterSpacing: 2, textTransform: 'uppercase' as const },
+  meta: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase' as const },      // libellé de section
+  metaLarge: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 2, textTransform: 'uppercase' as const }, // libellé d'en-tête
   quote: { fontFamily: fonts.display, fontSize: 22, color: colors.espresso, lineHeight: 30 },
   button: { fontFamily: fonts.bodyMedium, fontSize: 15, color: colors.creme, letterSpacing: 0.3 },
 };

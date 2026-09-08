@@ -54,7 +54,7 @@ export default function AdminDashboard() {
           <Feather name="chevron-left" size={22} color={colors.espresso} />
         </Pressable>
         <Text style={styles.h1}>{t('Dashboard admin')}</Text>
-        <View style={{ width: 40 }} />
+        <View style={{ width: 44 }} />
       </View>
       {denied ? (
         <Text style={styles.denied}>{t('Réservé à l’administratrice du Club.')}</Text>
@@ -115,7 +115,7 @@ export default function AdminDashboard() {
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingBottom: spacing.sm },
-  iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   h1: { fontFamily: fonts.displayMedium, fontSize: 20, color: colors.espresso },
   denied: { fontFamily: fonts.body, fontSize: 14, color: colors.clay, textAlign: 'center', marginTop: spacing.xxl },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
