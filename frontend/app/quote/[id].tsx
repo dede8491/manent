@@ -243,8 +243,8 @@ export default function QuoteDetail() {
 
         <View style={styles.actionBar} testID="quote-actions">
           <Pressable testID="q-like" onPress={toggleLike} style={styles.action}>
-            <Feather name="heart" size={20} color={(quote as any).liked_by_me ? '#B3552F' : colors.espresso} />
-            <Text style={[styles.actionCount, (quote as any).liked_by_me && { color: '#B3552F' }]}>{(quote as any).likes_count || 0}</Text>
+            <Feather name="heart" size={20} color={(quote as any).liked_by_me ? colors.danger : colors.espresso} />
+            <Text style={[styles.actionCount, (quote as any).liked_by_me && { color: colors.danger }]}>{(quote as any).likes_count || 0}</Text>
           </Pressable>
           <Pressable testID="q-comments" onPress={() => (comments === null ? loadComments() : setComments(null))} style={styles.action}>
             <Feather name="message-circle" size={20} color={colors.espresso} />

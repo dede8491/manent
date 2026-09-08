@@ -52,7 +52,7 @@ export function PromptsAdmin() {
             <Text style={styles.text}>{p.text_fr}</Text>
             <Text style={styles.meta}>{p.category ? `${p.category} · ` : ''}{t(p.uses > 1 ? '{n} utilisations' : '{n} utilisation', { n: p.uses })}</Text>
           </View>
-          <Pressable onPress={() => remove(p)} hitSlop={6} testID={`prompt-delete-${p.prompt_id}`}><Feather name="trash-2" size={15} color="#B3552F" /></Pressable>
+          <Pressable onPress={() => remove(p)} hitSlop={6} testID={`prompt-delete-${p.prompt_id}`}><Feather name="trash-2" size={15} color={colors.danger} /></Pressable>
         </View>
       ))}
     </View>

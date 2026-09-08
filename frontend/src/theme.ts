@@ -8,6 +8,9 @@ export const colors = {
   borderSoft: '#BBA99C',
   darkCard: '#4A2E23',
   darkBg: '#2D1913',
+  danger: '#B3552F',      // actions destructrices (terre cuite, dans la famille Clay)
+  success: '#5C8A6B',     // confirmations discrètes
+  overlay: 'rgba(58,33,25,0.45)',  // voile des modales et feuilles
 } as const;
 
 export const fonts = {
@@ -18,7 +21,7 @@ export const fonts = {
 } as const;
 
 export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32, xxxl: 48 } as const;
-export const radius = { sm: 4, md: 8, lg: 16, pill: 999 } as const;
+export const radius = { sm: 4, md: 8, lg: 16, xl: 20, pill: 999 } as const;
 
 export const type = {
   wordmark: { fontFamily: fonts.displayMedium, fontSize: 34, color: colors.espresso },

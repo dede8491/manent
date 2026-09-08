@@ -1243,4 +1243,9 @@ export const EN: Record<string, string> = {
   'En gratuit, Manent suit un livre en cours à la fois, pour un journal concentré. Ajoute celui-ci à ta liste de lecture, ou passe en Premium.': 'On the free plan Manent follows one book in progress at a time, for a focused journal. Add this one to your reading list, or go Premium.',
   'En gratuit, Manent suit un livre en cours à la fois, pour un journal concentré. Termine ou mets en pause l’autre, ou passe en Premium.': 'On the free plan Manent follows one book in progress at a time, for a focused journal. Finish or pause the other one, or go Premium.',
   'Son journal': 'Their journal',
+  'Impossible de charger.': 'Could not load.',
+  'Vérifie ta connexion, puis réessaie. Tes données sont intactes.': 'Check your connection, then try again. Your data is safe.',
+  'Voir ma fiche de fin de livre': 'See my end-of-book card',
+  'Accueil': 'Home',
+  'Profil': 'Profile',
 };

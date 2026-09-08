@@ -128,6 +128,6 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   visText: { fontFamily: fonts.body, fontSize: 13, color: colors.clay },
   ghostBtn: { flex: 1, height: 44, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center' },
   ghostText: { fontFamily: fonts.body, fontSize: 14, color: colors.espresso },
-  dangerBtn: { flex: 1, height: 44, borderRadius: radius.pill, backgroundColor: '#B3552F', alignItems: 'center', justifyContent: 'center' },
+  dangerBtn: { flex: 1, height: 44, borderRadius: radius.pill, backgroundColor: colors.danger, alignItems: 'center', justifyContent: 'center' },
   dangerText: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.creme },
 });

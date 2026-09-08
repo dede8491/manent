@@ -139,8 +139,8 @@ export default function Settings() {
 
   const Row = ({ icon, label, right, onPress, testID, danger }: any) => (
     <Pressable testID={testID} onPress={onPress} disabled={!onPress} style={styles.row}>
-      <Feather name={icon} size={18} color={danger ? '#B3552F' : colors.espresso} />
-      <Text style={[styles.rowLabel, danger && { color: '#B3552F' }]} numberOfLines={2}>{label}</Text>
+      <Feather name={icon} size={18} color={danger ? colors.danger : colors.espresso} />
+      <Text style={[styles.rowLabel, danger && { color: colors.danger }]} numberOfLines={2}>{label}</Text>
       {right}
     </Pressable>
   );
@@ -252,7 +252,7 @@ export default function Settings() {
             <Text style={styles.modalTitle}>{t('Tu es sûr ?')}</Text>
             <Text style={styles.docText}>{t('Tes livres, citations, tableaux et clubs seront supprimés définitivement. Cette action est irréversible.')}</Text>
             <View style={{ height: spacing.lg }} />
-            <PrimaryButton testID="delete-confirm" title={busy === 'delete' ? t('Suppression…') : t('Supprimer définitivement')} onPress={deleteAccount} style={{ backgroundColor: '#B3552F' }} />
+            <PrimaryButton testID="delete-confirm" title={busy === 'delete' ? t('Suppression…') : t('Supprimer définitivement')} onPress={deleteAccount} style={{ backgroundColor: colors.danger }} />
             <GhostButton testID="delete-cancel" title={t('Garder mon compte')} onPress={() => setConfirmDelete(false)} />
           </View>
         </View>

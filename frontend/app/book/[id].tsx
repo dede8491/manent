@@ -17,6 +17,7 @@ import { BookCover } from '@/src/components/BookCover';
 import { useT, useI18n } from '@/src/i18n';
 import { InfoTooltip } from '@/src/components/InfoTooltip';
 import ManentLoader from '@/src/components/ManentLoader';
+import { ErrorState } from '@/src/components/ErrorState';
 import { JournalBookSection } from '@/src/components/JournalBookSection';
 import { BookHero, AreaLine } from '@/src/components/BookHero';
 import { BottomSheet } from '@/src/components/BottomSheet';
@@ -169,23 +170,19 @@ export default function BookDetail() {
     }
   };
 
-  useFocusEffect(useCallback(() => {
-    (async () => {
-      const b = await api<any>(`/books/${id}`); setBook(b);
-      setRating(b.rating || 0); setRecap(b.recap || ''); setLessons(b.lessons || []);
-      const q = await api<{ quotes: Quote[] }>(`/quotes?book_id=${id}`);
-      setQuotes(q.quotes);
-      if (b.catalog_id) {
-        try { setCatalogMeta(await api<any>(`/catalog/book/${b.catalog_id}`)); } catch {}
-      }
-      if (b.type === 'etude') {
-        try {
-          const f = await api<{ total: number; due: number }>(`/flashcards?book_id=${id}`);
-          setFc({ total: f.total, due: f.due });
-        } catch {}
-      }
-    })();
-  }, [id]));
+  const [loadError, setLoadError] = useState(false);
+  const load = useCallback(async () => {
+    setLoadError(false);
+    // Livre et citations en parallèle ; catalogue et flashcards ensuite, sans bloquer l'affichage
+    const [bRes, qRes] = await Promise.allSettled([api<any>(`/books/${id}`), api<{ quotes: Quote[] }>(`/quotes?book_id=${id}`)]);
+    if (bRes.status !== 'fulfilled') { setLoadError(true); return; }
+    const b = bRes.value; setBook(b);
+    setRating(b.rating || 0); setRecap(b.recap || ''); setLessons(b.lessons || []);
+    if (qRes.status === 'fulfilled') setQuotes(qRes.value.quotes);
+    if (b.catalog_id) api<any>(`/catalog/book/${b.catalog_id}`).then(setCatalogMeta).catch(() => {});
+    if (b.type === 'etude') api<{ total: number; due: number }>(`/flashcards?book_id=${id}`).then(f => setFc({ total: f.total, due: f.due })).catch(() => {});
+  }, [id]);
+  useFocusEffect(useCallback(() => { load(); }, [load]));
 
   // Résumé du livre (résumé manuel prioritaire, sinon Google Books → Open Library, en français)
   useEffect(() => {
@@ -320,7 +317,20 @@ export default function BookDetail() {
     } finally { setGenerating(false); }
   };
 
-  if (!book) return <View style={{ flex: 1, backgroundColor: colors.glacier }} />;
+  if (!book) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.glacier, paddingTop: insets.top + spacing.sm }} testID="screen-book-loading">
+        <View style={{ paddingHorizontal: spacing.md }}>
+          <Pressable onPress={() => router.back()} testID="book-back" style={styles.iconBtn} accessibilityRole="button" accessibilityLabel={t('Retour')}>
+            <Feather name="chevron-left" size={22} color={colors.espresso} />
+          </Pressable>
+        </View>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          {loadError ? <ErrorState onRetry={load} testID="book-error" /> : <ManentLoader size={56} />}
+        </View>
+      </View>
+    );
+  }
   const isWattpad = book.type === 'wattpad';
   const isEtude = book.type === 'etude';
   const total = isWattpad ? book.chapters : book.pages;
@@ -397,7 +407,10 @@ export default function BookDetail() {
                   <Text style={styles.laterText}>{t('Plus tard')}</Text>
                 </Pressable>
               </View>
-              <Pressable testID="btn-next-reading" onPress={() => router.push('/queue')} hitSlop={6} style={{ marginTop: 8 }}>
+              <Pressable testID="btn-wrapup-now" onPress={() => router.push({ pathname: '/journal/wrapup/[bookId]', params: { bookId: String(id) } })} hitSlop={6} style={{ marginTop: 8 }}>
+                <Text style={styles.nextReading}>{t('Voir ma fiche de fin de livre')}  ›</Text>
+              </Pressable>
+              <Pressable testID="btn-next-reading" onPress={() => router.push('/queue')} hitSlop={6} style={{ marginTop: 6 }}>
                 <Text style={styles.nextReading}>{t('Passer à la lecture suivante')}  ›</Text>
               </Pressable>
             </View>
@@ -718,7 +731,7 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   modalBox: { backgroundColor: colors.creme, borderRadius: 20, padding: spacing.xl },
   modalTitle: { fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso },
   modalText: { fontFamily: fonts.body, fontSize: 14, color: colors.clay, marginTop: spacing.sm, lineHeight: 20 },
-  deleteBtn: { marginTop: spacing.lg, height: 48, borderRadius: radius.md, backgroundColor: '#B3552F', alignItems: 'center', justifyContent: 'center' },
+  deleteBtn: { marginTop: spacing.lg, height: 48, borderRadius: radius.md, backgroundColor: colors.danger, alignItems: 'center', justifyContent: 'center' },
   deleteBtnText: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.creme },
   cancelBtn: { marginTop: spacing.sm, height: 44, alignItems: 'center', justifyContent: 'center' },
   cancelBtnText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.espresso },

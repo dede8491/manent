@@ -11,6 +11,7 @@ import { useAuth } from '@/src/auth';
 import { Wordmark } from '@/src/components/Wordmark';
 import { BookCover } from '@/src/components/BookCover';
 import ManentLoader from '@/src/components/ManentLoader';
+import { ErrorState } from '@/src/components/ErrorState';
 import { InfoTooltip } from '@/src/components/InfoTooltip';
 import { WelcomeTour } from '@/src/components/WelcomeTour';
 import { useT, useLang } from '@/src/i18n';
@@ -30,6 +31,7 @@ export default function Home() {
   const { user, refresh } = useAuth();
   const { pending, flush } = useOutbox();
   const [home, setHome] = useState<JournalHome | null>(null);
+  const [loadError, setLoadError] = useState(false);
   const [nextUp, setNextUp] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [birthModal, setBirthModal] = useState(false);
@@ -37,8 +39,9 @@ export default function Home() {
   const [birthSaving, setBirthSaving] = useState(false);
 
   const load = useCallback(async () => {
-    try { setHome(await api<JournalHome>('/journal/home')); } catch {}
-    try { const d = await api<any>('/home/discover'); setNextUp(d?.next_up || null); } catch {}
+    const [h, d] = await Promise.allSettled([api<JournalHome>('/journal/home'), api<any>('/home/discover')]);
+    if (h.status === 'fulfilled') { setHome(h.value); setLoadError(false); } else setLoadError(true);
+    if (d.status === 'fulfilled') setNextUp(d.value?.next_up || null);
   }, []);
   useFocusEffect(useCallback(() => { flush().then(load); }, [load, flush]));
   const onRefresh = async () => { setRefreshing(true); await flush(); await load(); setRefreshing(false); };
@@ -110,12 +113,13 @@ export default function Home() {
       </View>
 
       {!home ? (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ManentLoader size={56} /></View>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>{loadError ? <ErrorState onRetry={load} testID="home-error" /> : <ManentLoader size={56} />}</View>
       ) : (
         <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingTop: spacing.sm, paddingBottom: insets.bottom + 90 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.chambray} />}>
           <Text style={styles.greeting}>{firstName ? `${greeting}, ${firstName}.` : `${greeting}.`}</Text>
           <Text style={styles.streak} testID="home-streak">{streakText}</Text>
+          {loadError && <View style={{ marginBottom: spacing.md }}><ErrorState compact onRetry={load} testID="home-error" /></View>}
 
           {pending > 0 && (
             <Pressable testID="home-outbox" onPress={() => flush().then(load)} style={styles.outbox}>

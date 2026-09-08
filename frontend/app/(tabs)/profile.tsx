@@ -57,24 +57,32 @@ export default function Profile() {
 
   useFocusEffect(React.useCallback(() => {
     (async () => {
-      try { setPremium(await api('/premium/status')); } catch {}
-      if ((user as any)?.is_admin) {
-        try { const b = await api<{ total: number }>('/admin/badge'); setAdminBadge(b.total || 0); } catch {}
+      // Toutes les requêtes du profil en parallèle (avant : neuf appels en série)
+      const isAdmin = !!(user as any)?.is_admin;
+      const [prem, adm, reco, inv, fol, club, read, bdg, bk, qt, bd] = await Promise.allSettled([
+        api<any>('/premium/status'),
+        isAdmin ? api<{ total: number }>('/admin/badge') : Promise.reject(new Error('skip')),
+        api<{ unread: number }>('/recommendations/badge'),
+        api<{ unread: number }>('/invitations/badge'),
+        api<any>('/me/follows'),
+        api<any>('/club/me/summary'),
+        api<any>('/stats/reading'),
+        api<{ badges: any[] }>('/badges'),
+        api<{ books: any[] }>('/books'),
+        api<{ quotes: any[] }>('/quotes'),
+        api<{ boards: any[] }>('/boards'),
+      ]);
+      if (prem.status === 'fulfilled') setPremium(prem.value);
+      if (adm.status === 'fulfilled') setAdminBadge(adm.value.total || 0);
+      if (reco.status === 'fulfilled') setRecoBadge(reco.value.unread || 0);
+      if (inv.status === 'fulfilled') setInvBadge(inv.value.unread || 0);
+      if (fol.status === 'fulfilled') setFollows(fol.value);
+      if (club.status === 'fulfilled') setClubSummary(club.value);
+      if (read.status === 'fulfilled') setReading(read.value);
+      if (bdg.status === 'fulfilled') setBadges(bdg.value.badges);
+      if (bk.status === 'fulfilled' && qt.status === 'fulfilled' && bd.status === 'fulfilled') {
+        setStats({ books: bk.value.books.length, quotes: qt.value.quotes.length, boards: bd.value.boards.length });
       }
-      try { const r = await api<{ unread: number }>('/recommendations/badge'); setRecoBadge(r.unread || 0); } catch {}
-      try { const r = await api<{ unread: number }>('/invitations/badge'); setInvBadge(r.unread || 0); } catch {}
-      try { setFollows(await api('/me/follows')); } catch {}
-      try { setClubSummary(await api('/club/me/summary')); } catch {}
-      try { setReading(await api('/stats/reading')); } catch {}
-      try { const b = await api<{ badges: any[] }>('/badges'); setBadges(b.badges); } catch {}
-      try {
-        const [b, q, t] = await Promise.all([
-          api<{ books: any[] }>('/books'),
-          api<{ quotes: any[] }>('/quotes'),
-          api<{ boards: any[] }>('/boards'),
-        ]);
-        setStats({ books: b.books.length, quotes: q.quotes.length, boards: t.boards.length });
-      } catch {}
     })();
   }, []));
   const shareProfile = async () => {

@@ -9,6 +9,7 @@ import { useColors, useStyles } from '@/src/themeCtx';
 import { useT, useLang } from '@/src/i18n';
 import { BookCover } from '@/src/components/BookCover';
 import ManentLoader from '@/src/components/ManentLoader';
+import { ErrorState } from '@/src/components/ErrorState';
 import { Entry, dayLabel, groupByDay, moodOf, outboxAsEntries, readOutbox, useOutbox } from '@/src/journal';
 
 // Onglet Journal : toutes les entrées, par jour, filtrables par livre. Les entrées en attente de réseau apparaissent en tête.
@@ -30,13 +31,14 @@ export default function JournalTab() {
   const [books, setBooks] = useState<Record<string, any>>({});
   const [refreshing, setRefreshing] = useState(false);
   const [more, setMore] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   const load = useCallback(async () => {
     try {
       const r = await api<{ entries: Entry[]; has_more: boolean; total: number }>(`/journal/entries?size=40${bookFilter ? `&book_id=${bookFilter}` : ''}`);
-      setEntries(r.entries); setHasMore(r.has_more); setTotal(r.total);
+      setEntries(r.entries); setHasMore(r.has_more); setTotal(r.total); setLoadError(false);
       setBooks(prev => { const next = { ...prev }; r.entries.forEach(e => { if (e.book?.book_id) next[e.book.book_id] = e.book; }); return next; });
-    } catch { setEntries(prev => prev || []); }
+    } catch { setLoadError(true); setEntries(prev => prev || []); }
     setLocal(outboxAsEntries(await readOutbox(), books).filter(e => !bookFilter || e.book_id === bookFilter));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookFilter]);
@@ -85,7 +87,10 @@ export default function JournalTab() {
       ) : (
         <ScrollView contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingBottom: insets.bottom + 90 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={async () => { setRefreshing(true); await flush(); await load(); setRefreshing(false); }} tintColor={colors.chambray} />}>
-          {all.length === 0 ? (
+          {loadError && all.length > 0 && <View style={{ marginTop: spacing.sm }}><ErrorState compact onRetry={load} testID="journal-error" /></View>}
+          {loadError && all.length === 0 ? (
+            <ErrorState onRetry={load} testID="journal-error" />
+          ) : all.length === 0 ? (
             <View style={{ paddingVertical: spacing.xxxl, alignItems: 'center' }}>
               <Text style={styles.emptyTitle}>{t('Ton journal commence ici.')}</Text>
               <Text style={styles.emptySub}>{t('Une page lue, une humeur, une phrase qui reste : note-les au fil des jours.')}</Text>

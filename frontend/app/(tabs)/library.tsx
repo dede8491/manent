@@ -10,6 +10,8 @@ import { BookCover } from '@/src/components/BookCover';
 import { InfoTooltip } from '@/src/components/InfoTooltip';
 import { AddReadingSheet } from '@/src/components/AddReadingSheet';
 import { useT } from '@/src/i18n';
+import ManentLoader from '@/src/components/ManentLoader';
+import { ErrorState } from '@/src/components/ErrorState';
 
 type Book = {
   book_id: string;
@@ -78,13 +80,14 @@ export default function Library() {
   const [loading, setLoading] = useState(true);
   const [addSheet, setAddSheet] = useState(false);
 
-  useFocusEffect(useCallback(() => {
-    (async () => {
-      setLoading(true);
-      const r = await api<{ books: Book[] }>(`/books${filter ? `?status=${filter}` : ''}`);
-      setBooks(r.books); setLoading(false);
-    })();
-  }, [filter]));
+  const [loadError, setLoadError] = useState(false);
+  const load = useCallback(async () => {
+    setLoading(true);
+    try { const r = await api<{ books: Book[] }>(`/books${filter ? `?status=${filter}` : ''}`); setBooks(r.books); setLoadError(false); }
+    catch { setLoadError(true); }
+    finally { setLoading(false); }
+  }, [filter]);
+  useFocusEffect(useCallback(() => { load(); }, [load]));
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.glacier }} testID="screen-library">
@@ -128,7 +131,11 @@ export default function Library() {
           </Pressable>
         ) : null}
         ItemSeparatorComponent={() => <View style={{ height: spacing.md }} />}
-        ListEmptyComponent={loading ? null : (
+        ListEmptyComponent={loading ? (
+          <View style={{ alignItems: 'center', paddingVertical: spacing.xxxl }}><ManentLoader size={56} /></View>
+        ) : loadError ? (
+          <ErrorState onRetry={load} testID="library-error" />
+        ) : (
           <View style={{ alignItems: 'center', paddingVertical: spacing.xxxl }}>
             <Text style={styles.emptyTitle}>{t("Ta bibliothèque t'attend.")}</Text>
             <Text style={styles.emptySub}>{t('Ajoute ton premier livre ou une histoire Wattpad.')}</Text>

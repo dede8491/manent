@@ -195,7 +195,7 @@ export function QuotesManager({ initialBookId }: { initialBookId?: string | null
           <Pressable testID="mq-bulk-public" onPress={() => applyAction(selIds, 'public')} style={styles.bulkBtn}><Feather name="globe" size={16} color={colors.creme} /></Pressable>
           <Pressable testID="mq-bulk-private" onPress={() => applyAction(selIds, 'private')} style={styles.bulkBtn}><Feather name="lock" size={16} color={colors.creme} /></Pressable>
           <Pressable testID="mq-bulk-hide" onPress={() => applyAction(selIds, 'hide')} style={styles.bulkBtn}><Feather name="eye-off" size={16} color={colors.creme} /></Pressable>
-          <Pressable testID="mq-bulk-delete" onPress={() => startDelete(quotes.filter(q => selected.has(q.quote_id)))} style={[styles.bulkBtn, { backgroundColor: '#B3552F' }]}><Feather name="trash-2" size={16} color={colors.creme} /></Pressable>
+          <Pressable testID="mq-bulk-delete" onPress={() => startDelete(quotes.filter(q => selected.has(q.quote_id)))} style={[styles.bulkBtn, { backgroundColor: colors.danger }]}><Feather name="trash-2" size={16} color={colors.creme} /></Pressable>
           <Pressable testID="mq-bulk-cancel" onPress={() => setSelected(new Set())} style={styles.bulkGhost}><Text style={styles.bulkGhostText}>{t('Annuler')}</Text></Pressable>
         </View>
       )}
@@ -222,7 +222,7 @@ export function QuotesManager({ initialBookId }: { initialBookId?: string | null
                   <Feather name={menuFor.is_hidden ? 'eye' : 'eye-off'} size={16} color={colors.espresso} /><Text style={styles.menuText}>{menuFor.is_hidden ? t('Afficher') : t('Masquer')}</Text>
                 </Pressable>
                 <Pressable testID="mq-action-delete" onPress={() => startDelete([menuFor])} style={styles.menuRow}>
-                  <Feather name="trash-2" size={16} color="#B3552F" /><Text style={[styles.menuText, { color: '#B3552F' }]}>{t('Supprimer')}</Text>
+                  <Feather name="trash-2" size={16} color={colors.danger} /><Text style={[styles.menuText, { color: colors.danger }]}>{t('Supprimer')}</Text>
                 </Pressable>
               </>
             )}

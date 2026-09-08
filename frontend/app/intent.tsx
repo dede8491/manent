@@ -134,7 +134,7 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   example: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.bisque },
   exampleText: { fontFamily: fonts.display, fontSize: 15.5, color: colors.espresso, flex: 1 },
   hint: { fontFamily: fonts.body, fontSize: 12.5, color: colors.clay, lineHeight: 17, marginTop: spacing.md },
-  error: { fontFamily: fonts.body, fontSize: 13, color: '#B3552F', marginTop: spacing.md },
+  error: { fontFamily: fonts.body, fontSize: 13, color: colors.danger, marginTop: spacing.md },
   interp: { fontFamily: fonts.display, fontSize: 16, color: colors.espresso, fontStyle: 'italic', lineHeight: 22 },
   chip: { height: 28, paddingHorizontal: 10, borderRadius: radius.pill, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },
   chipText: { fontFamily: fonts.bodyMedium, fontSize: 11.5, color: colors.creme },

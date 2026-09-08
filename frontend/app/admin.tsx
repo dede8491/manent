@@ -133,6 +133,6 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   reportContent: { fontFamily: fonts.display, fontSize: 15, color: colors.espresso, lineHeight: 21, marginTop: 6 },
   ghostBtn: { height: 34, paddingHorizontal: 14, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center' },
   ghostBtnText: { fontFamily: fonts.body, fontSize: 12.5, color: colors.espresso },
-  dangerBtn: { height: 34, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: '#B3552F', flexDirection: 'row', alignItems: 'center', gap: 6, justifyContent: 'center' },
+  dangerBtn: { height: 34, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: colors.danger, flexDirection: 'row', alignItems: 'center', gap: 6, justifyContent: 'center' },
   dangerBtnText: { fontFamily: fonts.bodyMedium, fontSize: 12.5, color: colors.creme },
 });

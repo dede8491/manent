@@ -3236,23 +3236,58 @@ async def _watch_wattpad():
         await asyncio.sleep(12 * 3600)
 
 
+async def _idx(coll, keys, **opts):
+    """Crée un index sans jamais bloquer le démarrage (doublons historiques, options différentes…)."""
+    try:
+        await coll.create_index(keys, **opts)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("index %s %s ignoré : %s", coll.name, keys, e)
+
+
 @app.on_event("startup")
 async def on_startup():
-    await db.users.create_index("email", unique=True)
-    await db.users.create_index("user_id", unique=True)
-    await db.user_sessions.create_index("session_token", unique=True)
-    await db.user_sessions.create_index("expires_at", expireAfterSeconds=0)
-    await db.books.create_index("user_id")
-    await db.quotes.create_index("user_id")
-    await db.quotes.create_index("is_public")
-    await db.boards.create_index("members")
-    await db.follows.create_index([("follower_id", 1), ("followed_id", 1)], unique=True)
-    await db.follows.create_index("followed_id")
-    await db.boards.create_index("share_slug")
-    await db.boards.create_index("invite_code")
-    await db.invitations.create_index([("to_id", 1), ("status", 1)])
-    await db.quote_likes.create_index([("quote_id", 1), ("user_id", 1)], unique=True)
-    await db.quote_comments.create_index([("quote_id", 1), ("created_at", 1)])
+    await _idx(db.users, "email", unique=True)
+    await _idx(db.users, "user_id", unique=True)
+    await _idx(db.user_sessions, "session_token", unique=True)
+    await _idx(db.user_sessions, "expires_at", expireAfterSeconds=0)
+    await _idx(db.books, "user_id")
+    await _idx(db.quotes, "user_id")
+    await _idx(db.quotes, "is_public")
+    await _idx(db.boards, "members")
+    await _idx(db.follows, [("follower_id", 1), ("followed_id", 1)], unique=True)
+    await _idx(db.follows, "followed_id")
+    await _idx(db.boards, "share_slug")
+    await _idx(db.boards, "invite_code")
+    await _idx(db.invitations, [("to_id", 1), ("status", 1)])
+    await _idx(db.quote_likes, [("quote_id", 1), ("user_id", 1)], unique=True)
+    await _idx(db.quote_comments, [("quote_id", 1), ("created_at", 1)])
+    await _idx(db.books, "book_id", unique=True)
+    await _idx(db.books, [("user_id", 1), ("status", 1)])
+    await _idx(db.books, [("user_id", 1), ("updated_at", -1)])
+    await _idx(db.books, "isbn", sparse=True)
+    await _idx(db.books, "catalog_id", sparse=True)
+    await _idx(db.quotes, "quote_id", unique=True)
+    await _idx(db.quotes, "book_id", sparse=True)
+    await _idx(db.quotes, [("user_id", 1), ("created_at", -1)])
+    await _idx(db.quotes, [("is_public", 1), ("created_at", -1)])
+    await _idx(db.boards, "board_id", unique=True)
+    await _idx(db.board_quotes, "board_id")
+    await _idx(db.board_quotes, "quote_id")
+    await _idx(db.reading_events, [("user_id", 1), ("day", -1)], unique=True)
+    await _idx(db.clubs, "club_id", unique=True)
+    await _idx(db.clubs, "members")
+    await _idx(db.clubs, "code", sparse=True)
+    await _idx(db.club_messages, [("club_id", 1), ("created_at", 1)])
+    await _idx(db.club_readers, [("cb_id", 1), ("user_id", 1)])
+    await _idx(db.club_posts, [("cb_id", 1), ("created_at", -1)])
+    await _idx(db.club_comments, [("post_id", 1), ("created_at", 1)])
+    await _idx(db.club_reviews, "cb_id")
+    await _idx(db.llm_usage, [("user_id", 1), ("day", 1)], unique=True)
+    await _idx(db.flashcards, [("user_id", 1), ("book_id", 1)])
+    await _idx(db.recommendations, [("to_id", 1), ("status", 1)])
+    await _idx(db.book_summaries, "key")
+    await _idx(db.meta, "key")
+    await _idx(db.users, "handle", sparse=True)
     await journal.init()
     asyncio.get_event_loop().create_task(_watch_wattpad())
     asyncio.get_event_loop().create_task(_migrate_covers())
@@ -3281,10 +3316,15 @@ app.include_router(club_router)
 app.include_router(journal.router)
 app.include_router(journal.admin_router, dependencies=[Depends(require_admin)])
 app.include_router(api)
+# CORS : l'auth est un Bearer (pas de cookie), donc pas de credentials ; origines explicites via CORS_ORIGINS
+# (liste séparée par des virgules), à défaut l'URL publique, à défaut tout (aperçu Emergent, web local).
+_cors_origins = [o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()]
+if not _cors_origins and os.environ.get("PUBLIC_BASE_URL"):
+    _cors_origins = [os.environ["PUBLIC_BASE_URL"].rstrip("/")]
 app.add_middleware(
     CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=["*"],
+    allow_credentials=False,
+    allow_origins=_cors_origins or ["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )

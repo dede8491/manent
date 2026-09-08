@@ -9,6 +9,7 @@ import { QuoteCard, Quote } from '@/src/components/QuoteCard';
 import { api } from '@/src/api';
 import { BookCardFeed, AwardCard, CollectionCard } from '@/src/components/FeedCards';
 import ManentLoader from '@/src/components/ManentLoader';
+import { ErrorState } from '@/src/components/ErrorState';
 import { InfoTooltip } from '@/src/components/InfoTooltip';
 import { AreaCard } from '@/src/components/AreaCard';
 import { ClubCard } from '@/src/components/ClubCard';
@@ -32,28 +33,23 @@ export default function Discover() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [discover, setDiscover] = useState<any>(null);
+  const [loadError, setLoadError] = useState(false);
 
   const load = useCallback(async () => {
-    try {
-      const r = await api<{ quotes: Quote[] }>('/feed');
-      setQuotes(r.quotes);
-    } catch {}
-    try {
-      const d = await api<{ quote: Quote | null }>('/quotes/daily');
-      setDaily(d.quote);
-    } catch {}
-    try {
-      setDiscover(await api<any>('/home/discover'));
-    } catch {}
-    try {
-      const pc = await api<{ clubs: any[] }>('/clubs/discover');
-      setPubClubs(pc.clubs || []);
-    } catch {}
-    try {
-      const fy = await api<{ books: any[]; total: number }>('/catalog/for-you?page=1&size=10');
-      setForYou(fy.books || []);
-      setForYouTotal(fy.total || 0);
-    } catch {}
+    // Cinq requêtes indépendantes en parallèle (avant : en série, cinq fois plus lent)
+    const [feed, dq, disc, pc, fy] = await Promise.allSettled([
+      api<{ quotes: Quote[] }>('/feed'),
+      api<{ quote: Quote | null }>('/quotes/daily'),
+      api<any>('/home/discover'),
+      api<{ clubs: any[] }>('/clubs/discover'),
+      api<{ books: any[]; total: number }>('/catalog/for-you?page=1&size=10'),
+    ]);
+    if (feed.status === 'fulfilled') setQuotes(feed.value.quotes);
+    if (dq.status === 'fulfilled') setDaily(dq.value.quote);
+    if (disc.status === 'fulfilled') setDiscover(disc.value);
+    if (pc.status === 'fulfilled') setPubClubs(pc.value.clubs || []);
+    if (fy.status === 'fulfilled') { setForYou(fy.value.books || []); setForYouTotal(fy.value.total || 0); }
+    setLoadError([feed, dq, disc, pc, fy].every(r => r.status === 'rejected'));
   }, []);
 
   const likeQuote = async (quoteId: string) => {
@@ -157,6 +153,7 @@ export default function Discover() {
         contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + 80 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.chambray} />}
       >
+        {loadError && !loading && <View style={{ marginBottom: spacing.lg }}><ErrorState compact onRetry={() => { setLoading(true); load().finally(() => setLoading(false)); }} testID="discover-error" /></View>}
         <View style={styles.shortcuts} testID="discover-shortcuts">
           {([['quotes', 'feather', 'Citations'], ['community', 'bookmark', 'Communauté'], ['queue', 'list', 'Lecture suivante']] as const).map(([key, icon, label]) => (
             <Pressable key={key} testID={`discover-shortcut-${key}`} onPress={() => router.push(key === 'queue' ? '/queue' : `/(tabs)/${key}`)} style={styles.shortcut}>

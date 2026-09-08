@@ -16,6 +16,9 @@ export const darkColors: Palette = {
   borderSoft: '#5E4437',
   darkCard: '#4A2E23',
   darkBg: '#2D1913',
+  danger: '#E08A66',
+  success: '#8FBF9C',
+  overlay: 'rgba(0,0,0,0.55)',
 };
 
 const KEY = 'manent_scheme';

@@ -118,7 +118,7 @@ export function ClassificationAdmin({ openId, onOpened }: { openId?: string | nu
             </Text>
             {conflicts.length > 0 && (
               <View style={styles.conflict} testID="admin-cls-conflict">
-                <Feather name="alert-triangle" size={14} color="#B3552F" />
+                <Feather name="alert-triangle" size={14} color={colors.danger} />
                 <Text style={styles.conflictText}>
                   {conflicts.map(c => t('Conflit sur {d} : donnée structurée {a}, IA {b} ({p} %). La donnée structurée est conservée.', {
                     d: t(DIM_LABELS[c.dim] || c.dim), a: (c.structured || []).map((k: string) => tax?.labels?.[c.dim]?.[k] || k).join(', '),
