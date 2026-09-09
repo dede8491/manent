@@ -20,12 +20,13 @@ import routes.catalog as catalog  # noqa: E402
 import routes.classification as classification  # noqa: E402
 import routes.club as club  # noqa: E402
 import routes.share as share  # noqa: E402
+import routes.push as push  # noqa: E402
 
 
 @pytest.fixture
 def fake_db(monkeypatch):
     db = AsyncMongoMockClient()["manent_test"]
-    for mod in (deps, server, journal, catalog, classification, club, share):
+    for mod in (deps, server, journal, catalog, classification, club, share, push):
         if hasattr(mod, "db"):
             monkeypatch.setattr(mod, "db", db)
     return db
@@ -120,3 +121,14 @@ async def test_upload_rejects_non_images(client):
     png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
     r = await client.post("/api/upload", headers=headers, files={"file": ("x.bin", png, "application/octet-stream")})
     assert r.status_code == 200 and r.json()["url"].startswith("data:image/png")
+
+
+async def test_notification_center(client, fake_db):
+    headers, user = await register(client, "n@manent-tests.org", "Nora")
+    await push.store_notifications([user["user_id"]], {"title": "Léa", "message": "a aimé ta citation", "data": {"type": "quote_like", "quote_id": "q1"}}, idempotency_key="like_q1_x")
+    await push.store_notifications([user["user_id"]], {"title": "Léa", "message": "a aimé ta citation", "data": {"type": "quote_like", "quote_id": "q1"}}, idempotency_key="like_q1_x")
+    b = await client.get("/api/notifications/badge", headers=headers)
+    assert b.status_code == 200 and b.json()["unread"] == 1, "idempotent : une seule notification pour la même clé"
+    r = await client.get("/api/notifications", headers=headers)
+    assert r.status_code == 200 and r.json()["notifications"][0]["action_url"] == "/quote/q1"
+    assert (await client.get("/api/notifications/badge", headers=headers)).json()["unread"] == 0, "lue une fois la liste ouverte"

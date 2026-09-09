@@ -48,19 +48,15 @@ export default function Profile() {
   const [clubSummary, setClubSummary] = useState<{ joined: number; reading: number; finished: number } | null>(null);
   const [badges, setBadges] = useState<{ id: string; title: string; desc: string; icon: string; earned: boolean }[]>([]);
   const [adminBadge, setAdminBadge] = useState(0);
-  const [recoBadge, setRecoBadge] = useState(0);
-  const [invBadge, setInvBadge] = useState(0);
   const [follows, setFollows] = useState<{ followers_count: number; following_count: number } | null>(null);
 
   useFocusEffect(React.useCallback(() => {
     (async () => {
       // Toutes les requêtes du profil en parallèle (avant : neuf appels en série)
       const isAdmin = !!(user as any)?.is_admin;
-      const [prem, adm, reco, inv, fol, club, bdg, bk, qt, bd] = await Promise.allSettled([
+      const [prem, adm, fol, club, bdg, bk, qt, bd] = await Promise.allSettled([
         api<any>('/premium/status'),
         isAdmin ? api<{ total: number }>('/admin/badge') : Promise.reject(new Error('skip')),
-        api<{ unread: number }>('/recommendations/badge'),
-        api<{ unread: number }>('/invitations/badge'),
         api<any>('/me/follows'),
         api<any>('/club/me/summary'),
         api<{ badges: any[] }>('/badges'),
@@ -70,8 +66,6 @@ export default function Profile() {
       ]);
       if (prem.status === 'fulfilled') setPremium(prem.value);
       if (adm.status === 'fulfilled') setAdminBadge(adm.value.total || 0);
-      if (reco.status === 'fulfilled') setRecoBadge(reco.value.unread || 0);
-      if (inv.status === 'fulfilled') setInvBadge(inv.value.unread || 0);
       if (fol.status === 'fulfilled') setFollows(fol.value);
       if (club.status === 'fulfilled') setClubSummary(club.value);
       if (bdg.status === 'fulfilled') setBadges(bdg.value.badges);
@@ -96,7 +90,7 @@ export default function Profile() {
         <InfoTooltip
           testID="info-profile"
           title={t('Comment ça marche')}
-          text={t("Tes livres, citations, tableaux et sujets, tes badges. Ta série de jours, ta semaine et ton objectif sont sur l'accueil. « Reçus » rassemble les invitations et les livres que des lectrices t'ont envoyés ; « Partager ma bibliothèque » crée un lien ou une image pour tes réseaux. Tape sur ton avatar pour changer ta photo, et sur Paramètres pour la langue, le mode sombre et la confidentialité.")}
+          text={t("Tes livres, citations, tableaux et sujets, tes badges. Ta série de jours, ta semaine et ton objectif sont sur l'accueil. Les invitations et les livres que des lectrices t'ont envoyés sont dans la cloche de l'accueil ; « Partager ma bibliothèque » crée un lien ou une image pour tes réseaux. Tape sur ton avatar pour changer ta photo, et sur Paramètres pour la langue, le mode sombre et la confidentialité.")}
         />
       </View>
       <View style={styles.header}>
@@ -181,10 +175,6 @@ export default function Profile() {
       </View>
 
       <View style={{ paddingHorizontal: spacing.xl, gap: spacing.sm, marginTop: spacing.lg }}>
-        <Pressable testID="row-inbox" onPress={() => router.push('/inbox')} accessibilityRole="button" style={styles.row}>
-          <Feather name="inbox" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Reçus')}</Text>
-          {(recoBadge + invBadge) > 0 && <View style={styles.badgeDot} testID="inbox-badge"><Text style={styles.badgeDotText}>{(recoBadge + invBadge) > 99 ? '99+' : recoBadge + invBadge}</Text></View>}
-        </Pressable>
         <Pressable testID="row-share-profile" onPress={shareProfile} style={styles.row}><Feather name="user-plus" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Partager mon profil')}</Text></Pressable>
         <Pressable testID="row-share-library" onPress={() => router.push('/share-library')} style={styles.row}><Feather name="share-2" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Partager ma bibliothèque')}</Text></Pressable>
         {(user as any)?.is_admin && (

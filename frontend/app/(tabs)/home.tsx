@@ -36,6 +36,7 @@ export default function Home() {
   const [nextUp, setNextUp] = useState<any>(null);
   const [reading, setReading] = useState<any>(null);
   const [goalSheet, setGoalSheet] = useState(false);
+  const [unread, setUnread] = useState(0);
   const [goalInput, setGoalInput] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [birthModal, setBirthModal] = useState(false);
@@ -43,10 +44,11 @@ export default function Home() {
   const [birthSaving, setBirthSaving] = useState(false);
 
   const load = useCallback(async () => {
-    const [h, d, r] = await Promise.allSettled([api<JournalHome>('/journal/home'), api<any>('/home/discover'), api<any>('/stats/reading')]);
+    const [h, d, r, n] = await Promise.allSettled([api<JournalHome>('/journal/home'), api<any>('/home/discover'), api<any>('/stats/reading'), api<{ unread: number }>('/notifications/badge')]);
     if (h.status === 'fulfilled') { setHome(h.value); setLoadError(false); } else setLoadError(true);
     if (d.status === 'fulfilled') setNextUp(d.value?.next_up || null);
     if (r.status === 'fulfilled') setReading(r.value);
+    if (n.status === 'fulfilled') setUnread(n.value.unread || 0);
   }, []);
   useFocusEffect(useCallback(() => { flush().then(load); }, [load, flush]));
   const onRefresh = async () => { setRefreshing(true); await flush(); await load(); setRefreshing(false); };
@@ -106,8 +108,12 @@ export default function Home() {
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
         <Wordmark size={19} variant="horizontal" />
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-          <Pressable testID="home-search" onPress={() => router.push('/search')} style={styles.iconBtn} hitSlop={6}>
+          <Pressable testID="home-search" onPress={() => router.push('/search')} accessibilityRole="button" accessibilityLabel={t('Rechercher')} style={styles.iconBtn} hitSlop={6}>
             <Feather name="search" size={19} color={colors.espresso} />
+          </Pressable>
+          <Pressable testID="home-notifications" onPress={() => router.push('/inbox')} accessibilityRole="button" accessibilityLabel={unread > 0 ? t('{n} notifications non lues', { n: unread }) : t('Notifications')} style={styles.iconBtn} hitSlop={6}>
+            <Feather name="bell" size={19} color={colors.espresso} />
+            {unread > 0 && <View style={styles.bellBadge} testID="home-notifications-badge"><Text style={styles.bellBadgeText}>{unread > 99 ? '99+' : unread}</Text></View>}
           </Pressable>
           <InfoTooltip
             testID="info-home"
@@ -296,7 +302,9 @@ export default function Home() {
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingBottom: spacing.sm },
-  iconBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  bellBadge: { position: 'absolute', top: 4, right: 2, minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 4, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },
+  bellBadgeText: { fontFamily: fonts.bodyMedium, fontSize: 9.5, color: colors.creme },
   greeting: { fontFamily: fonts.displayMedium, fontSize: 28, color: colors.espresso },
   streak: { fontFamily: fonts.body, fontSize: 13.5, color: colors.clay, marginTop: 2, marginBottom: spacing.lg },
   outbox: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.bisque, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.md },

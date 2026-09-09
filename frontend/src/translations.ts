@@ -1319,4 +1319,10 @@ export const EN: Record<string, string> = {
   'Ta fiche de fin de livre, à partager': 'Your end-of-book card, to share',
   'Mon évolution': 'My progress',
   'Pages lues par jour cette semaine': 'Pages read per day this week',
+  'Notifications': 'Notifications',
+  '{n} notifications non lues': '{n} unread notifications',
+  'Activité': 'Activity',
+  'Déjà vues': 'Already seen',
+  'Les cœurs et commentaires sur tes citations, les nouvelles abonnées, tes clubs, les invitations et les livres qu’on te recommande arrivent ici.': 'Hearts and comments on your quotes, new followers, your clubs, invitations and books recommended to you arrive here.',
+  'Tes livres, citations, tableaux et sujets, tes badges. Ta série de jours, ta semaine et ton objectif sont sur l\'accueil. Les invitations et les livres que des lectrices t\'ont envoyés sont dans la cloche de l\'accueil ; « Partager ma bibliothèque » crée un lien ou une image pour tes réseaux. Tape sur ton avatar pour changer ta photo, et sur Paramètres pour la langue, le mode sombre et la confidentialité.': 'Your books, quotes, boards and topics, your badges. Your streak, week and goal live on the home screen. Invitations and books other readers sent you are in the home bell; “Share my library” creates a link or an image for your networks. Tap your avatar to change your photo, and Settings for language, dark mode and privacy.',
 };

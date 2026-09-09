@@ -2923,6 +2923,25 @@ async def create_invitation(body: InvitationBody, user=Depends(get_current_user)
     return {"ok": True, "invite_id": inv["invite_id"]}
 
 
+# ============ Centre de notifications ============
+@api.get("/notifications")
+async def list_notifications(user=Depends(get_current_user)):
+    """Cinquante dernières notifications (likes, commentaires, abonnements, clubs, invitations…) ; ouvrir la liste marque tout comme lu."""
+    rows = await db.notifications.find({"user_id": user["user_id"]}, {"_id": 0, "key": 0}).sort("created_at", -1).to_list(50)
+    await db.notifications.update_many({"user_id": user["user_id"], "read": False}, {"$set": {"read": True}})
+    return {"notifications": rows}
+
+
+@api.get("/notifications/badge")
+async def notifications_badge(user=Depends(get_current_user)):
+    """Pastille de la cloche de l'accueil : notifications non lues + invitations et recommandations en attente non lues."""
+    uid = user["user_id"]
+    n = await db.notifications.count_documents({"user_id": uid, "read": False})
+    inv = await db.invitations.count_documents({"to_id": uid, "status": "pending", "read": False})
+    reco = await db.recommendations.count_documents({"to_id": uid, "read": False, "status": "pending"})
+    return {"unread": n + inv + reco, "notifications": n, "invitations": inv, "recommendations": reco}
+
+
 @api.get("/invitations/badge")
 async def invitations_badge(user=Depends(get_current_user)):
     return {"unread": await db.invitations.count_documents({"to_id": user["user_id"], "status": "pending", "read": False})}
@@ -3247,6 +3266,9 @@ async def on_startup():
     await _idx(db.book_summaries, "key")
     await _idx(db.meta, "key")
     await _idx(db.users, "handle", sparse=True)
+    await _idx(db.notifications, [("user_id", 1), ("created_at", -1)])
+    await _idx(db.notifications, [("user_id", 1), ("read", 1)])
+    await _idx(db.notifications, [("user_id", 1), ("key", 1)], unique=True, partialFilterExpression={"key": {"$type": "string"}})
     await _idx(db.login_attempts, "email", unique=True)
     await _idx(db.login_attempts, "first_at", expireAfterSeconds=LOGIN_WINDOW_S)
     await journal.init()
