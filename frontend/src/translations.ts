@@ -1317,4 +1317,6 @@ export const EN: Record<string, string> = {
   'Garde une trace de tout ce que tu lis et ressens : ton livre en cours, quelques mots chaque jour, tes citations, et une fiche à garder quand tu tournes la dernière page.': 'Keep a trace of everything you read and feel: your current book, a few words each day, your quotes, and a card to keep when you turn the last page.',
   'Ton journal, une entrée par jour': 'Your journal, one entry a day',
   'Ta fiche de fin de livre, à partager': 'Your end-of-book card, to share',
+  'Mon évolution': 'My progress',
+  'Pages lues par jour cette semaine': 'Pages read per day this week',
 };
