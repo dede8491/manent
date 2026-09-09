@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, Platform, Image, Share } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Platform, Image, Share } from 'react-native';
 import { shareUrl } from '@/src/share';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -46,10 +46,7 @@ export default function Profile() {
   const [premium, setPremium] = useState<{ is_premium: boolean; plan?: string | null; captures_used: number; captures_limit: number } | null>(null);
   const [stats, setStats] = useState({ books: 0, quotes: 0, boards: 0 });
   const [clubSummary, setClubSummary] = useState<{ joined: number; reading: number; finished: number } | null>(null);
-  const [reading, setReading] = useState<any>(null);
   const [badges, setBadges] = useState<{ id: string; title: string; desc: string; icon: string; earned: boolean }[]>([]);
-  const [goalModal, setGoalModal] = useState(false);
-  const [goalInput, setGoalInput] = useState('');
   const [adminBadge, setAdminBadge] = useState(0);
   const [recoBadge, setRecoBadge] = useState(0);
   const [invBadge, setInvBadge] = useState(0);
@@ -59,14 +56,13 @@ export default function Profile() {
     (async () => {
       // Toutes les requêtes du profil en parallèle (avant : neuf appels en série)
       const isAdmin = !!(user as any)?.is_admin;
-      const [prem, adm, reco, inv, fol, club, read, bdg, bk, qt, bd] = await Promise.allSettled([
+      const [prem, adm, reco, inv, fol, club, bdg, bk, qt, bd] = await Promise.allSettled([
         api<any>('/premium/status'),
         isAdmin ? api<{ total: number }>('/admin/badge') : Promise.reject(new Error('skip')),
         api<{ unread: number }>('/recommendations/badge'),
         api<{ unread: number }>('/invitations/badge'),
         api<any>('/me/follows'),
         api<any>('/club/me/summary'),
-        api<any>('/stats/reading'),
         api<{ badges: any[] }>('/badges'),
         api<{ books: any[] }>('/books'),
         api<{ quotes: any[] }>('/quotes'),
@@ -78,7 +74,6 @@ export default function Profile() {
       if (inv.status === 'fulfilled') setInvBadge(inv.value.unread || 0);
       if (fol.status === 'fulfilled') setFollows(fol.value);
       if (club.status === 'fulfilled') setClubSummary(club.value);
-      if (read.status === 'fulfilled') setReading(read.value);
       if (bdg.status === 'fulfilled') setBadges(bdg.value.badges);
       if (bk.status === 'fulfilled' && qt.status === 'fulfilled' && bd.status === 'fulfilled') {
         setStats({ books: bk.value.books.length, quotes: qt.value.quotes.length, boards: bd.value.boards.length });
@@ -101,7 +96,7 @@ export default function Profile() {
         <InfoTooltip
           testID="info-profile"
           title={t('Comment ça marche')}
-          text={t("Tes statistiques, ta série de jours, ton objectif de l'année et tes badges. « Reçus » rassemble les invitations et les livres que des lectrices t'ont envoyés ; « Partager ma bibliothèque » crée un lien ou une image pour tes réseaux. Tape sur ton avatar pour changer ta photo, et sur Paramètres pour la langue, le mode sombre et la confidentialité.")}
+          text={t("Tes livres, citations, tableaux et sujets, tes badges. Ta série de jours, ta semaine et ton objectif sont sur l'accueil. « Reçus » rassemble les invitations et les livres que des lectrices t'ont envoyés ; « Partager ma bibliothèque » crée un lien ou une image pour tes réseaux. Tape sur ton avatar pour changer ta photo, et sur Paramètres pour la langue, le mode sombre et la confidentialité.")}
         />
       </View>
       <View style={styles.header}>
@@ -149,67 +144,6 @@ export default function Profile() {
           </View>
           <Feather name="chevron-right" size={18} color={colors.clay} />
         </Pressable>
-      )}
-
-      {reading && (
-        <View style={styles.readingCard} testID="reading-stats">
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-            <View style={styles.streakBox}>
-              <Text style={styles.streakNum}>{reading.streak}</Text>
-              <Text style={styles.streakLbl}>{t(reading.streak > 1 ? 'jours d’affilée' : 'jour d’affilée')}</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.readingTitle}>{t('Ta semaine de lecture')}</Text>
-              <Text style={styles.readingSub}>{`${reading.week_pages} ${t(reading.week_pages > 1 ? 'pages lues' : 'page lue')} · ${reading.active_days_month} ${t(reading.active_days_month > 1 ? 'jours actifs' : 'jour actif')} ${t('ce mois-ci')}`}</Text>
-            </View>
-          </View>
-          <View style={styles.weekRow}>
-            {reading.week.map((d: any, i: number) => {
-              const max = Math.max(1, ...reading.week.map((x: any) => x.pages));
-              const h = d.pages > 0 ? Math.max(8, Math.round((d.pages / max) * 44)) : (d.active ? 8 : 3);
-              return (
-                <View key={i} style={styles.dayCol}>
-                  <View style={styles.barTrack}>
-                    <View style={[styles.bar, { height: h }, d.active && { backgroundColor: colors.chambray }]} />
-                  </View>
-                  <Text style={styles.dayLbl}>{d.label}</Text>
-                </View>
-              );
-            })}
-          </View>
-        </View>
-      )}
-
-      {reading && (
-        <Pressable testID="row-retrospective" onPress={() => router.push({ pathname: '/journal/retrospective', params: { year: String(reading.year) } })} accessibilityRole="button" style={styles.retroRow}>
-          <Feather name="calendar" size={16} color={colors.chambray} />
-          <Text style={styles.retroText}>{t('Ma rétrospective {year}', { year: reading.year })}</Text>
-          <Feather name="chevron-right" size={16} color={colors.clay} />
-        </Pressable>
-      )}
-
-      {reading && (
-        <View style={styles.goalCard} testID="goal-card">
-          <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
-            <Text style={styles.readingTitle}>{t('Objectif {year}', { year: reading.year })}</Text>
-            <Pressable testID="goal-edit" onPress={() => { setGoalInput(reading.yearly_goal ? String(reading.yearly_goal) : ''); setGoalModal(true); }} hitSlop={8}>
-              <Text style={styles.goalEdit}>{reading.yearly_goal ? t('Modifier') : t('Fixer un objectif')}</Text>
-            </Pressable>
-          </View>
-          {reading.yearly_goal ? (
-            <>
-              <View style={styles.goalBar}>
-                <View style={[styles.goalFill, { width: `${Math.min(100, Math.round((reading.books_year / reading.yearly_goal) * 100))}%` }]} />
-              </View>
-              <Text style={styles.goalText} testID="goal-text">
-                {t('{done} / {goal} livres terminés', { done: reading.books_year, goal: reading.yearly_goal })}
-                {reading.books_year >= reading.yearly_goal ? t('  ·  Objectif atteint.') : ''}
-              </Text>
-            </>
-          ) : (
-            <Text style={styles.readingSub}>{t('Combien de livres cette année ? Fixe ton cap, la jauge suivra.')}</Text>
-          )}
-        </View>
       )}
 
       {badges.length > 0 && (
@@ -264,34 +198,6 @@ export default function Profile() {
         <Pressable testID="row-signout" onPress={signOut} style={styles.row}><Feather name="log-out" size={18} color={colors.espresso} /><Text style={styles.rowLabel}>{t('Se déconnecter')}</Text></Pressable>
       </View>
 
-      <BottomSheet visible={goalModal} onClose={() => setGoalModal(false)} title={t('Objectif de l’année')} subtitle={t('Un cap réaliste vaut mieux qu’un record : combien de livres cette année ?')} testID="sheet-goal">
-            <TextInput
-              testID="goal-input"
-              value={goalInput} onChangeText={setGoalInput}
-              keyboardType="number-pad"
-              placeholder="12"
-              placeholderTextColor={colors.clay}
-              style={styles.goalInput}
-              autoFocus
-            />
-            <Pressable
-              testID="goal-save"
-              disabled={!goalInput || parseInt(goalInput, 10) < 1}
-              onPress={async () => {
-                const g = parseInt(goalInput, 10);
-                if (!g || g < 1) return;
-                await api('/me/goal', { method: 'PATCH', body: JSON.stringify({ yearly_goal: g }) });
-                setReading((r: any) => ({ ...r, yearly_goal: g }));
-                setGoalModal(false);
-              }}
-              style={[styles.goalSaveBtn, (!goalInput || parseInt(goalInput, 10) < 1) && { opacity: 0.5 }]}
-            >
-              <Text style={styles.goalSaveText}>{t('Enregistrer')}</Text>
-            </Pressable>
-            <Pressable testID="goal-cancel" onPress={() => setGoalModal(false)} style={{ alignSelf: 'center', padding: spacing.sm }}>
-              <Text style={styles.goalEdit}>{t('Annuler')}</Text>
-            </Pressable>
-      </BottomSheet>
     </ScrollView>
   );
 }
@@ -311,35 +217,16 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   followNum: { fontFamily: fonts.bodyMedium, color: colors.espresso },
   followDot: { fontFamily: fonts.body, fontSize: 13, color: colors.clay },
   statLbl: { fontFamily: fonts.bodyMedium, fontSize: 8.5, color: colors.clay, letterSpacing: 0.4, textTransform: 'uppercase', marginTop: 2, textAlign: 'center' },
-  retroRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: spacing.xl, marginTop: spacing.sm, paddingVertical: 10, paddingHorizontal: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft },
-  retroText: { flex: 1, fontFamily: fonts.bodyMedium, fontSize: 13.5, color: colors.espresso },
-  readingCard: { marginHorizontal: spacing.xl, marginTop: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },
-  clubCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginHorizontal: spacing.xl, marginTop: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },
-  clubIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },
-  streakBox: { width: 84, alignItems: 'center', paddingVertical: spacing.sm, backgroundColor: colors.bisque, borderRadius: radius.md },
-  streakNum: { fontFamily: fonts.displayMedium, fontSize: 30, color: colors.espresso, lineHeight: 34 },
-  streakLbl: { fontFamily: fonts.bodyMedium, fontSize: 8.5, color: colors.clay, letterSpacing: 1, textTransform: 'uppercase', textAlign: 'center' },
   readingTitle: { fontFamily: fonts.displayMedium, fontSize: 18, color: colors.espresso },
   readingSub: { fontFamily: fonts.body, fontSize: 12, color: colors.clay, marginTop: 2, lineHeight: 17 },
-  weekRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.md, paddingHorizontal: spacing.xs },
-  dayCol: { alignItems: 'center', gap: 4, flex: 1 },
-  barTrack: { height: 48, justifyContent: 'flex-end' },
-  bar: { width: 14, borderRadius: 3, backgroundColor: colors.borderSoft },
-  dayLbl: { fontFamily: fonts.bodyMedium, fontSize: 9, color: colors.clay, letterSpacing: 0.5, textTransform: 'uppercase' },
+  clubCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginHorizontal: spacing.xl, marginTop: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },
+  clubIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },
   badgesLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase', paddingHorizontal: spacing.xl, marginBottom: spacing.sm },
   badge: { width: 128, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md, alignItems: 'center' },
   badgeLocked: { opacity: 0.55 },
   badgeIcon: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.glacier, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm },
   badgeTitle: { fontFamily: fonts.displayMedium, fontSize: 15, color: colors.espresso, textAlign: 'center' },
   badgeDesc: { fontFamily: fonts.body, fontSize: 10.5, color: colors.clay, textAlign: 'center', marginTop: 2, lineHeight: 14 },
-  goalCard: { marginHorizontal: spacing.xl, marginTop: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },
-  goalEdit: { fontFamily: fonts.body, fontSize: 12, color: colors.clay, textDecorationLine: 'underline' },
-  goalBar: { height: 8, backgroundColor: colors.glacier, borderRadius: 4, overflow: 'hidden', marginTop: spacing.sm },
-  goalFill: { height: 8, backgroundColor: colors.chambray },
-  goalText: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1, textTransform: 'uppercase', marginTop: 6 },
-  goalInput: { height: 56, borderWidth: 1, borderColor: colors.borderSoft, borderRadius: radius.md, paddingHorizontal: spacing.md, fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso, backgroundColor: colors.creme, marginTop: spacing.md, textAlign: 'center' },
-  goalSaveBtn: { height: 52, borderRadius: radius.md, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center', marginTop: spacing.md },
-  goalSaveText: { fontFamily: fonts.bodyMedium, fontSize: 15, color: colors.creme },
   premium: { margin: spacing.xl, padding: spacing.lg, backgroundColor: colors.bisque, borderRadius: radius.md },
   premiumTitle: { fontFamily: fonts.displayMedium, fontSize: 22, color: colors.espresso },
   premiumText: { fontFamily: fonts.body, fontSize: 13, color: colors.espresso, marginTop: spacing.xs, lineHeight: 20 },

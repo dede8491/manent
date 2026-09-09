@@ -14,6 +14,7 @@ import ManentLoader from '@/src/components/ManentLoader';
 import { ErrorState } from '@/src/components/ErrorState';
 import { InfoTooltip } from '@/src/components/InfoTooltip';
 import { WelcomeTour } from '@/src/components/WelcomeTour';
+import { BottomSheet } from '@/src/components/BottomSheet';
 import { useT, useLang } from '@/src/i18n';
 import { dayLabel, JournalHome, moodOf, useOutbox } from '@/src/journal';
 
@@ -34,6 +35,8 @@ export default function Home() {
   const [loadError, setLoadError] = useState(false);
   const [nextUp, setNextUp] = useState<any>(null);
   const [reading, setReading] = useState<any>(null);
+  const [goalSheet, setGoalSheet] = useState(false);
+  const [goalInput, setGoalInput] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [birthModal, setBirthModal] = useState(false);
   const [birth, setBirth] = useState('');
@@ -235,9 +238,9 @@ export default function Home() {
                     );
                   })}
                 </View>
-                <Pressable testID="home-goal" onPress={() => router.push('/(tabs)/profile')} accessibilityRole="button" style={styles.goalRow}>
+                <Pressable testID="home-goal" onPress={() => { setGoalInput(reading.yearly_goal ? String(reading.yearly_goal) : ''); setGoalSheet(true); }} accessibilityRole="button" style={styles.goalRow}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.evoSub}>{t('Objectif {year}', { year: reading.year })}{reading.yearly_goal ? ` · ${t('{done} / {goal} livres terminés', { done: reading.books_year, goal: reading.yearly_goal })}` : ` · ${t('Fixer un objectif')}`}</Text>
+                    <Text style={styles.evoSub}>{t('Objectif {year}', { year: reading.year })}{reading.yearly_goal ? ` · ${t('{done} / {goal} livres terminés', { done: reading.books_year, goal: reading.yearly_goal })}${reading.books_year >= reading.yearly_goal ? t('  ·  Objectif atteint.') : ''}` : ` · ${t('Fixer un objectif')}`}</Text>
                     {reading.yearly_goal ? <View style={styles.goalBar}><View style={[styles.goalFill, { width: `${Math.min(100, Math.round((reading.books_year / reading.yearly_goal) * 100))}%` }]} /></View> : null}
                   </View>
                   <Feather name="chevron-right" size={14} color={colors.clay} />
@@ -253,6 +256,23 @@ export default function Home() {
 
         </ScrollView>
       )}
+
+      <BottomSheet visible={goalSheet} onClose={() => setGoalSheet(false)} title={t('Objectif de l’année')} subtitle={t('Un cap réaliste vaut mieux qu’un record : combien de livres cette année ?')} testID="sheet-goal" scroll={false}>
+        <TextInput testID="goal-input" value={goalInput} onChangeText={v => setGoalInput(v.replace(/\D/g, ''))} keyboardType="number-pad" placeholder="12" placeholderTextColor={colors.clay} style={styles.goalInput} autoFocus accessibilityLabel={t('Nombre de livres')} />
+        <Pressable
+          testID="goal-save"
+          disabled={!goalInput || parseInt(goalInput, 10) < 1}
+          accessibilityRole="button"
+          onPress={async () => {
+            const g = parseInt(goalInput, 10);
+            if (!g || g < 1) return;
+            try { await api('/me/goal', { method: 'PATCH', body: JSON.stringify({ yearly_goal: g }) }); setReading((r: any) => ({ ...r, yearly_goal: g })); setGoalSheet(false); } catch {}
+          }}
+          style={[styles.goalSaveBtn, (!goalInput || parseInt(goalInput, 10) < 1) && { opacity: 0.5 }]}
+        >
+          <Text style={styles.goalSaveText}>{t('Enregistrer')}</Text>
+        </Pressable>
+      </BottomSheet>
 
       <Modal visible={birthModal} transparent animationType="fade" onRequestClose={skipBirth}>
         <View style={styles.birthOverlay}>
@@ -322,6 +342,9 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   goalRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: spacing.md, paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.borderSoft },
   goalBar: { height: 6, backgroundColor: colors.glacier, borderRadius: 3, overflow: 'hidden', marginTop: 6 },
   goalFill: { height: 6, backgroundColor: colors.chambray },
+  goalInput: { height: 56, borderWidth: 1, borderColor: colors.borderSoft, borderRadius: radius.md, paddingHorizontal: spacing.md, fontFamily: fonts.displayMedium, fontSize: 22, color: colors.espresso, backgroundColor: colors.creme, textAlign: 'center' },
+  goalSaveBtn: { height: 48, borderRadius: radius.pill, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center', marginTop: spacing.md },
+  goalSaveText: { fontFamily: fonts.bodyMedium, fontSize: 15, color: colors.creme },
   retroRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: spacing.md },
   retroText: { flex: 1, fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.espresso },
   birthOverlay: { flex: 1, backgroundColor: 'rgba(58,33,25,0.4)', justifyContent: 'center', padding: spacing.xl },
