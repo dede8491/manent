@@ -251,15 +251,6 @@ export default function Home() {
             </>
           )}
 
-          <View style={styles.links}>
-            <Pressable testID="home-open-journal" onPress={() => router.push('/(tabs)/journal')} style={styles.linkBtn}>
-              <Feather name="book-open" size={15} color={colors.espresso} /><Text style={styles.linkText}>{t('Mon journal')}</Text>
-              {home.entries_total > 0 && <Text style={styles.linkCount}>{home.entries_total}</Text>}
-            </Pressable>
-            <Pressable testID="home-open-discover" onPress={() => router.push('/(tabs)/discover')} style={styles.linkBtn}>
-              <Feather name="compass" size={15} color={colors.espresso} /><Text style={styles.linkText}>{t('Découvrir')}</Text>
-            </Pressable>
-          </View>
         </ScrollView>
       )}
 
@@ -333,10 +324,6 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   goalFill: { height: 6, backgroundColor: colors.chambray },
   retroRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: spacing.md },
   retroText: { flex: 1, fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.espresso },
-  links: { flexDirection: 'row', gap: 8, marginTop: spacing.lg },
-  linkBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 42, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, backgroundColor: colors.creme },
-  linkText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.espresso },
-  linkCount: { fontFamily: fonts.body, fontSize: 12, color: colors.clay },
   birthOverlay: { flex: 1, backgroundColor: 'rgba(58,33,25,0.4)', justifyContent: 'center', padding: spacing.xl },
   birthModal: { backgroundColor: colors.glacier, borderRadius: 20, padding: spacing.xl },
   birthTitle: { fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso },
