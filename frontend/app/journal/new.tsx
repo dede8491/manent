@@ -24,7 +24,7 @@ export default function JournalNew() {
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const params = useLocalSearchParams<{ book_id?: string; page?: string; quote_id?: string; entry_id?: string; from?: string }>();
+  const params = useLocalSearchParams<{ book_id?: string; page?: string; quote_id?: string; entry_id?: string }>();
   const editing = !!params.entry_id;
 
   const [books, setBooks] = useState<Book[] | null>(null);

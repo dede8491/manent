@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useCallback, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Modal } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -24,6 +24,7 @@ export function QuotesManager({ initialBookId }: { initialBookId?: string | null
   const [search, setSearch] = useState('');
   const [vis, setVis] = useState<VisFilter>('toutes');
   const [bookFilter, setBookFilter] = useState<string | null>(initialBookId || null);
+  useEffect(() => { setBookFilter(initialBookId || null); }, [initialBookId]);
   const [themeFilter, setThemeFilter] = useState<string | null>(null);
   const [grid, setGrid] = useState(false);
   const [menuFor, setMenuFor] = useState<Q | null>(null);

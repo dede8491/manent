@@ -34,38 +34,30 @@ export default function AddBook() {
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const params = useLocalSearchParams<{ title?: string; author?: string; cover?: string; q?: string; isbn?: string; pages?: string; year?: string; method?: string; scan?: string; type?: string; chapters?: string; wattpad_url?: string; catalog_id?: string }>();
+  const params = useLocalSearchParams<{ title?: string; author?: string; cover?: string; isbn?: string; pages?: string; year?: string; method?: string; scan?: string; catalog_id?: string }>();
   const [method, setMethod] = useState<Method>(params.method === 'isbn' ? 'isbn' : params.method === 'wattpad' ? 'wattpad' : 'title');
   const selectedRef = useRef(false);
 
-  // Préremplissage depuis une suggestion (page thème, recherche accueil, feuille Ajouter une lecture)
+  // Préremplissage depuis une suggestion (page thème, recherche, fiche catalogue)
   useEffect(() => {
     if (params.title && !selectedRef.current) {
       selectedRef.current = true;
-      const isWp = params.type === 'wattpad';
       setSelected({
         title: params.title,
-        type: isWp ? 'wattpad' : undefined,
         catalog_id: params.catalog_id || undefined,
         author: params.author || null,
         cover: params.cover || null,
         isbn: params.isbn || null,
         pages: params.pages ? parseInt(String(params.pages), 10) || null : null,
-        chapters: params.chapters ? parseInt(String(params.chapters), 10) || null : null,
-        wattpad_url: isWp ? params.wattpad_url || null : undefined,
         year: params.year || null,
       });
-    }
-    if (params.q && !selectedRef.current) {
-      selectedRef.current = true;
-      setQuery(String(params.q));
     }
     if (params.scan === '1' && !selectedRef.current) {
       selectedRef.current = true;
       startScan();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.title, params.q, params.scan]);
+  }, [params.title, params.scan]);
 
   // Recherche par titre en direct
   const [query, setQuery] = useState('');

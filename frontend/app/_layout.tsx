@@ -102,7 +102,7 @@ function NavGate() {
   // Lot A4 : un lien profond ouvert sans compte est mémorisé, puis appliqué après l'onboarding.
   const pathname = usePathname();
   const gparams = useGlobalSearchParams<{ follow?: string; edit?: string; code?: string }>();
-  const isDeepLink = (p: string) => /^\/(q|b|c)\//.test(p) || p.startsWith('/@') || p.startsWith('/api/s/');
+  const isDeepLink = (p: string) => /^\/(q|b|c|t)\//.test(p) || p.startsWith('/@') || p.startsWith('/api/s/');
   const normalizeDeepLink = (p: string) => {
     let x = p.replace(/^\/api\/s/, '');
     if (x.startsWith('/u/')) x = '/@' + x.slice(3);

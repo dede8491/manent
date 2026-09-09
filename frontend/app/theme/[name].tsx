@@ -154,7 +154,7 @@ export default function ThemePage() {
                 <Pressable
                   key={b.catalog_id || i}
                   testID={`theme-discover-${i}`}
-                  onPress={() => router.push({ pathname: '/discover/book', params: { title: b.title, author: b.author || '', cover: b.cover || '', year: b.year || '', summary: b.summary || '' } })}
+                  onPress={() => router.push({ pathname: '/discover/book', params: { catalog_id: b.catalog_id || '', title: b.title, author: b.author || '', cover: b.cover || '', year: b.year || '', summary: b.summary || '' } })}
                   style={[styles.suggestCard, { width: gridCardW }]}
                 >
                   <Image source={{ uri: b.cover }} style={[styles.suggestCover, { height: gridCardW * 1.4 }]} resizeMode="cover" />

@@ -101,7 +101,7 @@ export default function Home() {
     if (home.active_days_week === 1) return t('Un jour de lecture cette semaine. Chaque page compte.');
     return t('Une page suffit pour commencer aujourd’hui.');
   })();
-  const writeEntry = () => router.push({ pathname: '/journal/new', params: book ? { book_id: book.book_id, from: 'home' } : { from: 'home' } });
+  const writeEntry = () => router.push({ pathname: '/journal/new', params: book ? { book_id: book.book_id } : {} });
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.glacier }} testID="screen-home">

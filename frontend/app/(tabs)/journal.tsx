@@ -27,14 +27,14 @@ export default function JournalTab() {
   const { pending, flush } = useOutbox();
   const params = useLocalSearchParams<{ book_id?: string; segment?: string }>();
   const [segment, setSegment] = useState<'entries' | 'quotes'>(params.segment === 'citations' ? 'quotes' : 'entries');
-  useEffect(() => { if (params.segment) setSegment(params.segment === 'citations' ? 'quotes' : 'entries'); }, [params.segment]);
   const [addSheet, setAddSheet] = useState(false);
   const [entries, setEntries] = useState<Entry[] | null>(null);
   const [local, setLocal] = useState<Entry[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [total, setTotal] = useState(0);
-  const [bookFilter, setBookFilter] = useState<string | null>(null);
-  useEffect(() => { if (params.book_id) setBookFilter(params.book_id); }, [params.book_id]);
+  const [bookFilter, setBookFilter] = useState<string | null>(params.book_id || null);
+  // Filtre et segment ré-appliqués à chaque arrivée avec des paramètres (même livre deux fois de suite compris)
+  useFocusEffect(useCallback(() => { if (params.book_id) setBookFilter(params.book_id); if (params.segment) setSegment(params.segment === 'citations' ? 'quotes' : 'entries'); }, [params.book_id, params.segment]));
   const [books, setBooks] = useState<Record<string, any>>({});
   const [refreshing, setRefreshing] = useState(false);
   const [more, setMore] = useState(false);
