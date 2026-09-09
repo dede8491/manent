@@ -209,7 +209,7 @@ export default function AddBook() {
           <Feather name="chevron-left" size={22} color={colors.espresso} />
         </Pressable>
         <Text style={styles.h1}>{t('Ajouter une lecture')}</Text>
-        <View style={{ width: 40 }} />
+        <View style={{ width: 44 }} />
       </View>
 
       <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + spacing.xxl }} keyboardShouldPersistTaps="handled">
@@ -430,7 +430,7 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   limitGhost: { height: 44, alignItems: 'center', justifyContent: 'center', marginTop: spacing.sm },
   limitGhostText: { fontFamily: fonts.bodyMedium, fontSize: 13.5, color: colors.chambray },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSoft },
-  iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   h1: { fontFamily: fonts.displayMedium, fontSize: 20, color: colors.espresso },
   tab: { flex: 1, height: 40, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.creme },
   tabActive: { backgroundColor: colors.espresso, borderColor: colors.espresso },

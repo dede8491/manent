@@ -54,7 +54,7 @@ export default function AdminDashboard() {
           <Feather name="chevron-left" size={22} color={colors.espresso} />
         </Pressable>
         <Text style={styles.h1}>{t('Dashboard admin')}</Text>
-        <View style={{ width: 40 }} />
+        <View style={{ width: 44 }} />
       </View>
       {denied ? (
         <Text style={styles.denied}>{t('Réservé à l’administratrice du Club.')}</Text>
@@ -115,7 +115,7 @@ export default function AdminDashboard() {
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingBottom: spacing.sm },
-  iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   h1: { fontFamily: fonts.displayMedium, fontSize: 20, color: colors.espresso },
   denied: { fontFamily: fonts.body, fontSize: 14, color: colors.clay, textAlign: 'center', marginTop: spacing.xxl },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
@@ -133,6 +133,6 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   reportContent: { fontFamily: fonts.display, fontSize: 15, color: colors.espresso, lineHeight: 21, marginTop: 6 },
   ghostBtn: { height: 34, paddingHorizontal: 14, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center' },
   ghostBtnText: { fontFamily: fonts.body, fontSize: 12.5, color: colors.espresso },
-  dangerBtn: { height: 34, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: '#B3552F', flexDirection: 'row', alignItems: 'center', gap: 6, justifyContent: 'center' },
+  dangerBtn: { height: 34, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: colors.danger, flexDirection: 'row', alignItems: 'center', gap: 6, justifyContent: 'center' },
   dangerBtnText: { fontFamily: fonts.bodyMedium, fontSize: 12.5, color: colors.creme },
 });

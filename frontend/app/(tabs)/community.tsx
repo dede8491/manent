@@ -11,6 +11,8 @@ import { ClubHome } from '@/src/components/ClubHome';
 import { InfoTooltip } from '@/src/components/InfoTooltip';
 import { BottomSheet } from '@/src/components/BottomSheet';
 import { useT } from '@/src/i18n';
+import ManentLoader from '@/src/components/ManentLoader';
+import { ErrorState } from '@/src/components/ErrorState';
 
 type Board = {
   board_id: string;
@@ -45,10 +47,17 @@ export default function Community() {
   const [readers, setReaders] = useState<any[]>([]);
   const [followedSet, setFollowedSet] = useState<Set<string>>(new Set());
 
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const load = useCallback(async () => {
-    const r = await api<{ boards: Board[] }>('/boards'); setBoards(r.boards);
-    try { const c = await api<{ clubs: any[] }>('/clubs'); setClubs(c.clubs); } catch {}
-    try { const s = await api<{ readers: any[] }>('/readers/suggestions'); setReaders(s.readers); } catch {}
+    const [b, c, r] = await Promise.allSettled([
+      api<{ boards: Board[] }>('/boards'), api<{ clubs: any[] }>('/clubs'), api<{ readers: any[] }>('/readers/suggestions'),
+    ]);
+    if (b.status === 'fulfilled') setBoards(b.value.boards);
+    if (c.status === 'fulfilled') setClubs(c.value.clubs);
+    if (r.status === 'fulfilled') setReaders(r.value.readers);
+    setLoadError(b.status === 'rejected');
+    setLoading(false);
   }, []);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -171,7 +180,11 @@ export default function Community() {
             <Text style={styles.meta}>{item.visibility === 'private' ? t('PRIVÉ') : item.visibility === 'public' ? t('PUBLIC') : t('COLLABORATIF')} · {t('{n} épingles', { n: item.pins_count || 0 })}</Text>
           </Pressable>
         )}
-        ListEmptyComponent={(
+        ListEmptyComponent={loading ? (
+          <View style={{ alignItems: 'center', paddingTop: spacing.xxxl }}><ManentLoader size={56} /></View>
+        ) : loadError ? (
+          <ErrorState onRetry={load} testID="community-error" />
+        ) : (
           <View style={{ alignItems: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.xxxl }}>
             <Text style={styles.emptyTitle}>{t("Ton premier tableau t'attend.")}</Text>
             <Text style={styles.emptySub}>{t("Rassemble tes citations autour d'un thème.")}</Text>

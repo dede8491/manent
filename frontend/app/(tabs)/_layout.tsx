@@ -4,12 +4,14 @@ import { StyleSheet, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/src/themeCtx';
+import { useT } from '@/src/i18n';
 
 // Barre : Accueil (journal du jour), Journal, Bibliothèque, Découvrir, Profil.
-// Citations et Communauté restent des écrans de l'app (accessibles depuis Découvrir) sans bouton dans la barre.
+// Les citations vivent dans Journal (segment). Communauté reste un écran masqué de la barre (Découvrir, Profil).
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
+  const t = useT();
   const tabBarHeight = 60;
   return (
     <Tabs
@@ -28,11 +30,11 @@ export default function TabsLayout() {
         sceneStyle: { backgroundColor: colors.glacier },
       }}
     >
-      <Tabs.Screen name="home" options={{ tabBarIcon: ({ color }) => <Feather name="home" size={22} color={color} /> }} />
-      <Tabs.Screen name="journal" options={{ tabBarIcon: ({ color }) => <Feather name="edit-3" size={22} color={color} /> }} />
-      <Tabs.Screen name="library" options={{ tabBarIcon: ({ color }) => <Feather name="book" size={22} color={color} /> }} />
-      <Tabs.Screen name="discover" options={{ tabBarIcon: ({ color }) => <Feather name="compass" size={22} color={color} /> }} />
-      <Tabs.Screen name="profile" options={{ tabBarIcon: ({ color }) => <Feather name="user" size={22} color={color} /> }} />
+      <Tabs.Screen name="home" options={{ title: t('Accueil'), tabBarAccessibilityLabel: t('Accueil'), tabBarIcon: ({ color }) => <Feather name="home" size={22} color={color} /> }} />
+      <Tabs.Screen name="journal" options={{ title: t('Journal'), tabBarAccessibilityLabel: t('Journal'), tabBarIcon: ({ color }) => <Feather name="edit-3" size={22} color={color} /> }} />
+      <Tabs.Screen name="library" options={{ title: t('Bibliothèque'), tabBarAccessibilityLabel: t('Bibliothèque'), tabBarIcon: ({ color }) => <Feather name="book" size={22} color={color} /> }} />
+      <Tabs.Screen name="discover" options={{ title: t('Découvrir'), tabBarAccessibilityLabel: t('Découvrir'), tabBarIcon: ({ color }) => <Feather name="compass" size={22} color={color} /> }} />
+      <Tabs.Screen name="profile" options={{ title: t('Profil'), tabBarAccessibilityLabel: t('Profil'), tabBarIcon: ({ color }) => <Feather name="user" size={22} color={color} /> }} />
       <Tabs.Screen name="quotes" options={{ href: null }} />
       <Tabs.Screen name="community" options={{ href: null }} />
     </Tabs>

@@ -7,10 +7,10 @@ import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
 import { QuoteCard, Quote } from '@/src/components/QuoteCard';
 import { api } from '@/src/api';
-import { BookCardFeed, AwardCard, CollectionCard } from '@/src/components/FeedCards';
+import { BookCardFeed, CollectionCard } from '@/src/components/FeedCards';
 import ManentLoader from '@/src/components/ManentLoader';
+import { ErrorState } from '@/src/components/ErrorState';
 import { InfoTooltip } from '@/src/components/InfoTooltip';
-import { AreaCard } from '@/src/components/AreaCard';
 import { ClubCard } from '@/src/components/ClubCard';
 import { useT } from '@/src/i18n';
 
@@ -23,7 +23,6 @@ export default function Discover() {
   const { width } = useWindowDimensions();
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [themes, setThemes] = useState<string[]>([]);
-  const [areas, setAreas] = useState<any[]>([]);
   const [pubClubs, setPubClubs] = useState<any[]>([]);
   const [joiningClub, setJoiningClub] = useState<string | null>(null);
   const [forYou, setForYou] = useState<any[]>([]);
@@ -32,28 +31,23 @@ export default function Discover() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [discover, setDiscover] = useState<any>(null);
+  const [loadError, setLoadError] = useState(false);
 
   const load = useCallback(async () => {
-    try {
-      const r = await api<{ quotes: Quote[] }>('/feed');
-      setQuotes(r.quotes);
-    } catch {}
-    try {
-      const d = await api<{ quote: Quote | null }>('/quotes/daily');
-      setDaily(d.quote);
-    } catch {}
-    try {
-      setDiscover(await api<any>('/home/discover'));
-    } catch {}
-    try {
-      const pc = await api<{ clubs: any[] }>('/clubs/discover');
-      setPubClubs(pc.clubs || []);
-    } catch {}
-    try {
-      const fy = await api<{ books: any[]; total: number }>('/catalog/for-you?page=1&size=10');
-      setForYou(fy.books || []);
-      setForYouTotal(fy.total || 0);
-    } catch {}
+    // Cinq requêtes indépendantes en parallèle (avant : en série, cinq fois plus lent)
+    const [feed, dq, disc, pc, fy] = await Promise.allSettled([
+      api<{ quotes: Quote[] }>('/feed'),
+      api<{ quote: Quote | null }>('/quotes/daily'),
+      api<any>('/home/discover'),
+      api<{ clubs: any[] }>('/clubs/discover'),
+      api<{ books: any[]; total: number }>('/catalog/for-you?page=1&size=10'),
+    ]);
+    if (feed.status === 'fulfilled') setQuotes(feed.value.quotes);
+    if (dq.status === 'fulfilled') setDaily(dq.value.quote);
+    if (disc.status === 'fulfilled') setDiscover(disc.value);
+    if (pc.status === 'fulfilled') setPubClubs(pc.value.clubs || []);
+    if (fy.status === 'fulfilled') { setForYou(fy.value.books || []); setForYouTotal(fy.value.total || 0); }
+    setLoadError([feed, dq, disc, pc, fy].every(r => r.status === 'rejected'));
   }, []);
 
   const likeQuote = async (quoteId: string) => {
@@ -88,10 +82,6 @@ export default function Discover() {
       } catch {
         try { setThemes((await api<{ themes: string[] }>('/themes')).themes); } catch {}
       }
-      try {
-        const ar = await api<{ areas: any[] }>('/catalog/areas');
-        setAreas(ar.areas || []);
-      } catch {}
       await load();
       setLoading(false);
     })();
@@ -115,15 +105,15 @@ export default function Discover() {
           <InfoTooltip
             testID="info-home"
             title={t('Comment ça marche')}
-            text={t("« Pour toi » te propose des livres d'après tes sujets, les origines de tes auteurs, tes clubs et les lectrices que tu suis : « Pas pour moi » affine les prochaines propositions. Plus bas, les origines, les clubs publics, ta citation du matin et le fil des lectrices. L'icône de scan identifie un livre par son code-barres.")}
+            text={t("Cherche par mots ou décris ton envie. « Pour toi » propose des livres d'après tes sujets, les origines de tes auteurs et les lectrices que tu suis : « Pas pour moi » affine les prochaines propositions. Puis ta citation du matin, le fil des lectrices, les collections, les plus lus et les clubs publics. L'icône de scan identifie un livre par son code-barres.")}
           />
         </View>
         <View style={[styles.searchRow, { flexDirection: 'row', gap: 8, alignItems: 'center' }]}>
-          <Pressable testID="home-search" onPress={() => router.push('/search')} style={[styles.search, { flex: 1 }]}>
+          <Pressable testID="home-search" onPress={() => router.push('/search')} accessibilityRole="search" style={[styles.search, { flex: 1 }]}>
             <Feather name="search" size={16} color={colors.clay} />
             <Text style={styles.searchPlaceholder}>{t('Cherche une citation, un livre, un lecteur…')}</Text>
           </Pressable>
-          <Pressable testID="home-scan" onPress={() => router.push('/discover/scan')} style={styles.scanBtn}>
+          <Pressable testID="home-scan" onPress={() => router.push('/discover/scan')} accessibilityRole="button" accessibilityLabel={t('Scanner un code-barres')} style={styles.scanBtn}>
             <Feather name="maximize" size={17} color={colors.espresso} />
           </Pressable>
         </View>
@@ -142,49 +132,17 @@ export default function Discover() {
             </Pressable>
           </ScrollView>
         </View>
-        <Pressable testID="home-intent" onPress={() => router.push('/intent')} style={({ pressed }) => [styles.intentCard, pressed && { opacity: 0.9 }]}>
-          <View style={styles.intentIcon}><Feather name="feather" size={16} color={colors.creme} /></View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.intentTitle}>{t('Je cherche un livre qui…')}</Text>
-            <Text style={styles.intentSub} numberOfLines={1}>{t('Décris ton envie, Manent trouve le livre.')}</Text>
-          </View>
-          <Pressable testID="home-filters" onPress={() => router.push('/filters')} hitSlop={8} style={styles.intentFilters}>
-            <Feather name="sliders" size={14} color={colors.espresso} />
-          </Pressable>
+        <Pressable testID="home-intent" onPress={() => router.push({ pathname: '/search', params: { mode: 'envie' } })} accessibilityRole="button" style={styles.intentLink}>
+          <Feather name="feather" size={14} color={colors.chambray} />
+          <Text style={styles.intentLinkText}>{t('Je cherche un livre qui…')}</Text>
+          <Text style={styles.intentLinkSub} numberOfLines={1}>{t('Décris ton envie, Manent trouve le livre.')}</Text>
         </Pressable>
       </View>
       <ScrollView
         contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + 80 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.chambray} />}
       >
-        <View style={styles.shortcuts} testID="discover-shortcuts">
-          {([['quotes', 'feather', 'Citations'], ['community', 'bookmark', 'Communauté'], ['queue', 'list', 'Lecture suivante']] as const).map(([key, icon, label]) => (
-            <Pressable key={key} testID={`discover-shortcut-${key}`} onPress={() => router.push(key === 'queue' ? '/queue' : `/(tabs)/${key}`)} style={styles.shortcut}>
-              <Feather name={icon} size={16} color={colors.espresso} />
-              <Text style={styles.shortcutText}>{t(label)}</Text>
-            </Pressable>
-          ))}
-        </View>
-        {areas.length > 0 && (
-          <View style={{ marginBottom: spacing.lg }} testID="home-areas">
-            <Text style={styles.areasLabel}>{t('Par origine')}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>
-              {areas.map((a: any) => (
-                <AreaCard key={a.key} testID={`area-card-${a.key}`} label={a.label} count={a.count} onPress={() => router.push({ pathname: '/browse', params: { f: JSON.stringify({ continent: [a.key] }), title: a.label } })} />
-              ))}
-            </ScrollView>
-          </View>
-        )}
-        {pubClubs.length > 0 && (
-          <View style={{ marginBottom: spacing.lg }} testID="home-public-clubs">
-            <Text style={styles.areasLabel}>{t('Clubs publics à rejoindre')}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>
-              {pubClubs.slice(0, 8).map((c: any) => (
-                <ClubCard key={c.club_id} testID={`home-club-${c.club_id}`} club={c} joining={joiningClub === c.club_id} onJoin={() => joinPublicClub(c.club_id)} />
-              ))}
-            </ScrollView>
-          </View>
-        )}
+        {loadError && !loading && <View style={{ marginBottom: spacing.lg }}><ErrorState compact onRetry={() => { setLoading(true); load().finally(() => setLoading(false)); }} testID="discover-error" /></View>}
         {forYou.length > 0 && (
           <View style={{ marginBottom: spacing.lg }} testID="home-for-you">
             <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
@@ -244,18 +202,6 @@ export default function Discover() {
           </View>
         )}
 
-        {discover?.awarded?.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>{t('Livres primés')}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.md }}>
-              {discover.awarded.map((b: any, i: number) => (
-                <AwardCard key={i} testID={`award-${i}`} {...b}
-                  onPress={() => router.push({ pathname: '/discover/book', params: { title: b.title, author: b.author || '', cover: b.cover || '', year: b.year || '', prize: `${b.prize} ${b.year}` } })} />
-              ))}
-            </ScrollView>
-          </View>
-        )}
-
         {discover?.popular?.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>{discover.popular_scope === 'all' ? t('Les plus lus sur Manent') : t('Les plus lus cette semaine')}</Text>
@@ -281,13 +227,15 @@ export default function Discover() {
           </View>
         )}
 
-        {discover?.new_books?.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>{t('Nouveautés')}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.md }}>
-              {discover.new_books.map((b: any, i: number) => (
-                <BookCardFeed key={i} testID={`new-${i}`} {...b}
-                  onPress={() => router.push({ pathname: '/discover/book', params: { title: b.title, author: b.author || '', cover: b.cover || '', year: b.year || '', summary: b.summary || '' } })} />
+        {pubClubs.length > 0 && (
+          <View style={{ marginTop: spacing.xl }} testID="home-public-clubs">
+            <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
+              <Text style={styles.areasLabel}>{t('Clubs publics à rejoindre')}</Text>
+              <Pressable testID="home-community" onPress={() => router.push('/(tabs)/community')} hitSlop={8} accessibilityRole="button"><Text style={styles.seeAll}>{t('Mes tableaux et clubs')}</Text></Pressable>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>
+              {pubClubs.slice(0, 8).map((c: any) => (
+                <ClubCard key={c.club_id} testID={`home-club-${c.club_id}`} club={c} joining={joiningClub === c.club_id} onJoin={() => joinPublicClub(c.club_id)} />
               ))}
             </ScrollView>
           </View>
@@ -300,9 +248,6 @@ export default function Discover() {
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   screenTitle: { fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso },
-  shortcuts: { flexDirection: 'row', gap: 8, marginBottom: spacing.lg },
-  shortcut: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 40, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, backgroundColor: colors.creme },
-  shortcutText: { fontFamily: fonts.bodyMedium, fontSize: 12, color: colors.espresso },
   header: { paddingHorizontal: 0, paddingBottom: spacing.sm, backgroundColor: colors.glacier, gap: spacing.md },
   searchRow: { paddingHorizontal: spacing.xl },
   search: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 44, paddingHorizontal: spacing.md, backgroundColor: colors.creme, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft },
@@ -310,11 +255,9 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   scanBtn: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: colors.creme, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center' },
   dailyLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: spacing.sm },
   chipRow: { height: 44 },
-  intentCard: { marginHorizontal: spacing.xl, flexDirection: 'row', alignItems: 'center', gap: 12, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.bisque },
-  intentIcon: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },
-  intentTitle: { fontFamily: fonts.displayMedium, fontSize: 17, color: colors.espresso },
-  intentSub: { fontFamily: fonts.body, fontSize: 12, color: colors.clay, marginTop: 1 },
-  intentFilters: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.creme, alignItems: 'center', justifyContent: 'center' },
+  intentLink: { marginHorizontal: spacing.xl, flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
+  intentLinkText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.chambray },
+  intentLinkSub: { flex: 1, fontFamily: fonts.body, fontSize: 12, color: colors.clay },
   areasLabel: { fontFamily: fonts.displayMedium, fontSize: 21, color: colors.espresso, marginBottom: spacing.md },
   seeAll: { fontFamily: fonts.bodyMedium, fontSize: 12.5, color: colors.chambray },
   reason: { fontFamily: fonts.body, fontSize: 10.5, color: colors.chambray, marginTop: 3, lineHeight: 14 },

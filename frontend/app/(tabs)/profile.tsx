@@ -57,24 +57,32 @@ export default function Profile() {
 
   useFocusEffect(React.useCallback(() => {
     (async () => {
-      try { setPremium(await api('/premium/status')); } catch {}
-      if ((user as any)?.is_admin) {
-        try { const b = await api<{ total: number }>('/admin/badge'); setAdminBadge(b.total || 0); } catch {}
+      // Toutes les requêtes du profil en parallèle (avant : neuf appels en série)
+      const isAdmin = !!(user as any)?.is_admin;
+      const [prem, adm, reco, inv, fol, club, read, bdg, bk, qt, bd] = await Promise.allSettled([
+        api<any>('/premium/status'),
+        isAdmin ? api<{ total: number }>('/admin/badge') : Promise.reject(new Error('skip')),
+        api<{ unread: number }>('/recommendations/badge'),
+        api<{ unread: number }>('/invitations/badge'),
+        api<any>('/me/follows'),
+        api<any>('/club/me/summary'),
+        api<any>('/stats/reading'),
+        api<{ badges: any[] }>('/badges'),
+        api<{ books: any[] }>('/books'),
+        api<{ quotes: any[] }>('/quotes'),
+        api<{ boards: any[] }>('/boards'),
+      ]);
+      if (prem.status === 'fulfilled') setPremium(prem.value);
+      if (adm.status === 'fulfilled') setAdminBadge(adm.value.total || 0);
+      if (reco.status === 'fulfilled') setRecoBadge(reco.value.unread || 0);
+      if (inv.status === 'fulfilled') setInvBadge(inv.value.unread || 0);
+      if (fol.status === 'fulfilled') setFollows(fol.value);
+      if (club.status === 'fulfilled') setClubSummary(club.value);
+      if (read.status === 'fulfilled') setReading(read.value);
+      if (bdg.status === 'fulfilled') setBadges(bdg.value.badges);
+      if (bk.status === 'fulfilled' && qt.status === 'fulfilled' && bd.status === 'fulfilled') {
+        setStats({ books: bk.value.books.length, quotes: qt.value.quotes.length, boards: bd.value.boards.length });
       }
-      try { const r = await api<{ unread: number }>('/recommendations/badge'); setRecoBadge(r.unread || 0); } catch {}
-      try { const r = await api<{ unread: number }>('/invitations/badge'); setInvBadge(r.unread || 0); } catch {}
-      try { setFollows(await api('/me/follows')); } catch {}
-      try { setClubSummary(await api('/club/me/summary')); } catch {}
-      try { setReading(await api('/stats/reading')); } catch {}
-      try { const b = await api<{ badges: any[] }>('/badges'); setBadges(b.badges); } catch {}
-      try {
-        const [b, q, t] = await Promise.all([
-          api<{ books: any[] }>('/books'),
-          api<{ quotes: any[] }>('/quotes'),
-          api<{ boards: any[] }>('/boards'),
-        ]);
-        setStats({ books: b.books.length, quotes: q.quotes.length, boards: t.boards.length });
-      } catch {}
     })();
   }, []));
   const shareProfile = async () => {
@@ -93,7 +101,7 @@ export default function Profile() {
         <InfoTooltip
           testID="info-profile"
           title={t('Comment ça marche')}
-          text={t("Tes statistiques, ta série de jours, ton objectif de l'année et tes badges. « Recommandations » rassemble les livres que des lectrices t'ont envoyés ; « Partager ma bibliothèque » crée un lien ou une image pour tes réseaux. Tape sur ton avatar pour changer ta photo, et sur Paramètres pour la langue, le mode sombre et la confidentialité.")}
+          text={t("Tes statistiques, ta série de jours, ton objectif de l'année et tes badges. « Reçus » rassemble les invitations et les livres que des lectrices t'ont envoyés ; « Partager ma bibliothèque » crée un lien ou une image pour tes réseaux. Tape sur ton avatar pour changer ta photo, et sur Paramètres pour la langue, le mode sombre et la confidentialité.")}
         />
       </View>
       <View style={styles.header}>
@@ -173,6 +181,14 @@ export default function Profile() {
       )}
 
       {reading && (
+        <Pressable testID="row-retrospective" onPress={() => router.push({ pathname: '/journal/retrospective', params: { year: String(reading.year) } })} accessibilityRole="button" style={styles.retroRow}>
+          <Feather name="calendar" size={16} color={colors.chambray} />
+          <Text style={styles.retroText}>{t('Ma rétrospective {year}', { year: reading.year })}</Text>
+          <Feather name="chevron-right" size={16} color={colors.clay} />
+        </Pressable>
+      )}
+
+      {reading && (
         <View style={styles.goalCard} testID="goal-card">
           <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
             <Text style={styles.readingTitle}>{t('Objectif {year}', { year: reading.year })}</Text>
@@ -231,13 +247,9 @@ export default function Profile() {
       </View>
 
       <View style={{ paddingHorizontal: spacing.xl, gap: spacing.sm, marginTop: spacing.lg }}>
-        <Pressable testID="row-recommendations" onPress={() => router.push('/recommendations')} style={styles.row}>
-          <Feather name="gift" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Recommandations')}</Text>
-          {recoBadge > 0 && <View style={styles.badgeDot} testID="reco-badge"><Text style={styles.badgeDotText}>{recoBadge > 99 ? '99+' : recoBadge}</Text></View>}
-        </Pressable>
-        <Pressable testID="row-invitations" onPress={() => router.push('/invitations')} style={styles.row}>
-          <Feather name="mail" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Invitations')}</Text>
-          {invBadge > 0 && <View style={styles.badgeDot} testID="inv-badge"><Text style={styles.badgeDotText}>{invBadge > 99 ? '99+' : invBadge}</Text></View>}
+        <Pressable testID="row-inbox" onPress={() => router.push('/inbox')} accessibilityRole="button" style={styles.row}>
+          <Feather name="inbox" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Reçus')}</Text>
+          {(recoBadge + invBadge) > 0 && <View style={styles.badgeDot} testID="inbox-badge"><Text style={styles.badgeDotText}>{(recoBadge + invBadge) > 99 ? '99+' : recoBadge + invBadge}</Text></View>}
         </Pressable>
         <Pressable testID="row-share-profile" onPress={shareProfile} style={styles.row}><Feather name="user-plus" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Partager mon profil')}</Text></Pressable>
         <Pressable testID="row-share-library" onPress={() => router.push('/share-library')} style={styles.row}><Feather name="share-2" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Partager ma bibliothèque')}</Text></Pressable>
@@ -299,6 +311,8 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   followNum: { fontFamily: fonts.bodyMedium, color: colors.espresso },
   followDot: { fontFamily: fonts.body, fontSize: 13, color: colors.clay },
   statLbl: { fontFamily: fonts.bodyMedium, fontSize: 8.5, color: colors.clay, letterSpacing: 0.4, textTransform: 'uppercase', marginTop: 2, textAlign: 'center' },
+  retroRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: spacing.xl, marginTop: spacing.sm, paddingVertical: 10, paddingHorizontal: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft },
+  retroText: { flex: 1, fontFamily: fonts.bodyMedium, fontSize: 13.5, color: colors.espresso },
   readingCard: { marginHorizontal: spacing.xl, marginTop: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },
   clubCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginHorizontal: spacing.xl, marginTop: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },
   clubIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },

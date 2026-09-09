@@ -235,7 +235,7 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   sectionTitle: { fontFamily: fonts.displayMedium, fontSize: 21, color: colors.espresso, marginTop: spacing.xl, marginBottom: spacing.sm },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   statCard: { width: '30%', flexGrow: 1, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.sm, alignItems: 'center' },
-  statWarn: { borderColor: '#B3552F' },
+  statWarn: { borderColor: colors.danger },
   statNum: { fontFamily: fonts.displayMedium, fontSize: 20, color: colors.espresso },
   statLabel: { fontFamily: fonts.bodyMedium, fontSize: 8.5, color: colors.clay, letterSpacing: 0.8, textTransform: 'uppercase', marginTop: 2, textAlign: 'center' },
   meta: { fontFamily: fonts.body, fontSize: 11.5, color: colors.clay, marginTop: spacing.sm, lineHeight: 16 },

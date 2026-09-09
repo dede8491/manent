@@ -68,7 +68,7 @@ export function UsersAdmin() {
           </View>
           {!u.is_admin && !u.is_me && (
             <Pressable testID={`admin-user-delete-${u.handle}`} onPress={() => setTarget(u)} style={styles.trashBtn} hitSlop={6}>
-              <Feather name="trash-2" size={15} color="#B3552F" />
+              <Feather name="trash-2" size={15} color={colors.danger} />
             </Pressable>
           )}
         </View>
@@ -113,6 +113,6 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   help: { fontFamily: fonts.body, fontSize: 12.5, color: colors.clay, lineHeight: 17, marginBottom: spacing.xs },
   ghostBtn: { height: 38, paddingHorizontal: 16, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center' },
   ghostText: { fontFamily: fonts.body, fontSize: 13, color: colors.espresso },
-  dangerBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 38, paddingHorizontal: 16, borderRadius: radius.pill, backgroundColor: '#B3552F' },
+  dangerBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 38, paddingHorizontal: 16, borderRadius: radius.pill, backgroundColor: colors.danger },
   dangerText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.creme },
 });

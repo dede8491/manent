@@ -10,6 +10,7 @@ import { api } from '@/src/api';
 import { BookCover } from '@/src/components/BookCover';
 import { BottomSheet } from '@/src/components/BottomSheet';
 import ManentLoader from '@/src/components/ManentLoader';
+import { ScreenHeader } from '@/src/components/ScreenHeader';
 import { useT } from '@/src/i18n';
 
 type Book = { book_id: string; title: string; author?: string; cover?: string | null; pages?: number | null; queue_position?: number | null };
@@ -93,13 +94,7 @@ export default function QueueScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.glacier }} testID="screen-queue">
-      <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-        <Pressable onPress={() => router.back()} testID="queue-back" style={styles.iconBtn}>
-          <Feather name="chevron-left" size={22} color={colors.espresso} />
-        </Pressable>
-        <Text style={styles.headerLabel}>{t('Liste de lecture')}</Text>
-        <View style={{ width: 40 }} />
-      </View>
+      <ScreenHeader title={t('Liste de lecture')} backTestID="queue-back" />
 
       {loading ? (
         <View style={{ paddingTop: spacing.xxl, alignItems: 'center' }}><ManentLoader size={48} /></View>
@@ -193,7 +188,7 @@ export default function QueueScreen() {
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.md, paddingBottom: spacing.sm },
-  iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   headerLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 2, textTransform: 'uppercase' },
   title: { fontFamily: fonts.displayMedium, fontSize: 30, color: colors.espresso },
   sub: { fontFamily: fonts.body, fontSize: 13, color: colors.clay, marginTop: 2, marginBottom: spacing.lg },

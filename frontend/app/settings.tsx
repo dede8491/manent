@@ -6,7 +6,8 @@ import { Feather } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { fonts, radius, spacing } from '@/src/theme';
-import { useColors, useStyles, useScheme, useToggleScheme } from '@/src/themeCtx';
+import { useColors, useStyles, useScheme, useSchemePref } from '@/src/themeCtx';
+import { Chip } from '@/src/components/Chip';
 import { useAuth } from '@/src/auth';
 import { useI18n } from '@/src/i18n';
 import { api } from '@/src/api';
@@ -76,7 +77,7 @@ export default function Settings() {
   const styles = useStyles(makeStyles);
   const { user, signOut } = useAuth();
   const scheme = useScheme();
-  const toggleScheme = useToggleScheme();
+  const { pref: schemePref, setPref: setSchemePref } = useSchemePref();
   const { lang, setLang, t } = useI18n();
   const [defaultPublic, setDefaultPublic] = useState(false);
   const [profilePublic, setProfilePublic] = useState(true);
@@ -139,8 +140,8 @@ export default function Settings() {
 
   const Row = ({ icon, label, right, onPress, testID, danger }: any) => (
     <Pressable testID={testID} onPress={onPress} disabled={!onPress} style={styles.row}>
-      <Feather name={icon} size={18} color={danger ? '#B3552F' : colors.espresso} />
-      <Text style={[styles.rowLabel, danger && { color: '#B3552F' }]} numberOfLines={2}>{label}</Text>
+      <Feather name={icon} size={18} color={danger ? colors.danger : colors.espresso} />
+      <Text style={[styles.rowLabel, danger && { color: colors.danger }]} numberOfLines={2}>{label}</Text>
       {right}
     </Pressable>
   );
@@ -152,7 +153,7 @@ export default function Settings() {
           <Feather name="chevron-left" size={22} color={colors.espresso} />
         </Pressable>
         <Text style={styles.h1}>{t('Paramètres')}</Text>
-        <View style={{ width: 40 }} />
+        <View style={{ width: 44 }} />
       </View>
       <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + spacing.xxl, gap: spacing.sm }}>
         <Text style={styles.section}>{t('Compte')}</Text>
@@ -172,17 +173,11 @@ export default function Settings() {
         </View>
 
         <Text style={styles.section}>{t('Apparence')}</Text>
-        <Row
-          testID="settings-darkmode"
-          icon={scheme === 'dark' ? 'sun' : 'moon'}
-          label={t('Mode sombre')}
-          onPress={toggleScheme}
-          right={
-            <View style={[styles.switch, scheme === 'dark' && { backgroundColor: colors.chambray }]}>
-              <View style={[styles.knob, scheme === 'dark' && { alignSelf: 'flex-end' }]} />
-            </View>
-          }
-        />
+        <View style={{ flexDirection: 'row', gap: 8, marginBottom: spacing.sm }} accessibilityRole="radiogroup">
+          {([['system', 'Comme le téléphone', 'smartphone'], ['light', 'Clair', 'sun'], ['dark', 'Sombre', 'moon']] as const).map(([k, label, icon]) => (
+            <Chip key={k} testID={`settings-scheme-${k}`} label={t(label)} icon={icon} role="radio" selected={schemePref === k} onPress={() => setSchemePref(k)} />
+          ))}
+        </View>
 
         <Text style={styles.section}>{t('Confidentialité')}</Text>
         <Row
@@ -252,7 +247,7 @@ export default function Settings() {
             <Text style={styles.modalTitle}>{t('Tu es sûr ?')}</Text>
             <Text style={styles.docText}>{t('Tes livres, citations, tableaux et clubs seront supprimés définitivement. Cette action est irréversible.')}</Text>
             <View style={{ height: spacing.lg }} />
-            <PrimaryButton testID="delete-confirm" title={busy === 'delete' ? t('Suppression…') : t('Supprimer définitivement')} onPress={deleteAccount} style={{ backgroundColor: '#B3552F' }} />
+            <PrimaryButton testID="delete-confirm" title={busy === 'delete' ? t('Suppression…') : t('Supprimer définitivement')} onPress={deleteAccount} style={{ backgroundColor: colors.danger }} />
             <GhostButton testID="delete-cancel" title={t('Garder mon compte')} onPress={() => setConfirmDelete(false)} />
           </View>
         </View>
@@ -263,7 +258,7 @@ export default function Settings() {
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSoft },
-  iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   h1: { fontFamily: fonts.displayMedium, fontSize: 20, color: colors.espresso },
   section: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase', marginTop: spacing.lg, marginBottom: 2 },
   card: { backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },

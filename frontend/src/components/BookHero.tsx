@@ -41,7 +41,7 @@ export function AreaLine({ areas, countries, style }: { areas?: string[]; countr
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   bar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.md },
-  iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   right: { minWidth: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' },
   label: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 2, textTransform: 'uppercase' },
   hero: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.lg },

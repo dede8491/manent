@@ -54,8 +54,8 @@ export function QuoteCard({ quote, onPress, compact, onPressAuthor, onLike }: { 
           {hasStats && (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
               <Pressable testID={`quote-like-${quote.quote_id}`} onPress={onLike} disabled={!onLike} hitSlop={8} style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                <Feather name="heart" size={13} color={quote.liked_by_me ? '#B3552F' : colors.clay} />
-                <Text style={[styles.stat, quote.liked_by_me && { color: '#B3552F' }]}>{quote.likes_count || 0}</Text>
+                <Feather name="heart" size={13} color={quote.liked_by_me ? colors.danger : colors.clay} />
+                <Text style={[styles.stat, quote.liked_by_me && { color: colors.danger }]}>{quote.likes_count || 0}</Text>
               </Pressable>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
                 <Feather name="message-circle" size={13} color={colors.clay} />

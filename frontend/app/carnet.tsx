@@ -9,6 +9,7 @@ import { api } from '@/src/api';
 import { BookCover } from '@/src/components/BookCover';
 import { useT } from '@/src/i18n';
 import ManentLoader from '@/src/components/ManentLoader';
+import { ScreenHeader } from '@/src/components/ScreenHeader';
 
 type Fiche = { book_id: string; title: string; author?: string; rating?: number; updated_at?: string; has_summary?: boolean };
 
@@ -41,13 +42,7 @@ export default function Carnet() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.glacier }} testID="screen-carnet">
-      <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-        <Pressable onPress={() => router.back()} testID="carnet-back" style={styles.iconBtn}>
-          <Feather name="chevron-left" size={22} color={colors.espresso} />
-        </Pressable>
-        <Text style={styles.headerLabel}>{t('Carnet de lecture')}</Text>
-        <View style={{ width: 40 }} />
-      </View>
+      <ScreenHeader title={t('Carnet de lecture')} backTestID="carnet-back" />
 
       {isPremium === null || fiches === null ? (
         <View style={{ paddingTop: spacing.xxl, alignItems: 'center' }}>
@@ -107,7 +102,7 @@ export default function Carnet() {
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, backgroundColor: colors.glacier },
-  iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   headerLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 2, textTransform: 'uppercase' },
   h1: { fontFamily: fonts.displayMedium, fontSize: 28, color: colors.espresso },
   lockBox: { margin: spacing.xl, backgroundColor: colors.creme, borderRadius: 20, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.xl, alignItems: 'center', gap: spacing.sm },

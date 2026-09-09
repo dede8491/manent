@@ -6,8 +6,7 @@ from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, UploadFi
 from fastapi.responses import JSONResponse, Response
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
-import os, logging, uuid, base64, re, io, asyncio, unicodedata, hashlib
+import os, logging, uuid, base64, re, io, asyncio, unicodedata, hashlib, contextlib
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional, Literal, Any
@@ -31,8 +30,8 @@ import routes.share as share_pages
 from routes.club import router as club_router, event_reminder_loop
 import routes.journal as journal
 
-client = AsyncIOMotorClient(MONGO_URL)
-db = client[DB_NAME]
+from deps import db, _client as client, now_utc, new_id, get_current_user  # une seule connexion Mongo, une seule auth
+import reading
 
 app = FastAPI(title="Manent API")
 
@@ -47,14 +46,18 @@ api = APIRouter(prefix="/api")
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("manent")
 
+_bg_tasks: set = set()
+
+
+def _bg(coro):
+    """Tâche de fond suivie : référence gardée (pas de ramassage silencieux), annulée à l'arrêt."""
+    task = asyncio.create_task(coro)
+    _bg_tasks.add(task)
+    task.add_done_callback(_bg_tasks.discard)
+    return task
+
 
 # ============ Helpers ============
-def now_utc():
-    return datetime.now(timezone.utc)
-
-def new_id(prefix="id"):
-    return f"{prefix}_{uuid.uuid4().hex[:16]}"
-
 def clean_doc(d):
     if d is None:
         return None
@@ -63,25 +66,6 @@ def clean_doc(d):
 
 
 # ============ Auth ============
-async def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="not_authenticated")
-    token = authorization.split(" ", 1)[1]
-    session = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
-    if not session:
-        raise HTTPException(status_code=401, detail="invalid_session")
-    expires = session.get("expires_at")
-    if isinstance(expires, datetime):
-        if expires.tzinfo is None:
-            expires = expires.replace(tzinfo=timezone.utc)
-        if expires < now_utc():
-            raise HTTPException(status_code=401, detail="session_expired")
-    user = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0, "password_hash": 0})
-    if not user:
-        raise HTTPException(status_code=401, detail="user_not_found")
-    return user
-
-
 async def require_admin(user=Depends(get_current_user)) -> dict:
     if not user.get("is_admin"):
         raise HTTPException(status_code=403, detail="admin_only")
@@ -108,16 +92,7 @@ def _valid_birthdate(bd: Optional[str]) -> Optional[str]:
     return d.strftime("%Y-%m-%d")
 
 
-def _is_adult(user: dict) -> bool:
-    """>= 18 ans. Sans date de naissance → considéré mineur par prudence."""
-    bd = user.get("birthdate")
-    if not bd:
-        return False
-    try:
-        d = datetime.strptime(bd, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-    except ValueError:
-        return False
-    return (now_utc() - d).days >= 18 * 365.25
+_is_adult = reading.is_adult
 
 
 def sensitive_filter(user: dict) -> dict:
@@ -134,13 +109,16 @@ class SessionExchange(BaseModel):
     session_id: str
 
 
+from deps import SESSION_DAYS  # 90 jours, prolongés à chaque usage : on ne redemande pas le mot de passe
+
+
 async def create_session(user_id: str) -> dict:
     token = f"mnt_{uuid.uuid4().hex}{uuid.uuid4().hex[:16]}"
     session = {
         "session_token": token,
         "user_id": user_id,
         "created_at": now_utc(),
-        "expires_at": now_utc() + timedelta(days=7),
+        "expires_at": now_utc() + timedelta(days=SESSION_DAYS),
     }
     await db.user_sessions.insert_one(session.copy())
     return {"session_token": token}
@@ -175,24 +153,33 @@ async def register(body: RegisterBody):
     return {"session_token": sess["session_token"], "user": clean_doc({**user, "password_hash": None})}
 
 
-_login_fails: dict = {}  # email -> [count, first_ts] — protection force brute
+# Protection force brute partagée entre workers et redémarrages : compteur en base, purgé par index TTL (15 min)
+LOGIN_MAX_FAILS, LOGIN_WINDOW_S = 5, 900
+
+
+async def _login_blocked(email: str) -> bool:
+    rec = await db.login_attempts.find_one({"email": email}, {"_id": 0, "count": 1, "first_at": 1})
+    if not rec:
+        return False
+    first = rec.get("first_at")
+    if isinstance(first, datetime) and first.tzinfo is None:
+        first = first.replace(tzinfo=timezone.utc)
+    if isinstance(first, datetime) and (now_utc() - first).total_seconds() > LOGIN_WINDOW_S:
+        await db.login_attempts.delete_one({"email": email})
+        return False
+    return rec.get("count", 0) >= LOGIN_MAX_FAILS
 
 
 @api.post("/auth/login")
 async def login(body: LoginBody):
     email = body.email.lower()
-    rec = _login_fails.get(email)
-    now_ts = now_utc().timestamp()
-    if rec and rec[0] >= 5 and now_ts - rec[1] < 900:
+    if await _login_blocked(email):
         raise HTTPException(status_code=429, detail="too_many_attempts")
-    if rec and now_ts - rec[1] >= 900:
-        _login_fails.pop(email, None)
     user = await db.users.find_one({"email": email})
     if not user or not user.get("password_hash") or not bcrypt.checkpw(body.password.encode(), user["password_hash"].encode()):
-        r = _login_fails.setdefault(email, [0, now_ts])
-        r[0] += 1
+        await db.login_attempts.update_one({"email": email}, {"$inc": {"count": 1}, "$setOnInsert": {"first_at": now_utc()}}, upsert=True)
         raise HTTPException(status_code=401, detail="invalid_credentials")
-    _login_fails.pop(email, None)
+    await db.login_attempts.delete_one({"email": email})
     sess = await create_session(user["user_id"])
     user.pop("_id", None); user.pop("password_hash", None)
     return {"session_token": sess["session_token"], "user": user}
@@ -312,9 +299,9 @@ async def logout(authorization: Optional[str] = Header(None)):
 # ============ Users ============
 class UserPatch(BaseModel):
     reading_mode: Optional[Literal['plaisir', 'etudes', 'both']] = None
-    themes: Optional[List[str]] = None
-    pseudo: Optional[str] = None
-    picture: Optional[str] = None
+    themes: Optional[List[str]] = Field(None, max_length=40)
+    pseudo: Optional[str] = Field(None, min_length=2, max_length=30)
+    picture: Optional[str] = Field(None, max_length=2_000_000)  # URL, ou data URL de repli
 
 
 @api.patch("/users/me")
@@ -583,9 +570,9 @@ class BookCreate(BaseModel):
 
 
 class BookPatch(BaseModel):
-    title: Optional[str] = None
-    author: Optional[str] = None
-    cover: Optional[str] = None
+    title: Optional[str] = Field(None, min_length=1, max_length=200)
+    author: Optional[str] = Field(None, max_length=200)
+    cover: Optional[str] = Field(None, max_length=2000)
     pages: Optional[int] = None
     chapters: Optional[int] = None
     status: Optional[Literal['a_lire', 'en_cours', 'termine']] = None
@@ -835,7 +822,7 @@ def today_key():
 
 
 # Quota quotidien par utilisateur sur les appels IA (protection des coûts — audit SEC-001)
-LLM_DAILY_LIMITS = {"summary": 20, "page_number": 40, "autofill": 10}
+LLM_DAILY_LIMITS = {"summary": 20, "page_number": 40, "autofill": 10, "sensitivity": 30, "intent": 20}
 
 
 async def llm_quota_ok(user_id: str, kind: str) -> bool:
@@ -848,11 +835,7 @@ async def llm_quota_ok(user_id: str, kind: str) -> bool:
 
 
 async def log_reading_event(user_id: str, pages: int = 0):
-    await db.reading_events.update_one(
-        {"user_id": user_id, "day": today_key()},
-        {"$inc": {"pages": max(0, pages), "actions": 1}},
-        upsert=True,
-    )
+    await reading.log_event(db, user_id, pages)
 
 
 @api.patch("/books/{book_id}")
@@ -1104,7 +1087,8 @@ async def vision(body: VisionBody, user=Depends(get_current_user)):
         text = await chat.send_message(msg)
     except Exception as e:
         logger.exception("vision call failed")
-        raise HTTPException(status_code=500, detail=f"vision_failed: {e}")
+        logger.warning("vision failed: %s", e)
+        raise HTTPException(status_code=502, detail="vision_failed")
 
     text = (text or "").strip()
     if body.mode == 'page_number':
@@ -1135,10 +1119,10 @@ class QuoteCreate(BaseModel):
 
 
 class QuotePatch(BaseModel):
-    text: Optional[str] = None
-    page: Optional[int] = None
-    chapter: Optional[int] = None
-    note: Optional[str] = None
+    text: Optional[str] = Field(None, max_length=6000)
+    page: Optional[int] = Field(None, ge=0)
+    chapter: Optional[int] = Field(None, ge=0)
+    note: Optional[str] = Field(None, max_length=1000)
     themes: Optional[List[str]] = None
     is_public: Optional[bool] = None
     is_sensitive: Optional[bool] = None
@@ -1188,10 +1172,9 @@ async def create_quote(body: QuoteCreate, user=Depends(get_current_user)):
     else:
         doc["visibility"] = "public" if body.is_public else "private"
     await db.quotes.insert_one(doc.copy())
-    await log_reading_event(user["user_id"], 0)
-    # Filet de sécurité IA sur les citations visibles par d'autres, non marquées sensibles
-    if doc["visibility"] != "private" and not body.is_sensitive:
-        asyncio.create_task(_ai_sensitivity_check(quote_id, body.text))
+    # Filet de sécurité IA sur les citations visibles par d'autres, non marquées sensibles (quota par compte)
+    if doc["visibility"] != "private" and not body.is_sensitive and await llm_quota_ok(user["user_id"], "sensitivity"):
+        _bg(_ai_sensitivity_check(quote_id, body.text))
     # Notifier les abonnés quand une citation devient publique
     if doc["is_public"] or doc["visibility"] == "followers":
         try:
@@ -1204,17 +1187,15 @@ async def create_quote(body: QuoteCreate, user=Depends(get_current_user)):
             }, idempotency_key=f"quote-{quote_id}")
         except Exception as e:
             logger.warning("push new quote failed (non-blocking): %s", e)
-    # auto-progress
-    if body.book_id and body.page:
-        book = await db.books.find_one({"book_id": body.book_id, "user_id": user["user_id"]}, {"_id": 0})
-        if book and (book.get("progress_page") or 0) < body.page:
-            await db.books.update_one(
-                {"book_id": body.book_id, "user_id": user["user_id"]},
-                {"$set": {"progress_page": body.page, "status": "en_cours" if book.get("status") == "a_lire" else book.get("status"), "updated_at": now_utc()}},
-            )
-    if body.book_id:
-        # une citation compte comme une activité de lecture : ce livre remonte dans « Reprendre ta lecture »
-        await db.books.update_one({"book_id": body.book_id, "user_id": user["user_id"]}, {"$set": {"updated_at": now_utc()}})
+    # Une citation compte comme une activité de lecture ; sa page fait avancer le livre (règle unique reading.advance_book)
+    book = await db.books.find_one({"book_id": body.book_id, "user_id": user["user_id"]}, {"_id": 0}) if body.book_id else None
+    if book and book.get("status") != "termine":
+        wp = book.get("type") == "wattpad"
+        await reading.advance_book(db, user["user_id"], book, page=None if wp else body.page, chapter=body.chapter if wp else None)
+    else:
+        if book:
+            await db.books.update_one({"book_id": body.book_id, "user_id": user["user_id"]}, {"$set": {"updated_at": now_utc()}})
+        await log_reading_event(user["user_id"], 0)
     return clean_doc(doc)
 
 
@@ -1269,18 +1250,10 @@ async def daily_quote(user=Depends(get_current_user)):
 
 @api.get("/quotes/{quote_id}")
 async def get_quote(quote_id: str, user=Depends(get_current_user)):
-    q = await db.quotes.find_one({"quote_id": quote_id}, {"_id": 0})
+    q = await reading.visible_quote(db, quote_id, user)
     if not q:
         raise HTTPException(status_code=404, detail="not_found")
     is_owner = q["user_id"] == user["user_id"]
-    if not is_owner:
-        allowed = q.get("is_public")
-        if not allowed and q.get("visibility") == "followers":
-            allowed = await db.follows.find_one({"follower_id": user["user_id"], "followed_id": q["user_id"]}) is not None
-        if not allowed or q.get("is_hidden"):
-            raise HTTPException(status_code=404, detail="not_found")
-    if not is_owner and q.get("is_sensitive") and not _is_adult(user):
-        raise HTTPException(status_code=404, detail="not_found")
     if q.get("book_id"):
         q["book"] = await db.books.find_one({"book_id": q["book_id"]}, {"_id": 0})
     owner = await db.users.find_one({"user_id": q["user_id"]}, {"_id": 0, "pseudo": 1, "handle": 1, "picture": 1})
@@ -1294,15 +1267,9 @@ async def get_quote(quote_id: str, user=Depends(get_current_user)):
 
 # ============ Réactions sur les citations (cœur, commentaires) ============
 async def _visible_quote_or_404(quote_id: str, user: dict) -> dict:
-    q = await db.quotes.find_one({"quote_id": quote_id}, {"_id": 0})
+    q = await reading.visible_quote(db, quote_id, user)
     if not q:
         raise HTTPException(status_code=404, detail="not_found")
-    if q["user_id"] != user["user_id"]:
-        allowed = q.get("is_public")
-        if not allowed and q.get("visibility") == "followers":
-            allowed = await db.follows.find_one({"follower_id": user["user_id"], "followed_id": q["user_id"]}) is not None
-        if not allowed or q.get("is_hidden") or (q.get("is_sensitive") and not _is_adult(user)):
-            raise HTTPException(status_code=404, detail="not_found")
     return q
 
 
@@ -1402,6 +1369,7 @@ class SettingsBody(BaseModel):
     profile_public: Optional[bool] = None
     recos_enabled: Optional[bool] = None
     birthdate: Optional[str] = None
+    tour_seen: Optional[bool] = None  # tour de bienvenue vu (stocké sur le compte : une seule fois, quel que soit l'appareil)
 
 
 @api.patch("/me/settings")
@@ -1414,10 +1382,10 @@ async def update_settings(body: SettingsBody, user=Depends(get_current_user)):
         upd["birthdate"] = bd
     if upd:
         await db.users.update_one({"user_id": user["user_id"]}, {"$set": upd})
-    u = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "language": 1, "default_public": 1, "profile_public": 1, "birthdate": 1, "recos_enabled": 1})
+    u = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "language": 1, "default_public": 1, "profile_public": 1, "birthdate": 1, "recos_enabled": 1, "tour_seen": 1})
     return {"language": (u or {}).get("language", "fr"), "default_public": (u or {}).get("default_public", False),
             "profile_public": (u or {}).get("profile_public", True), "birthdate": (u or {}).get("birthdate"),
-            "recos_enabled": (u or {}).get("recos_enabled", True)}
+            "recos_enabled": (u or {}).get("recos_enabled", True), "tour_seen": bool((u or {}).get("tour_seen"))}
 
 
 @api.get("/me/export")
@@ -1530,8 +1498,8 @@ async def search_all(
 
 # ============ Boards ============
 class BoardCreate(BaseModel):
-    name: str
-    description: Optional[str] = ""
+    name: str = Field(..., min_length=1, max_length=80)
+    description: Optional[str] = Field("", max_length=500)
     visibility: Literal['private', 'public', 'collaborative'] = 'private'
 
 
@@ -1711,9 +1679,9 @@ class ClubCreate(BaseModel):
 
 
 class ClubPatch(BaseModel):
-    name: Optional[str] = None
+    name: Optional[str] = Field(None, min_length=1, max_length=80)
     visibility: Optional[Literal['private', 'public']] = None
-    description: Optional[str] = None
+    description: Optional[str] = Field(None, max_length=500)
     book: Optional[dict] = None  # {book_id?, title, author?}
     weekly_passage: Optional[dict] = None  # {text, page?, book_title?}
     challenge: Optional[dict] = None  # {title, goal_pages}
@@ -2419,14 +2387,7 @@ async def reading_stats(user=Depends(get_current_user)):
     events = await db.reading_events.find({"user_id": user["user_id"]}, {"_id": 0}).sort("day", -1).to_list(90)
     by_day = {e["day"]: e for e in events}
     today = now_utc().date()
-    # série de jours consécutifs (tolérance : la série tient si l'activité date d'hier)
-    streak = 0
-    d = today
-    if today.strftime("%Y-%m-%d") not in by_day:
-        d = today - timedelta(days=1)
-    while d.strftime("%Y-%m-%d") in by_day:
-        streak += 1
-        d -= timedelta(days=1)
+    streak = reading.compute_streak(set(by_day), today)  # même règle que l'accueil
     # 7 derniers jours
     week = []
     for i in range(6, -1, -1):
@@ -2987,11 +2948,8 @@ async def invitations_badge(user=Depends(get_current_user)):
 async def list_invitations(user=Depends(get_current_user)):
     rows = await db.invitations.find({"to_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
     await db.invitations.update_many({"to_id": user["user_id"], "read": False}, {"$set": {"read": True}})
-    out = []
-    for r in rows:
-        u = await db.users.find_one({"user_id": r["from_id"]}, {"_id": 0, "pseudo": 1, "handle": 1, "picture": 1})
-        out.append({**r, "from": u})
-    return {"invitations": out}
+    users = {u["user_id"]: u for u in await db.users.find({"user_id": {"$in": [r["from_id"] for r in rows]}}, {"_id": 0, "user_id": 1, "pseudo": 1, "handle": 1, "picture": 1}).to_list(200)}
+    return {"invitations": [{**r, "from": users.get(r["from_id"])} for r in rows]}
 
 
 @api.post("/invitations/{invite_id}/accept")
@@ -3024,11 +2982,9 @@ async def recommendations_badge(user=Depends(get_current_user)):
 @api.get("/recommendations")
 async def list_recommendations(user=Depends(get_current_user)):
     rows = await db.recommendations.find({"to_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
-    out = []
-    for r in rows:
-        b = await db.catalog_books.find_one({"catalog_id": r["catalog_id"]}, {"_id": 0})
-        u = await db.users.find_one({"user_id": r["from_id"]}, {"_id": 0, "pseudo": 1, "handle": 1, "picture": 1})
-        out.append({**r, "book": catalog._card(b) if b else None, "from": u})
+    books = {b["catalog_id"]: b for b in await db.catalog_books.find({"catalog_id": {"$in": [r["catalog_id"] for r in rows]}}, {"_id": 0}).to_list(200)}
+    users = {u["user_id"]: u for u in await db.users.find({"user_id": {"$in": [r["from_id"] for r in rows]}}, {"_id": 0, "user_id": 1, "pseudo": 1, "handle": 1, "picture": 1}).to_list(200)}
+    out = [{**r, "book": catalog._card(books[r["catalog_id"]]) if r["catalog_id"] in books else None, "from": users.get(r["from_id"])} for r in rows]
     # Ouvrir la liste marque tout comme lu (la pastille disparaît)
     await db.recommendations.update_many({"to_id": user["user_id"], "read": False}, {"$set": {"read": True}})
     return {"recommendations": out}
@@ -3153,19 +3109,25 @@ async def upload(request: Request, file: UploadFile = File(...), user=Depends(ge
     data = await file.read()
     if len(data) > 10 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="file_too_large")
-    ext = (file.filename or "img.jpg").split(".")[-1].lower()
-    if ext not in ("jpg", "jpeg", "png", "webp"):
-        ext = "jpg"
+    # Type réel (octets de signature), jamais le nom de fichier ni le Content-Type du client
+    if data[:3] == b"\xff\xd8\xff":
+        ext, ctype = "jpg", "image/jpeg"
+    elif data[:8] == b"\x89PNG\r\n\x1a\n":
+        ext, ctype = "png", "image/png"
+    elif data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        ext, ctype = "webp", "image/webp"
+    else:
+        raise HTTPException(status_code=415, detail="unsupported_image")
     path = f"manent/uploads/{user['user_id']}/{uuid.uuid4().hex}.{ext}"
     try:
-        await _storage_put(path, data, file.content_type or "image/jpeg")
+        await _storage_put(path, data, ctype)
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 402:
             raise HTTPException(status_code=402, detail="storage_quota")
         logger.error("object storage upload failed: %s %s", e.response.status_code, e.response.text[:300])
         # Repli : data URL (dev uniquement)
         b64 = base64.b64encode(data).decode()
-        return {"url": f"data:{file.content_type or 'image/jpeg'};base64,{b64}", "key": path, "storage_failed": True}
+        return {"url": f"data:{ctype};base64,{b64}", "key": path, "storage_failed": True}
     host = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
     url = f"https://{host}/api/files/{path}" if host else f"/api/files/{path}"
     return {"url": url, "key": path}
@@ -3301,35 +3263,82 @@ async def _watch_wattpad():
         await asyncio.sleep(12 * 3600)
 
 
-@app.on_event("startup")
+async def _idx(coll, keys, **opts):
+    """Crée un index sans jamais bloquer le démarrage (doublons historiques, options différentes…)."""
+    try:
+        await coll.create_index(keys, **opts)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("index %s %s ignoré : %s", coll.name, keys, e)
+
+
 async def on_startup():
-    await db.users.create_index("email", unique=True)
-    await db.users.create_index("user_id", unique=True)
-    await db.user_sessions.create_index("session_token", unique=True)
-    await db.user_sessions.create_index("expires_at", expireAfterSeconds=0)
-    await db.books.create_index("user_id")
-    await db.quotes.create_index("user_id")
-    await db.quotes.create_index("is_public")
-    await db.boards.create_index("members")
-    await db.follows.create_index([("follower_id", 1), ("followed_id", 1)], unique=True)
-    await db.follows.create_index("followed_id")
-    await db.boards.create_index("share_slug")
-    await db.boards.create_index("invite_code")
-    await db.invitations.create_index([("to_id", 1), ("status", 1)])
-    await db.quote_likes.create_index([("quote_id", 1), ("user_id", 1)], unique=True)
-    await db.quote_comments.create_index([("quote_id", 1), ("created_at", 1)])
+    await _idx(db.users, "email", unique=True)
+    await _idx(db.users, "user_id", unique=True)
+    await _idx(db.user_sessions, "session_token", unique=True)
+    await _idx(db.user_sessions, "expires_at", expireAfterSeconds=0)
+    await _idx(db.books, "user_id")
+    await _idx(db.quotes, "user_id")
+    await _idx(db.quotes, "is_public")
+    await _idx(db.boards, "members")
+    await _idx(db.follows, [("follower_id", 1), ("followed_id", 1)], unique=True)
+    await _idx(db.follows, "followed_id")
+    await _idx(db.boards, "share_slug")
+    await _idx(db.boards, "invite_code")
+    await _idx(db.invitations, [("to_id", 1), ("status", 1)])
+    await _idx(db.quote_likes, [("quote_id", 1), ("user_id", 1)], unique=True)
+    await _idx(db.quote_comments, [("quote_id", 1), ("created_at", 1)])
+    await _idx(db.books, "book_id", unique=True)
+    await _idx(db.books, [("user_id", 1), ("status", 1)])
+    await _idx(db.books, [("user_id", 1), ("updated_at", -1)])
+    await _idx(db.books, "isbn", sparse=True)
+    await _idx(db.books, "catalog_id", sparse=True)
+    await _idx(db.quotes, "quote_id", unique=True)
+    await _idx(db.quotes, "book_id", sparse=True)
+    await _idx(db.quotes, [("user_id", 1), ("created_at", -1)])
+    await _idx(db.quotes, [("is_public", 1), ("created_at", -1)])
+    await _idx(db.boards, "board_id", unique=True)
+    await _idx(db.board_quotes, "board_id")
+    await _idx(db.board_quotes, "quote_id")
+    await _idx(db.reading_events, [("user_id", 1), ("day", -1)], unique=True)
+    await _idx(db.clubs, "club_id", unique=True)
+    await _idx(db.clubs, "members")
+    await _idx(db.clubs, "code", sparse=True)
+    await _idx(db.club_messages, [("club_id", 1), ("created_at", 1)])
+    await _idx(db.club_readers, [("cb_id", 1), ("user_id", 1)])
+    await _idx(db.club_posts, [("cb_id", 1), ("created_at", -1)])
+    await _idx(db.club_comments, [("post_id", 1), ("created_at", 1)])
+    await _idx(db.club_reviews, "cb_id")
+    await _idx(db.llm_usage, [("user_id", 1), ("day", 1)], unique=True)
+    await _idx(db.flashcards, [("user_id", 1), ("book_id", 1)])
+    await _idx(db.recommendations, [("to_id", 1), ("status", 1)])
+    await _idx(db.book_summaries, "key")
+    await _idx(db.meta, "key")
+    await _idx(db.users, "handle", sparse=True)
+    await _idx(db.login_attempts, "email", unique=True)
+    await _idx(db.login_attempts, "first_at", expireAfterSeconds=LOGIN_WINDOW_S)
     await journal.init()
-    asyncio.get_event_loop().create_task(_watch_wattpad())
-    asyncio.get_event_loop().create_task(_migrate_covers())
-    asyncio.get_event_loop().create_task(_seed_featured())
-    asyncio.get_event_loop().create_task(event_reminder_loop())
+    for coro in (_watch_wattpad(), _migrate_covers(), _seed_featured(), event_reminder_loop()):
+        _bg(coro)
     await catalog.init(db)
     logger.info("Manent backend ready")
 
 
-@app.on_event("shutdown")
-async def shutdown_db_client():
+async def on_shutdown():
+    for task in list(_bg_tasks):
+        task.cancel()
     client.close()
+
+
+@contextlib.asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    await on_startup()
+    try:
+        yield
+    finally:
+        await on_shutdown()
+
+
+app.router.lifespan_context = _lifespan
 
 
 app.include_router(catalog_router, dependencies=[Depends(get_current_user)])
@@ -3346,10 +3355,15 @@ app.include_router(club_router)
 app.include_router(journal.router)
 app.include_router(journal.admin_router, dependencies=[Depends(require_admin)])
 app.include_router(api)
+# CORS : l'auth est un Bearer (pas de cookie), donc pas de credentials ; origines explicites via CORS_ORIGINS
+# (liste séparée par des virgules), à défaut l'URL publique, à défaut tout (aperçu Emergent, web local).
+_cors_origins = [o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()]
+if not _cors_origins and os.environ.get("PUBLIC_BASE_URL"):
+    _cors_origins = [os.environ["PUBLIC_BASE_URL"].rstrip("/")]
 app.add_middleware(
     CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=["*"],
+    allow_credentials=False,
+    allow_origins=_cors_origins or ["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )

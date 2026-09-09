@@ -56,7 +56,7 @@ export default function FlashcardsReview() {
           <Feather name="x" size={22} color={colors.espresso} />
         </Pressable>
         <Text style={styles.headerLabel}>{t('Révision')}</Text>
-        <View style={{ width: 40 }} />
+        <View style={{ width: 44 }} />
       </View>
 
       {queue === null ? (
@@ -111,7 +111,7 @@ export default function FlashcardsReview() {
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, backgroundColor: colors.glacier },
-  iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   headerLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 2, textTransform: 'uppercase' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
   doneTitle: { fontFamily: fonts.displayMedium, fontSize: 26, color: colors.espresso, marginTop: spacing.md, textAlign: 'center' },

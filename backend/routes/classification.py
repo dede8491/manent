@@ -857,9 +857,23 @@ class IntentBody(BaseModel):
     text: str = Field(min_length=3, max_length=300)
 
 
+async def _user_quota_ok(user_id: str, kind: str, limit: int) -> bool:
+    """Quota quotidien par compte (en plus du quota global de l'instance)."""
+    day = now_utc().strftime("%Y-%m-%d")
+    doc = await db.llm_usage.find_one({"user_id": user_id, "day": day}, {"_id": 0, kind: 1})
+    if (doc or {}).get(kind, 0) >= limit:
+        return False
+    await db.llm_usage.update_one({"user_id": user_id, "day": day}, {"$inc": {kind: 1}}, upsert=True)
+    return True
+
+
 @router.post("/intent")
-async def intent_search(body: IntentBody):
+async def intent_search(body: IntentBody, authorization: Optional[str] = Header(None)):
     from routes.catalog import _card
+    if resolve_user is not None:
+        user = await resolve_user(authorization)
+        if not await _user_quota_ok(user["user_id"], "intent", 20):
+            raise HTTPException(status_code=429, detail="llm_quota_reached")
     text = body.text.strip()
     parsed = await parse_search_intent(text)
     sel = parsed["filters"]

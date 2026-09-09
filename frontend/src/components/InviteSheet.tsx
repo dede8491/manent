@@ -142,5 +142,5 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   memberChip: { height: 28, paddingHorizontal: 10, borderRadius: radius.pill, backgroundColor: colors.bisque, alignItems: 'center', justifyContent: 'center' },
   memberText: { fontFamily: fonts.bodyMedium, fontSize: 11.5, color: colors.espresso },
   leave: { marginTop: spacing.lg, alignSelf: 'center', padding: spacing.sm },
-  leaveText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: '#B3552F' },
+  leaveText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.danger },
 });

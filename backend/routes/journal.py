@@ -21,6 +21,8 @@ from pydantic import BaseModel, Field
 from pymongo.errors import DuplicateKeyError
 
 from deps import db, get_current_user, now_utc, new_id
+import reading
+from reading import compute_streak  # noqa: F401  (réexporté pour les tests et l'accueil)
 
 logger = logging.getLogger("journal")
 router = APIRouter(prefix="/api/journal")
@@ -83,17 +85,6 @@ def pick_prompt(prompts: list, entries_count: int, last_prompt_id: Optional[str]
     return p
 
 
-def compute_streak(active_days: set, today) -> int:
-    """Jours consécutifs d'activité ; la série tient encore si la dernière activité date d'hier."""
-    streak, d = 0, today
-    if d.strftime("%Y-%m-%d") not in active_days:
-        d = today - timedelta(days=1)
-    while d.strftime("%Y-%m-%d") in active_days:
-        streak += 1
-        d -= timedelta(days=1)
-    return streak
-
-
 def mood_series(entries: list) -> list:
     """Frise d'humeurs d'un livre, dans l'ordre chronologique (entrées sans humeur ignorées)."""
     pts = [{"date": e.get("date"), "mood": e.get("mood"), "page": e.get("page") or e.get("chapter"), "entry_id": e.get("entry_id")}
@@ -149,8 +140,7 @@ async def _quota(user_id: str) -> dict:
 
 
 async def _log_event(user_id: str, pages: int = 0):
-    await db.reading_events.update_one({"user_id": user_id, "day": now_utc().strftime("%Y-%m-%d")},
-                                       {"$inc": {"pages": max(0, pages), "actions": 1}}, upsert=True)
+    await reading.log_event(db, user_id, pages)
 
 
 async def _prompts() -> list:
@@ -200,19 +190,8 @@ def _progress(book: dict) -> dict:
 
 
 async def _advance_book(user_id: str, book: dict, page: Optional[int], chapter: Optional[int]) -> None:
-    """Une page (ou un chapitre) atteinte fait avancer le livre, jamais reculer ; un livre « à lire » passe « en cours »."""
-    wp = book.get("type") == "wattpad"
-    key, val, total = ("progress_chapter", chapter, book.get("chapters")) if wp else ("progress_page", page, book.get("pages"))
-    upd = {"updated_at": now_utc()}
-    if book.get("status") == "a_lire":
-        upd["status"] = "en_cours"
-    delta = 0
-    if val is not None and val > (book.get(key) or 0):
-        val = min(int(total), val) if total else val
-        delta = val - (book.get(key) or 0)
-        upd[key] = val
-    await db.books.update_one({"book_id": book["book_id"], "user_id": user_id}, {"$set": upd})
-    await _log_event(user_id, delta if not wp else 0)
+    """Règle unique (reading.advance_book) : ne recule jamais, borne au total, « à lire » → « en cours », journalise."""
+    await reading.advance_book(db, user_id, book, page, chapter)
 
 
 # ------------------------------------------------------------------------------------------------ modèles
@@ -440,6 +419,63 @@ async def public_entries(handle: str, size: int = Query(20, ge=1, le=50), user=D
         return {"entries": []}
     rows = await db.journal_entries.find({"user_id": u["user_id"], "is_public": True}, {"_id": 0}).sort("created_at", -1).to_list(size)
     return {"entries": await _decorate(u["user_id"], rows)}
+
+
+@router.get("/retrospective")
+async def retrospective(year: Optional[int] = None, user=Depends(get_current_user)):
+    """Rétrospective annuelle (Premium) : livres terminés, pages, entrées, humeurs, auteurs de l'année.
+    En gratuit : les compteurs seulement (aperçu), le détail est verrouillé."""
+    uid = user["user_id"]
+    now = now_utc()
+    y = year or now.year
+    start, end = datetime(y, 1, 1, tzinfo=timezone.utc), datetime(y + 1, 1, 1, tzinfo=timezone.utc)
+    premium = await _is_premium(uid)
+    books = await db.books.find({"user_id": uid, "status": "termine", "finished_at": {"$gte": start, "$lt": end}},
+                                {**_BOOK_FIELDS, "author": 1, "pages": 1}).sort("finished_at", 1).to_list(500)
+    entries = await db.journal_entries.find({"user_id": uid, "date": {"$gte": f"{y}-01-01", "$lte": f"{y}-12-31"}},
+                                            {"_id": 0, "mood": 1, "book_id": 1, "date": 1}).to_list(10000)
+    quotes_count = await db.quotes.count_documents({"user_id": uid, "created_at": {"$gte": start, "$lt": end}})
+    events = await db.reading_events.find({"user_id": uid, "day": {"$gte": f"{y}-01-01", "$lte": f"{y}-12-31"}},
+                                          {"_id": 0, "day": 1, "pages": 1}).to_list(400)
+    days = sorted(e["day"] for e in events)
+    longest, run, prev = 0, 0, None
+    for d in days:
+        cur = datetime.strptime(d, "%Y-%m-%d").date()
+        run = run + 1 if prev and (cur - prev).days == 1 else 1
+        longest = max(longest, run)
+        prev = cur
+    out = {
+        "year": y, "is_premium": premium, "locked": not premium,
+        "books_count": len(books), "entries_count": len(entries), "quotes_count": quotes_count,
+        "pages_total": sum(e.get("pages", 0) for e in events), "active_days": len(days), "longest_streak": longest,
+        "years": sorted({int(b["finished_at"].year) for b in await db.books.find({"user_id": uid, "status": "termine", "finished_at": {"$exists": True}}, {"_id": 0, "finished_at": 1}).to_list(2000) if isinstance(b.get("finished_at"), datetime)} | {now.year}, reverse=True),
+    }
+    if not premium:
+        return out
+    moods = [e["mood"] for e in entries if e.get("mood")]
+    dist = {str(v): moods.count(v) for v in range(1, 6)}
+    authors: dict = {}
+    for b in books:
+        for a in [x.strip() for x in (b.get("author") or "").split(",") if x.strip()]:
+            authors[a] = authors.get(a, 0) + 1
+    months = [0] * 12
+    for e in entries:
+        try:
+            months[int(e["date"][5:7]) - 1] += 1
+        except (ValueError, TypeError):
+            pass
+    best = max(books, key=lambda b: (b.get("rating") or 0, b.get("finished_at") or start), default=None)
+    out.update({
+        "books": [{"book_id": b["book_id"], "title": b.get("title"), "author": b.get("author"), "cover": b.get("cover"),
+                   "rating": b.get("rating") or 0, "finished_at": b["finished_at"].strftime("%Y-%m-%d") if isinstance(b.get("finished_at"), datetime) else None} for b in books],
+        "mood_distribution": dist,
+        "mood_dominant": MOOD_BY_VALUE.get(max(set(moods), key=moods.count)) if moods else None,
+        "top_authors": [{"name": a, "count": n} for a, n in sorted(authors.items(), key=lambda x: (-x[1], x[0]))[:5]],
+        "months": months,
+        "best_book": {"book_id": best["book_id"], "title": best.get("title"), "author": best.get("author"), "cover": best.get("cover"), "rating": best.get("rating") or 0} if best and (best.get("rating") or 0) > 0 else None,
+        "moods_scale": MOODS,
+    })
+    return out
 
 
 @router.get("/quota")

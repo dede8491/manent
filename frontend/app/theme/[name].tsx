@@ -9,6 +9,7 @@ import { QuoteCard, Quote } from '@/src/components/QuoteCard';
 import { api } from '@/src/api';
 import { useT } from '@/src/i18n';
 import ManentLoader from '@/src/components/ManentLoader';
+import { ScreenHeader } from '@/src/components/ScreenHeader';
 
 export default function ThemePage() {
   const t = useT();
@@ -66,13 +67,7 @@ export default function ThemePage() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.glacier }} testID="screen-theme">
-      <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-        <Pressable onPress={() => router.back()} testID="theme-back" style={styles.iconBtn}>
-          <Feather name="chevron-left" size={22} color={colors.espresso} />
-        </Pressable>
-        <Text style={styles.headerLabel}>{t('Sujet')}</Text>
-        <View style={{ width: 40 }} />
-      </View>
+      <ScreenHeader title={t('Sujet')} backTestID="theme-back" />
       <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xxl }}>
         <View style={styles.hero}>
           <Text style={styles.title} testID="theme-title">{data?.theme || (() => { try { return decodeURIComponent(String(name || '')); } catch { return String(name || ''); } })() || t('Sujet')}</Text>
@@ -208,7 +203,7 @@ export default function ThemePage() {
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, backgroundColor: colors.glacier },
-  iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   headerLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 2, textTransform: 'uppercase' },
   hero: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.lg, alignItems: 'center' },
   title: { fontFamily: fonts.displayMedium, fontSize: 40, color: colors.espresso, textTransform: 'capitalize' },

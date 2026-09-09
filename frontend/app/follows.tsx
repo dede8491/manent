@@ -6,6 +6,7 @@ import { Feather } from '@expo/vector-icons';
 import { api } from '@/src/api';
 import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
+import { Avatar } from '@/src/components/Avatar';
 import { useT } from '@/src/i18n';
 import ManentLoader from '@/src/components/ManentLoader';
 
@@ -44,7 +45,7 @@ export default function FollowsScreen() {
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
         <Pressable onPress={() => router.back()} testID="follows-back" style={styles.iconBtn}><Feather name="chevron-left" size={22} color={colors.espresso} /></Pressable>
         <Text style={styles.h1} numberOfLines={1}>{data?.pseudo || t('Mes lectrices')}</Text>
-        <View style={{ width: 40 }} />
+        <View style={{ width: 44 }} />
       </View>
       <View style={styles.segRow}>
         {([['followers', t('Abonnées')], ['following', t('Abonnements')]] as const).map(([k, lbl]) => (
@@ -62,7 +63,7 @@ export default function FollowsScreen() {
             </View>
           ) : rows.map(r => (
             <Pressable key={r.handle} testID={`follows-row-${r.handle}`} onPress={() => router.push({ pathname: '/reader/[handle]', params: { handle: r.handle } })} style={styles.row}>
-              {r.picture ? <Image source={{ uri: r.picture }} style={styles.avatar} /> : <View style={styles.avatar}><Text style={styles.initial}>{(r.pseudo?.[0] || 'M').toUpperCase()}</Text></View>}
+              <Avatar uri={r.picture} name={r.pseudo} size={44} />
               <View style={{ flex: 1 }}>
                 <Text style={styles.name}>{r.pseudo}</Text>
                 <Text style={styles.handle}>@{r.handle}</Text>
@@ -82,7 +83,7 @@ export default function FollowsScreen() {
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingBottom: spacing.sm },
-  iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   h1: { fontFamily: fonts.displayMedium, fontSize: 20, color: colors.espresso, flex: 1, textAlign: 'center' },
   segRow: { flexDirection: 'row', gap: 8, paddingHorizontal: spacing.xl, marginBottom: spacing.sm },
   seg: { flex: 1, height: 38, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center' },
