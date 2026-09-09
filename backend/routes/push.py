@@ -39,6 +39,41 @@ async def register_push(body: RegisterPushBody, user=Depends(get_current_user)):
     return {"status": "registered"}
 
 
+# Types de notifications (clé, libellé, description) : réglables une à une dans Paramètres → Notifications.
+KINDS = [
+    ("followed_quote", "Nouvelle citation d’une lectrice suivie", "Quand une personne que tu suis publie une citation."),
+    ("quote_like", "Cœur sur une de tes citations", "Quand une lectrice aime une citation publique."),
+    ("quote_comment", "Commentaire sur une de tes citations", "Quand une lectrice commente une citation publique."),
+    ("new_follower", "Nouvelle abonnée", "Quand quelqu’un se met à suivre tes lectures."),
+    ("recommendation", "Livre recommandé", "Quand une lectrice te recommande un livre."),
+    ("invitation", "Invitation", "Quand on t’invite sur un tableau ou dans un club."),
+    ("club", "Vie de tes clubs", "Messages, progression partagée, défis, passages de la semaine, événements."),
+    ("book_update", "Nouveaux chapitres", "Quand une histoire Wattpad de ta bibliothèque avance."),
+]
+KIND_KEYS = {k for k, _, _ in KINDS}
+
+
+def notif_kind(data: dict) -> str:
+    """Type d'une notification, déduit de son contenu (data.type, écran cible, message)."""
+    d = data.get("data") or {}
+    t = d.get("type")
+    if t in KIND_KEYS:
+        return t
+    url = data.get("action_url") or ""
+    msg = (data.get("message") or "").lower()
+    if url.startswith("/quote/"):
+        return "followed_quote"
+    if url.startswith("/reader/"):
+        return "new_follower"
+    if url.startswith("/club") or "publication" in msg or (data.get("title") or "") == "Club de lecture":
+        return "club"
+    if url.startswith("/recommendations") or url.startswith("/inbox?tab=recommendations"):
+        return "recommendation"
+    if url.startswith("/book/"):
+        return "book_update"
+    return "general"
+
+
 def _action_url(data: dict) -> str | None:
     """Écran à ouvrir depuis la notification : action_url explicite, sinon déduit du type."""
     if data.get("action_url"):
@@ -52,6 +87,18 @@ def _action_url(data: dict) -> str | None:
     return None
 
 
+async def filter_recipients(recipients: list, kind: str) -> list:
+    """Retire les destinataires qui ont désactivé ce type dans leurs préférences (notif_prefs.<kind> = false)."""
+    if not recipients or kind not in KIND_KEYS:
+        return list(recipients)
+    try:
+        off = {u["user_id"] for u in await db.users.find({"user_id": {"$in": list(recipients)}, f"notif_prefs.{kind}": False}, {"_id": 0, "user_id": 1}).to_list(10000)}
+    except Exception as e:  # noqa: BLE001
+        logger.warning("notif prefs lookup failed: %s", e)
+        return list(recipients)
+    return [r for r in recipients if r not in off]
+
+
 async def store_notifications(recipients: list, data: dict, idempotency_key: str | None = None) -> None:
     """Garde chaque notification en base (collection notifications) pour le centre de notifications de l'app.
     Idempotent sur (destinataire, clé). Ne bloque jamais l'envoi."""
@@ -59,8 +106,7 @@ async def store_notifications(recipients: list, data: dict, idempotency_key: str
         now = now_utc()
         for uid in recipients:
             doc = {"notif_id": new_id("nt"), "user_id": uid, "title": data.get("title") or "Manent", "message": data.get("message") or "",
-                   "action_url": _action_url(data), "kind": (data.get("data") or {}).get("type") or ("club" if (data.get("action_url") or "").startswith("/club") else "general"),
-                   "read": False, "created_at": now}
+                   "action_url": _action_url(data), "kind": notif_kind(data), "read": False, "created_at": now}
             if idempotency_key:
                 await db.notifications.update_one({"user_id": uid, "key": f"{idempotency_key}"}, {"$setOnInsert": {**doc, "key": idempotency_key}}, upsert=True)
             else:
@@ -75,6 +121,9 @@ async def send_push(recipients: list, data: dict, idempotency_key: str | None = 
         return
     if "title" not in data or "message" not in data:
         raise ValueError("data must include title and message")
+    recipients = await filter_recipients(recipients, notif_kind(data))
+    if not recipients:
+        return
     await store_notifications(recipients, data, idempotency_key)
     # max 100 destinataires par appel — on découpe
     for i in range(0, len(recipients), 100):

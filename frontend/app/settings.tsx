@@ -138,8 +138,16 @@ export default function Settings() {
     }
   };
 
+  const [notifKinds, setNotifKinds] = useState<{ key: string; label: string; description: string; enabled: boolean }[]>([]);
+  useEffect(() => { api<{ kinds: any[] }>('/me/notifications').then(r => setNotifKinds(r.kinds)).catch(() => {}); }, []);
+  const toggleNotif = async (key: string) => {
+    const next = notifKinds.map(k => k.key === key ? { ...k, enabled: !k.enabled } : k);
+    setNotifKinds(next);
+    try { await api('/me/notifications', { method: 'PATCH', body: JSON.stringify({ prefs: { [key]: next.find(k => k.key === key)!.enabled } }) }); } catch {}
+  };
+
   const Row = ({ icon, label, right, onPress, testID, danger }: any) => (
-    <Pressable testID={testID} onPress={onPress} disabled={!onPress} style={styles.row}>
+    <Pressable testID={testID} onPress={onPress} disabled={!onPress} accessibilityRole={right ? 'switch' : 'button'} accessibilityLabel={label} style={styles.row}>
       <Feather name={icon} size={18} color={danger ? colors.danger : colors.espresso} />
       <Text style={[styles.rowLabel, danger && { color: colors.danger }]} numberOfLines={2}>{label}</Text>
       {right}
@@ -178,6 +186,25 @@ export default function Settings() {
             <Chip key={k} testID={`settings-scheme-${k}`} label={t(label)} icon={icon} role="radio" selected={schemePref === k} onPress={() => setSchemePref(k)} />
           ))}
         </View>
+
+        <Text style={styles.section}>{t('Notifications')}</Text>
+        <Text style={styles.note}>{t('Chaque type se règle séparément. Il vaut pour les notifications sur ton téléphone et pour la cloche de l’accueil.')}</Text>
+        {notifKinds.map(k => (
+          <View key={k.key}>
+            <Row
+              testID={`settings-notif-${k.key}`}
+              icon={k.key === 'followed_quote' ? 'feather' : k.key === 'quote_like' ? 'heart' : k.key === 'quote_comment' ? 'message-circle' : k.key === 'new_follower' ? 'user-plus' : k.key === 'recommendation' ? 'gift' : k.key === 'invitation' ? 'mail' : k.key === 'club' ? 'users' : 'book'}
+              label={t(k.label)}
+              onPress={() => toggleNotif(k.key)}
+              right={
+                <View style={[styles.switch, k.enabled && { backgroundColor: colors.chambray }]}>
+                  <View style={[styles.knob, k.enabled && { alignSelf: 'flex-end' }]} />
+                </View>
+              }
+            />
+            <Text style={styles.note}>{t(k.description)}</Text>
+          </View>
+        ))}
 
         <Text style={styles.section}>{t('Confidentialité')}</Text>
         <Row

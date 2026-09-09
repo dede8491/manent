@@ -1357,6 +1357,28 @@ async def update_settings(body: SettingsBody, user=Depends(get_current_user)):
             "recos_enabled": (u or {}).get("recos_enabled", True), "tour_seen": bool((u or {}).get("tour_seen"))}
 
 
+class NotifPrefsBody(BaseModel):
+    prefs: dict  # {kind: bool}
+
+
+@api.get("/me/notifications")
+async def get_notif_prefs(user=Depends(get_current_user)):
+    """Préférences de notifications par type (push et centre de notifications). Tout est activé par défaut."""
+    from routes.push import KINDS
+    u = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "notif_prefs": 1}) or {}
+    prefs = u.get("notif_prefs") or {}
+    return {"kinds": [{"key": k, "label": lbl, "description": desc, "enabled": prefs.get(k, True) is not False} for k, lbl, desc in KINDS]}
+
+
+@api.patch("/me/notifications")
+async def patch_notif_prefs(body: NotifPrefsBody, user=Depends(get_current_user)):
+    from routes.push import KIND_KEYS
+    upd = {f"notif_prefs.{k}": bool(v) for k, v in body.prefs.items() if k in KIND_KEYS}
+    if upd:
+        await db.users.update_one({"user_id": user["user_id"]}, {"$set": upd})
+    return await get_notif_prefs(user)
+
+
 @api.get("/me/export")
 async def export_my_data(user=Depends(get_current_user)):
     uid = user["user_id"]
@@ -2869,7 +2891,7 @@ async def create_recommendation(body: RecommendationBody, user=Depends(get_curre
         await send_push([target["user_id"]], {
             "title": "Manent",
             "message": f"{user['pseudo']} te recommande « {book['title']} »",
-            "action_url": "/recommendations",
+            "action_url": "/inbox?tab=recommendations",
         })
     except Exception as e:
         logger.warning("push recommendation failed (non-blocking): %s", e)

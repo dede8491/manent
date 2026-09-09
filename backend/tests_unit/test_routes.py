@@ -132,3 +132,18 @@ async def test_notification_center(client, fake_db):
     r = await client.get("/api/notifications", headers=headers)
     assert r.status_code == 200 and r.json()["notifications"][0]["action_url"] == "/quote/q1"
     assert (await client.get("/api/notifications/badge", headers=headers)).json()["unread"] == 0, "lue une fois la liste ouverte"
+
+
+async def test_notification_preferences_filter(client, fake_db):
+    headers, user = await register(client, "p@manent-tests.org", "Paule")
+    r = await client.get("/api/me/notifications", headers=headers)
+    assert r.status_code == 200 and all(k["enabled"] for k in r.json()["kinds"]) and len(r.json()["kinds"]) == 8
+    r = await client.patch("/api/me/notifications", headers=headers, json={"prefs": {"quote_like": False, "bogus": False}})
+    assert {k["key"]: k["enabled"] for k in r.json()["kinds"]}["quote_like"] is False
+    like = {"title": "Manent", "message": "Léa a aimé ta citation", "data": {"type": "quote_like", "quote_id": "q1"}}
+    assert await push.filter_recipients([user["user_id"]], push.notif_kind(like)) == []
+    follow = {"title": "Manent", "message": "Léa suit maintenant tes lectures", "action_url": "/reader/lea"}
+    assert push.notif_kind(follow) == "new_follower"
+    assert await push.filter_recipients([user["user_id"]], "new_follower") == [user["user_id"]]
+    assert push.notif_kind({"title": "Léa", "message": "« … »", "action_url": "/quote/q9"}) == "followed_quote"
+    assert push.notif_kind({"title": "Mon club", "message": "x", "action_url": "/club/c1"}) == "club"
