@@ -145,7 +145,7 @@ export default function WrapUp() {
           </Pressable>
           <Pressable testID="wrapup-pdf" onPress={exportPdf} disabled={pdfBusy} accessibilityRole="button" style={[styles.ghostBtn, pdfBusy && { opacity: 0.6 }]}>
             <Feather name="file-text" size={15} color={colors.espresso} />
-            <Text style={styles.ghostText}>{pdfBusy ? t('Génération…') : t('Exporter mon journal en PDF')}</Text>
+            <Text style={styles.ghostText} numberOfLines={1}>{pdfBusy ? t('Génération…') : t('Exporter mon journal en PDF')}</Text>
             {!w.is_premium && <Text style={styles.premiumTag}>PREMIUM</Text>}
           </Pressable>
           {!w.is_premium && (
@@ -222,9 +222,6 @@ function CardStat({ label, value, styles, color }: { label: string; value: strin
 }
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.md, paddingBottom: spacing.xs },
-  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  headerLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 2, textTransform: 'uppercase' },
   hero: { flexDirection: 'row', gap: spacing.lg, alignItems: 'center' },
   kicker: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.chambray, letterSpacing: 1.6, textTransform: 'uppercase' },
   title: { fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso, lineHeight: 29, marginTop: 2 },
@@ -244,9 +241,9 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   lesson: { fontFamily: fonts.body, fontSize: 14, color: colors.espresso, lineHeight: 21 },
   shareBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 50, borderRadius: radius.pill, backgroundColor: colors.chambray, marginTop: spacing.xl },
   shareText: { fontFamily: fonts.bodyMedium, fontSize: 15, color: colors.creme },
-  ghostBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 46, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, backgroundColor: colors.creme, marginTop: spacing.sm },
-  ghostText: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.espresso },
-  premiumTag: { fontFamily: fonts.bodyMedium, fontSize: 9, color: colors.espresso, letterSpacing: 1, backgroundColor: colors.bisque, paddingHorizontal: 6, paddingVertical: 2, borderRadius: radius.pill },
+  ghostBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 46, paddingVertical: 10, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, backgroundColor: colors.creme, marginTop: spacing.sm },
+  ghostText: { flexShrink: 1, fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.espresso },
+  premiumTag: { flexShrink: 0, fontFamily: fonts.bodyMedium, fontSize: 9, color: colors.espresso, letterSpacing: 1, backgroundColor: colors.bisque, paddingHorizontal: 6, paddingVertical: 2, borderRadius: radius.pill },
   premiumHint: { fontFamily: fonts.body, fontSize: 12.5, color: colors.chambray, textDecorationLine: 'underline' },
   msg: { fontFamily: fonts.body, fontSize: 13, color: colors.clay, textAlign: 'center', marginTop: spacing.md, lineHeight: 19 },
   // carte 1080×1920 — palette de marque fixe (indépendante du mode sombre)

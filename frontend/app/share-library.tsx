@@ -159,9 +159,6 @@ export default function ShareLibrary() {
 }
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.md, paddingBottom: spacing.sm },
-  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  headerLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 2, textTransform: 'uppercase' },
   title: { fontFamily: fonts.displayMedium, fontSize: 28, color: colors.espresso },
   sub: { fontFamily: fonts.body, fontSize: 13.5, color: colors.clay, lineHeight: 19, marginTop: 4, marginBottom: spacing.lg },
   rowBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },

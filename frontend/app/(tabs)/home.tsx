@@ -14,6 +14,7 @@ import ManentLoader from '@/src/components/ManentLoader';
 import { ErrorState } from '@/src/components/ErrorState';
 import { InfoTooltip } from '@/src/components/InfoTooltip';
 import { WelcomeTour } from '@/src/components/WelcomeTour';
+import { BottomSheet } from '@/src/components/BottomSheet';
 import { useT, useLang } from '@/src/i18n';
 import { dayLabel, JournalHome, moodOf, useOutbox } from '@/src/journal';
 
@@ -34,16 +35,20 @@ export default function Home() {
   const [loadError, setLoadError] = useState(false);
   const [nextUp, setNextUp] = useState<any>(null);
   const [reading, setReading] = useState<any>(null);
+  const [goalSheet, setGoalSheet] = useState(false);
+  const [unread, setUnread] = useState(0);
+  const [goalInput, setGoalInput] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [birthModal, setBirthModal] = useState(false);
   const [birth, setBirth] = useState('');
   const [birthSaving, setBirthSaving] = useState(false);
 
   const load = useCallback(async () => {
-    const [h, d, r] = await Promise.allSettled([api<JournalHome>('/journal/home'), api<any>('/home/discover'), api<any>('/stats/reading')]);
+    const [h, d, r, n] = await Promise.allSettled([api<JournalHome>('/journal/home'), api<any>('/home/discover'), api<any>('/stats/reading'), api<{ unread: number }>('/notifications/badge')]);
     if (h.status === 'fulfilled') { setHome(h.value); setLoadError(false); } else setLoadError(true);
     if (d.status === 'fulfilled') setNextUp(d.value?.next_up || null);
     if (r.status === 'fulfilled') setReading(r.value);
+    if (n.status === 'fulfilled') setUnread(n.value.unread || 0);
   }, []);
   useFocusEffect(useCallback(() => { flush().then(load); }, [load, flush]));
   const onRefresh = async () => { setRefreshing(true); await flush(); await load(); setRefreshing(false); };
@@ -89,22 +94,21 @@ export default function Home() {
   const firstName = (user?.pseudo || '').split(' ')[0];
   const hour = new Date().getHours();
   const greeting = hour < 5 ? t('Bonne nuit') : hour < 12 ? t('Bonjour') : hour < 18 ? t('Bon après-midi') : t('Bonsoir');
-  const streakText = (() => {
-    if (!home) return '';
-    if (home.streak >= 2) return t('{n} jours de lecture d’affilée.', { n: home.streak });
-    if (home.active_days_week >= 2) return t('{n} jours de lecture cette semaine.', { n: home.active_days_week });
-    if (home.active_days_week === 1) return t('Un jour de lecture cette semaine. Chaque page compte.');
-    return t('Une page suffit pour commencer aujourd’hui.');
-  })();
-  const writeEntry = () => router.push({ pathname: '/journal/new', params: book ? { book_id: book.book_id, from: 'home' } : { from: 'home' } });
+  // Une seule phrase d'accroche sous le prénom ; la série chiffrée vit dans « Mon évolution » (pas deux fois la même donnée).
+  const subline = entry ? t('Contente de te retrouver. Ton journal t’attend.') : t('Une page suffit pour commencer aujourd’hui.');
+  const writeEntry = () => router.push({ pathname: '/journal/new', params: book ? { book_id: book.book_id } : {} });
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.glacier }} testID="screen-home">
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
         <Wordmark size={19} variant="horizontal" />
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-          <Pressable testID="home-search" onPress={() => router.push('/search')} style={styles.iconBtn} hitSlop={6}>
+          <Pressable testID="home-search" onPress={() => router.push('/search')} accessibilityRole="button" accessibilityLabel={t('Rechercher')} style={styles.iconBtn} hitSlop={6}>
             <Feather name="search" size={19} color={colors.espresso} />
+          </Pressable>
+          <Pressable testID="home-notifications" onPress={() => router.push('/inbox')} accessibilityRole="button" accessibilityLabel={unread > 0 ? t('{n} notifications non lues', { n: unread }) : t('Notifications')} style={styles.iconBtn} hitSlop={6}>
+            <Feather name="bell" size={19} color={colors.espresso} />
+            {unread > 0 && <View style={styles.bellBadge} testID="home-notifications-badge"><Text style={styles.bellBadgeText}>{unread > 99 ? '99+' : unread}</Text></View>}
           </Pressable>
           <InfoTooltip
             testID="info-home"
@@ -120,13 +124,13 @@ export default function Home() {
         <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingTop: spacing.sm, paddingBottom: insets.bottom + 90 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.chambray} />}>
           <Text style={styles.greeting}>{firstName ? `${greeting}, ${firstName}.` : `${greeting}.`}</Text>
-          <Text style={styles.streak} testID="home-streak">{streakText}</Text>
+          <Text style={styles.streak} testID="home-subline">{subline}</Text>
           {loadError && <View style={{ marginBottom: spacing.md }}><ErrorState compact onRetry={load} testID="home-error" /></View>}
 
           {pending > 0 && (
-            <Pressable testID="home-outbox" onPress={() => flush().then(load)} style={styles.outbox}>
+            <Pressable testID="home-outbox" onPress={() => flush().then(load)} accessibilityRole="button" style={styles.outbox}>
               <Feather name="cloud-off" size={14} color={colors.espresso} />
-              <Text style={styles.outboxText}>{t(pending > 1 ? '{n} entrées attendent le réseau.' : 'Une entrée attend le réseau.', { n: pending })}</Text>
+              <Text style={styles.outboxText} numberOfLines={2}>{t(pending > 1 ? '{n} entrées attendent le réseau.' : 'Une entrée attend le réseau.', { n: pending })}</Text>
               <Text style={styles.outboxAction}>{t('Réessayer')}</Text>
             </Pressable>
           )}
@@ -162,11 +166,11 @@ export default function Home() {
                 <Text style={styles.bookTitle}>{nextUp ? t('Commencer « {t} » ?', { t: nextUp.title }) : t('Quel livre lis-tu en ce moment ?')}</Text>
                 <View style={{ flexDirection: 'row', gap: 8, marginTop: spacing.sm, flexWrap: 'wrap' }}>
                   {nextUp && (
-                    <Pressable testID="home-start-next" onPress={() => router.push({ pathname: '/book/[id]', params: { id: nextUp.book_id } })} style={styles.smallBtn}>
+                    <Pressable testID="home-start-next" onPress={() => router.push({ pathname: '/book/[id]', params: { id: nextUp.book_id } })} accessibilityRole="button" style={styles.smallBtn}>
                       <Text style={styles.smallBtnText}>{t('Commencer')}</Text>
                     </Pressable>
                   )}
-                  <Pressable testID="home-add-book" onPress={() => router.push('/book/add')} style={styles.smallGhost}>
+                  <Pressable testID="home-add-book" onPress={() => router.push({ pathname: '/book/add', params: { method: 'title' } })} accessibilityRole="button" style={styles.smallGhost}>
                     <Feather name="plus" size={13} color={colors.espresso} /><Text style={styles.smallGhostText}>{t('Ajouter un livre')}</Text>
                   </Pressable>
                 </View>
@@ -175,7 +179,7 @@ export default function Home() {
           )}
 
           {/* Écrire */}
-          <Pressable testID="home-write" onPress={writeEntry} style={({ pressed }) => [styles.writeBtn, pressed && { opacity: 0.9 }]}>
+          <Pressable testID="home-write" onPress={writeEntry} accessibilityRole="button" style={({ pressed }) => [styles.writeBtn, pressed && { opacity: 0.9 }]}>
             <View style={styles.writeIcon}><Feather name="feather" size={18} color={colors.chambray} /></View>
             <View style={{ flex: 1 }}>
               <Text style={styles.writeTitle}>{t('Écrire mon entrée du jour')}</Text>
@@ -214,9 +218,18 @@ export default function Home() {
               <Text style={styles.sectionLabel}>{t('Mon évolution')}</Text>
               <View style={styles.evoCard} testID="home-evolution">
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
-                  <View style={styles.streakBox}>
-                    <Text style={styles.streakNum}>{reading.streak}</Text>
-                    <Text style={styles.streakLbl}>{t(reading.streak > 1 ? 'jours d’affilée' : 'jour d’affilée')}</Text>
+                  <View style={styles.streakBox} testID="home-streak" accessibilityLabel={reading.streak > 0 ? t('{n} jours de lecture d’affilée.', { n: reading.streak }) : t('Une page suffit pour commencer aujourd’hui.')}>
+                    {reading.streak > 0 ? (
+                      <>
+                        <Text style={styles.streakNum}>{reading.streak}</Text>
+                        <Text style={styles.streakLbl} numberOfLines={2} adjustsFontSizeToFit>{t(reading.streak > 1 ? 'jours d’affilée' : 'jour d’affilée')}</Text>
+                      </>
+                    ) : (
+                      <>
+                        <Feather name="feather" size={22} color={colors.chambray} />
+                        <Text style={styles.streakLbl} numberOfLines={2} adjustsFontSizeToFit>{t('Une page suffit')}</Text>
+                      </>
+                    )}
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.evoTitle}>{t('Ta semaine de lecture')}</Text>
@@ -235,9 +248,9 @@ export default function Home() {
                     );
                   })}
                 </View>
-                <Pressable testID="home-goal" onPress={() => router.push('/(tabs)/profile')} accessibilityRole="button" style={styles.goalRow}>
+                <Pressable testID="home-goal" onPress={() => { setGoalInput(reading.yearly_goal ? String(reading.yearly_goal) : ''); setGoalSheet(true); }} accessibilityRole="button" style={styles.goalRow}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.evoSub}>{t('Objectif {year}', { year: reading.year })}{reading.yearly_goal ? ` · ${t('{done} / {goal} livres terminés', { done: reading.books_year, goal: reading.yearly_goal })}` : ` · ${t('Fixer un objectif')}`}</Text>
+                    <Text style={styles.evoSub}>{t('Objectif {year}', { year: reading.year })}{reading.yearly_goal ? ` · ${t('{done} / {goal} livres terminés', { done: reading.books_year, goal: reading.yearly_goal })}${reading.books_year >= reading.yearly_goal ? t('  ·  Objectif atteint.') : ''}` : ` · ${t('Fixer un objectif')}`}</Text>
                     {reading.yearly_goal ? <View style={styles.goalBar}><View style={[styles.goalFill, { width: `${Math.min(100, Math.round((reading.books_year / reading.yearly_goal) * 100))}%` }]} /></View> : null}
                   </View>
                   <Feather name="chevron-right" size={14} color={colors.clay} />
@@ -251,28 +264,36 @@ export default function Home() {
             </>
           )}
 
-          <View style={styles.links}>
-            <Pressable testID="home-open-journal" onPress={() => router.push('/(tabs)/journal')} style={styles.linkBtn}>
-              <Feather name="book-open" size={15} color={colors.espresso} /><Text style={styles.linkText}>{t('Mon journal')}</Text>
-              {home.entries_total > 0 && <Text style={styles.linkCount}>{home.entries_total}</Text>}
-            </Pressable>
-            <Pressable testID="home-open-discover" onPress={() => router.push('/(tabs)/discover')} style={styles.linkBtn}>
-              <Feather name="compass" size={15} color={colors.espresso} /><Text style={styles.linkText}>{t('Découvrir')}</Text>
-            </Pressable>
-          </View>
         </ScrollView>
       )}
+
+      <BottomSheet visible={goalSheet} onClose={() => setGoalSheet(false)} title={t('Objectif de l’année')} subtitle={t('Un cap réaliste vaut mieux qu’un record : combien de livres cette année ?')} testID="sheet-goal" scroll={false}>
+        <TextInput testID="goal-input" value={goalInput} onChangeText={v => setGoalInput(v.replace(/\D/g, ''))} keyboardType="number-pad" placeholder="12" placeholderTextColor={colors.clay} style={styles.goalInput} autoFocus accessibilityLabel={t('Nombre de livres')} />
+        <Pressable
+          testID="goal-save"
+          disabled={!goalInput || parseInt(goalInput, 10) < 1}
+          accessibilityRole="button"
+          onPress={async () => {
+            const g = parseInt(goalInput, 10);
+            if (!g || g < 1) return;
+            try { await api('/me/goal', { method: 'PATCH', body: JSON.stringify({ yearly_goal: g }) }); setReading((r: any) => ({ ...r, yearly_goal: g })); setGoalSheet(false); } catch {}
+          }}
+          style={[styles.goalSaveBtn, (!goalInput || parseInt(goalInput, 10) < 1) && { opacity: 0.5 }]}
+        >
+          <Text style={styles.goalSaveText}>{t('Enregistrer')}</Text>
+        </Pressable>
+      </BottomSheet>
 
       <Modal visible={birthModal} transparent animationType="fade" onRequestClose={skipBirth}>
         <View style={styles.birthOverlay}>
           <View style={styles.birthModal} testID="birthdate-modal">
             <Text style={styles.birthTitle}>{t('Ta date de naissance')}</Text>
             <Text style={styles.birthSub}>{t('Elle sert uniquement à filtrer les contenus sensibles selon ton âge. Sans elle, ils resteront masqués.')}</Text>
-            <TextInput testID="birthdate-input" value={birth} onChangeText={onBirthChange} placeholder={t('JJ/MM/AAAA')} placeholderTextColor={colors.clay} keyboardType="number-pad" maxLength={10} style={styles.birthInput} />
-            <Pressable testID="birthdate-save" onPress={saveBirth} disabled={!birthIso || birthSaving} style={[styles.birthBtn, (!birthIso || birthSaving) && { opacity: 0.5 }]}>
+            <TextInput testID="birthdate-input" value={birth} onChangeText={onBirthChange} placeholder={t('JJ/MM/AAAA')} placeholderTextColor={colors.clay} keyboardType="number-pad" maxLength={10} style={styles.birthInput} accessibilityLabel={t('Date de naissance (JJ/MM/AAAA)')} />
+            <Pressable testID="birthdate-save" onPress={saveBirth} disabled={!birthIso || birthSaving} accessibilityRole="button" style={[styles.birthBtn, (!birthIso || birthSaving) && { opacity: 0.5 }]}>
               <Text style={styles.birthBtnText}>{t('Enregistrer')}</Text>
             </Pressable>
-            <Pressable testID="birthdate-skip" onPress={skipBirth} style={{ alignSelf: 'center', padding: spacing.sm }}>
+            <Pressable testID="birthdate-skip" onPress={skipBirth} accessibilityRole="button" style={{ alignSelf: 'center', padding: spacing.sm }}>
               <Text style={styles.birthSkip}>{t('Plus tard')}</Text>
             </Pressable>
           </View>
@@ -285,12 +306,14 @@ export default function Home() {
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingBottom: spacing.sm },
-  iconBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  bellBadge: { position: 'absolute', top: 4, right: 2, minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 4, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },
+  bellBadgeText: { fontFamily: fonts.bodyMedium, fontSize: 9.5, color: colors.creme },
   greeting: { fontFamily: fonts.displayMedium, fontSize: 28, color: colors.espresso },
   streak: { fontFamily: fonts.body, fontSize: 13.5, color: colors.clay, marginTop: 2, marginBottom: spacing.lg },
   outbox: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.bisque, borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.md },
   outboxText: { flex: 1, fontFamily: fonts.body, fontSize: 12.5, color: colors.espresso },
-  outboxAction: { fontFamily: fonts.bodyMedium, fontSize: 12.5, color: colors.chambray },
+  outboxAction: { fontFamily: fonts.bodyMedium, fontSize: 12.5, color: colors.chambray, flexShrink: 0 },
   bookCard: { flexDirection: 'row', gap: spacing.lg, backgroundColor: colors.creme, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.lg },
   emptyCover: { width: 92, height: 134, borderRadius: 8, backgroundColor: colors.glacier, alignItems: 'center', justifyContent: 'center' },
   kicker: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.chambray, letterSpacing: 1.6, textTransform: 'uppercase', marginBottom: 4 },
@@ -318,9 +341,9 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   entryText: { fontFamily: fonts.body, fontSize: 14.5, color: colors.espresso, lineHeight: 22 },
   entryQuote: { fontFamily: fonts.display, fontSize: 17, color: colors.espresso, lineHeight: 24 },
   evoCard: { backgroundColor: colors.creme, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.lg },
-  streakBox: { width: 76, alignItems: 'center', paddingVertical: spacing.sm, backgroundColor: colors.bisque, borderRadius: radius.md },
+  streakBox: { width: 92, minHeight: 64, alignItems: 'center', justifyContent: 'center', paddingVertical: spacing.sm, paddingHorizontal: 6, backgroundColor: colors.bisque, borderRadius: radius.md, gap: 2 },
   streakNum: { fontFamily: fonts.displayMedium, fontSize: 28, color: colors.espresso, lineHeight: 32 },
-  streakLbl: { fontFamily: fonts.bodyMedium, fontSize: 8.5, color: colors.clay, letterSpacing: 1, textTransform: 'uppercase', textAlign: 'center' },
+  streakLbl: { fontFamily: fonts.bodyMedium, fontSize: 8.5, color: colors.clay, letterSpacing: 0.8, textTransform: 'uppercase', textAlign: 'center' },
   evoTitle: { fontFamily: fonts.displayMedium, fontSize: 18, color: colors.espresso },
   evoSub: { fontFamily: fonts.body, fontSize: 12, color: colors.clay, marginTop: 2, lineHeight: 17 },
   weekRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.md, paddingHorizontal: spacing.xs },
@@ -331,14 +354,13 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   goalRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: spacing.md, paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.borderSoft },
   goalBar: { height: 6, backgroundColor: colors.glacier, borderRadius: 3, overflow: 'hidden', marginTop: 6 },
   goalFill: { height: 6, backgroundColor: colors.chambray },
+  goalInput: { height: 56, borderWidth: 1, borderColor: colors.borderSoft, borderRadius: radius.md, paddingHorizontal: spacing.md, fontFamily: fonts.displayMedium, fontSize: 22, color: colors.espresso, backgroundColor: colors.creme, textAlign: 'center' },
+  goalSaveBtn: { height: 48, borderRadius: radius.pill, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center', marginTop: spacing.md },
+  goalSaveText: { fontFamily: fonts.bodyMedium, fontSize: 15, color: colors.creme },
   retroRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: spacing.md },
   retroText: { flex: 1, fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.espresso },
-  links: { flexDirection: 'row', gap: 8, marginTop: spacing.lg },
-  linkBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 42, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, backgroundColor: colors.creme },
-  linkText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.espresso },
-  linkCount: { fontFamily: fonts.body, fontSize: 12, color: colors.clay },
-  birthOverlay: { flex: 1, backgroundColor: 'rgba(58,33,25,0.4)', justifyContent: 'center', padding: spacing.xl },
-  birthModal: { backgroundColor: colors.glacier, borderRadius: 20, padding: spacing.xl },
+  birthOverlay: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'center', padding: spacing.xl },
+  birthModal: { backgroundColor: colors.glacier, borderRadius: radius.xl, padding: spacing.xl },
   birthTitle: { fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso },
   birthSub: { fontFamily: fonts.body, fontSize: 13, color: colors.clay, lineHeight: 19, marginTop: spacing.xs },
   birthInput: { height: 56, borderWidth: 1, borderColor: colors.borderSoft, borderRadius: radius.md, fontFamily: fonts.displayMedium, fontSize: 22, color: colors.espresso, backgroundColor: colors.creme, marginTop: spacing.md, textAlign: 'center' },

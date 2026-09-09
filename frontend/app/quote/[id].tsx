@@ -344,7 +344,7 @@ export default function QuoteDetail() {
             <View style={styles.grabber} />
             <Text style={styles.modalTitle}>{t('Choisis un tableau')}</Text>
             {boards.length === 0 ? (
-              <Text style={{ fontFamily: fonts.body, color: colors.clay, textAlign: 'center', paddingVertical: spacing.xl }}>{t('Aucun tableau. Crée-en un depuis Communauté.')}</Text>
+              <Text style={{ fontFamily: fonts.body, color: colors.clay, textAlign: 'center', paddingVertical: spacing.xl }}>{t('Aucun tableau. Crée-en un depuis Découvrir → « Mes tableaux et clubs ».')}</Text>
             ) : (
               <FlatList
                 data={boards}

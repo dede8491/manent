@@ -1388,6 +1388,28 @@ async def update_settings(body: SettingsBody, user=Depends(get_current_user)):
             "recos_enabled": (u or {}).get("recos_enabled", True), "tour_seen": bool((u or {}).get("tour_seen"))}
 
 
+class NotifPrefsBody(BaseModel):
+    prefs: dict  # {kind: bool}
+
+
+@api.get("/me/notifications")
+async def get_notif_prefs(user=Depends(get_current_user)):
+    """Préférences de notifications par type (push et centre de notifications). Tout est activé par défaut."""
+    from routes.push import KINDS
+    u = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "notif_prefs": 1}) or {}
+    prefs = u.get("notif_prefs") or {}
+    return {"kinds": [{"key": k, "label": lbl, "description": desc, "enabled": prefs.get(k, True) is not False} for k, lbl, desc in KINDS]}
+
+
+@api.patch("/me/notifications")
+async def patch_notif_prefs(body: NotifPrefsBody, user=Depends(get_current_user)):
+    from routes.push import KIND_KEYS
+    upd = {f"notif_prefs.{k}": bool(v) for k, v in body.prefs.items() if k in KIND_KEYS}
+    if upd:
+        await db.users.update_one({"user_id": user["user_id"]}, {"$set": upd})
+    return await get_notif_prefs(user)
+
+
 @api.get("/me/export")
 async def export_my_data(user=Depends(get_current_user)):
     uid = user["user_id"]
@@ -2885,7 +2907,7 @@ async def create_recommendation(body: RecommendationBody, user=Depends(get_curre
         await send_push([target["user_id"]], {
             "title": "Manent",
             "message": f"{user['pseudo']} te recommande « {book['title']} »",
-            "action_url": "/recommendations",
+            "action_url": "/inbox?tab=recommendations",
         })
     except Exception as e:
         logger.warning("push recommendation failed (non-blocking): %s", e)
@@ -2937,6 +2959,25 @@ async def create_invitation(body: InvitationBody, user=Depends(get_current_user)
     except Exception:
         pass
     return {"ok": True, "invite_id": inv["invite_id"]}
+
+
+# ============ Centre de notifications ============
+@api.get("/notifications")
+async def list_notifications(user=Depends(get_current_user)):
+    """Cinquante dernières notifications (likes, commentaires, abonnements, clubs, invitations…) ; ouvrir la liste marque tout comme lu."""
+    rows = await db.notifications.find({"user_id": user["user_id"]}, {"_id": 0, "key": 0}).sort("created_at", -1).to_list(50)
+    await db.notifications.update_many({"user_id": user["user_id"], "read": False}, {"$set": {"read": True}})
+    return {"notifications": rows}
+
+
+@api.get("/notifications/badge")
+async def notifications_badge(user=Depends(get_current_user)):
+    """Pastille de la cloche de l'accueil : notifications non lues + invitations et recommandations en attente non lues."""
+    uid = user["user_id"]
+    n = await db.notifications.count_documents({"user_id": uid, "read": False})
+    inv = await db.invitations.count_documents({"to_id": uid, "status": "pending", "read": False})
+    reco = await db.recommendations.count_documents({"to_id": uid, "read": False, "status": "pending"})
+    return {"unread": n + inv + reco, "notifications": n, "invitations": inv, "recommendations": reco}
 
 
 @api.get("/invitations/badge")
@@ -3314,6 +3355,9 @@ async def on_startup():
     await _idx(db.book_summaries, "key")
     await _idx(db.meta, "key")
     await _idx(db.users, "handle", sparse=True)
+    await _idx(db.notifications, [("user_id", 1), ("created_at", -1)])
+    await _idx(db.notifications, [("user_id", 1), ("read", 1)])
+    await _idx(db.notifications, [("user_id", 1), ("key", 1)], unique=True, partialFilterExpression={"key": {"$type": "string"}})
     await _idx(db.login_attempts, "email", unique=True)
     await _idx(db.login_attempts, "first_at", expireAfterSeconds=LOGIN_WINDOW_S)
     await journal.init()

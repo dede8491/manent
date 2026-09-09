@@ -18,7 +18,7 @@ import ManentLoader from '@/src/components/ManentLoader';
 import { Feather } from '@expo/vector-icons';
 import { useT, useI18n } from '@/src/i18n';
 
-type Info = { title: string; author?: string; cover?: string | null; year?: string; summary?: string | null; prize?: string; catalog_id?: string; isbn?: string; pages?: number };
+type Info = { title: string; author?: string; cover?: string | null; year?: string; summary?: string | null; catalog_id?: string; isbn?: string; pages?: number };
 
 // Fiche catalogue unique (livre pas encore dans ma bibliothèque). Trois façons d'y arriver :
 // par identifiant (`catalog_id`, liens /b/…), par code-barres (`isbn`, scanner) ou par données déjà connues (title, author…).
@@ -31,7 +31,7 @@ export default function DiscoverBook() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const p = useLocalSearchParams<any>();
-  const [info, setInfo] = useState<Info | null>(p.title ? { title: p.title, author: p.author, cover: p.cover, year: p.year, summary: p.summary, prize: p.prize, catalog_id: p.catalog_id } : null);
+  const [info, setInfo] = useState<Info | null>(p.title ? { title: p.title, author: p.author, cover: p.cover, year: p.year, summary: p.summary, catalog_id: p.catalog_id } : null);
   const [meta, setMeta] = useState<any>(null);
   const [social, setSocial] = useState<{ readers: number; avg_rating: number | null; ratings_count: number; quotes: Quote[]; in_library: boolean } | null>(null);
   const [status, setStatus] = useState<'a_lire' | 'en_cours' | 'termine'>('a_lire');
@@ -109,7 +109,6 @@ export default function DiscoverBook() {
         >
           <View style={{ alignItems: 'center' }}>
             <BookCover uri={info.cover || meta?.cover || undefined} title={info.title} width={140} height={210} radius={10} initialSize={48} />
-            {info.prize ? <View style={styles.prizeTag}><Text style={styles.prizeText}>{info.prize}</Text></View> : null}
             <Text style={styles.title}>{info.title}</Text>
             {!!info.author && <Text style={styles.author}>{info.author}{info.year ? `  ·  ${info.year}` : ''}</Text>}
             <AreaLine areas={meta?.area_labels} countries={meta?.country_labels} style={{ marginTop: 6 }} />
@@ -169,8 +168,6 @@ export default function DiscoverBook() {
 }
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
-  prizeTag: { backgroundColor: colors.chambray, paddingHorizontal: 12, paddingVertical: 4, borderRadius: radius.pill, marginTop: spacing.md },
-  prizeText: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.creme, letterSpacing: 1, textTransform: 'uppercase' },
   title: { fontFamily: fonts.displayMedium, fontSize: 26, color: colors.espresso, textAlign: 'center', marginTop: spacing.md, lineHeight: 31 },
   author: { fontFamily: fonts.body, fontSize: 14, color: colors.clay, marginTop: 4 },
   social: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.chambray, marginTop: 8 },

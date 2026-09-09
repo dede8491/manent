@@ -103,15 +103,15 @@ export default function Discover() {
         <View style={{ paddingHorizontal: spacing.xl, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <Text style={styles.screenTitle}>{t('Découvrir')}</Text>
           <InfoTooltip
-            testID="info-home"
+            testID="info-discover"
             title={t('Comment ça marche')}
-            text={t("Cherche par mots ou décris ton envie. « Pour toi » propose des livres d'après tes sujets, les origines de tes auteurs et les lectrices que tu suis : « Pas pour moi » affine les prochaines propositions. Puis ta citation du matin, le fil des lectrices, les collections, les plus lus et les clubs publics. L'icône de scan identifie un livre par son code-barres.")}
+            text={t("« Pour toi » propose des livres d'après tes sujets, les origines de tes auteurs et les lectrices que tu suis : « Pas pour moi » affine les prochaines propositions. Puis ta citation du matin, le fil des lectrices, les collections, les plus lus et les clubs publics. La barre du haut ouvre la recherche (par mots ou par envie) ; l'icône de scan identifie un livre par son code-barres.")}
           />
         </View>
         <View style={[styles.searchRow, { flexDirection: 'row', gap: 8, alignItems: 'center' }]}>
-          <Pressable testID="home-search" onPress={() => router.push('/search')} accessibilityRole="search" style={[styles.search, { flex: 1 }]}>
+          <Pressable testID="discover-search" onPress={() => router.push('/search')} accessibilityRole="search" accessibilityLabel={t('Rechercher')} style={[styles.search, { flex: 1 }]}>
             <Feather name="search" size={16} color={colors.clay} />
-            <Text style={styles.searchPlaceholder}>{t('Cherche une citation, un livre, un lecteur…')}</Text>
+            <Text style={styles.searchPlaceholder} numberOfLines={1}>{t('Citation, livre, lectrice…')}</Text>
           </Pressable>
           <Pressable testID="home-scan" onPress={() => router.push('/discover/scan')} accessibilityRole="button" accessibilityLabel={t('Scanner un code-barres')} style={styles.scanBtn}>
             <Feather name="maximize" size={17} color={colors.espresso} />
@@ -119,23 +119,20 @@ export default function Discover() {
         </View>
         <View style={styles.chipRow}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: spacing.xl }}>
-            <View style={[styles.chip, styles.chipActive]}>
-              <Text style={[styles.chipText, styles.chipTextActive]}>{t('Pour toi')}</Text>
-            </View>
-            {themes.map(t => (
-              <Pressable key={t} testID={`home-chip-${t}`} onPress={() => router.push({ pathname: '/theme/[name]', params: { name: t } })} style={styles.chip}>
-                <Text style={styles.chipText}>{t}</Text>
+            {themes.map(th => (
+              <Pressable key={th} testID={`home-chip-${th}`} onPress={() => router.push({ pathname: '/theme/[name]', params: { name: th } })} accessibilityRole="button" style={styles.chip}>
+                <Text style={styles.chipText} numberOfLines={1}>{th}</Text>
               </Pressable>
             ))}
-            <Pressable testID="home-chip-add" onPress={() => router.push('/onboarding/themes?edit=1')} style={styles.chip}>
+            <Pressable testID="home-chip-add" onPress={() => router.push('/onboarding/themes?edit=1')} accessibilityRole="button" accessibilityLabel={t('Modifier mes sujets')} style={styles.chip}>
               <Text style={styles.chipText}>+</Text>
             </Pressable>
           </ScrollView>
         </View>
         <Pressable testID="home-intent" onPress={() => router.push({ pathname: '/search', params: { mode: 'envie' } })} accessibilityRole="button" style={styles.intentLink}>
           <Feather name="feather" size={14} color={colors.chambray} />
-          <Text style={styles.intentLinkText}>{t('Je cherche un livre qui…')}</Text>
-          <Text style={styles.intentLinkSub} numberOfLines={1}>{t('Décris ton envie, Manent trouve le livre.')}</Text>
+          <Text style={styles.intentLinkText} numberOfLines={1}>{t('Je cherche un livre qui…')}</Text>
+          <Feather name="chevron-right" size={14} color={colors.chambray} />
         </Pressable>
       </View>
       <ScrollView
@@ -146,9 +143,9 @@ export default function Discover() {
         {forYou.length > 0 && (
           <View style={{ marginBottom: spacing.lg }} testID="home-for-you">
             <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
-              <Text style={styles.areasLabel}>{t('Pour toi')}</Text>
+              <Text style={[styles.areasLabel, { flex: 1 }]} numberOfLines={1}>{t('Pour toi')}</Text>
               {forYouTotal > forYou.length && (
-                <Pressable testID="home-for-you-more" onPress={() => router.push('/for-you')} hitSlop={8}>
+                <Pressable testID="home-for-you-more" onPress={() => router.push('/for-you')} hitSlop={8} accessibilityRole="button">
                   <Text style={styles.seeAll}>{t('Voir plus')}</Text>
                 </Pressable>
               )}
@@ -161,7 +158,7 @@ export default function Discover() {
                     onPress={() => router.push({ pathname: '/discover/book', params: { title: b.title, author: b.author || '', cover: b.cover || '', year: b.year || '', summary: b.summary || '', catalog_id: b.catalog_id } })}
                   />
                   {!!b.reason && <Text style={styles.reason} numberOfLines={2}>{b.reason}</Text>}
-                  <Pressable testID={`for-you-dismiss-${b.catalog_id}`} onPress={() => dismissForYou(b.catalog_id)} hitSlop={6} style={{ marginTop: 4 }}>
+                  <Pressable testID={`for-you-dismiss-${b.catalog_id}`} onPress={() => dismissForYou(b.catalog_id)} hitSlop={6} accessibilityRole="button" style={{ marginTop: 4 }}>
                     <Text style={styles.dismiss}>{t('Pas pour moi')}</Text>
                   </Pressable>
                 </View>
@@ -230,8 +227,8 @@ export default function Discover() {
         {pubClubs.length > 0 && (
           <View style={{ marginTop: spacing.xl }} testID="home-public-clubs">
             <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
-              <Text style={styles.areasLabel}>{t('Clubs publics à rejoindre')}</Text>
-              <Pressable testID="home-community" onPress={() => router.push('/(tabs)/community')} hitSlop={8} accessibilityRole="button"><Text style={styles.seeAll}>{t('Mes tableaux et clubs')}</Text></Pressable>
+              <Text style={[styles.areasLabel, { flex: 1 }]} numberOfLines={1}>{t('Clubs publics')}</Text>
+              <Pressable testID="home-community" onPress={() => router.push('/(tabs)/community')} hitSlop={8} accessibilityRole="button" style={{ flexShrink: 0 }}><Text style={styles.seeAll} numberOfLines={1}>{t('Mes tableaux et clubs')}</Text></Pressable>
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>
               {pubClubs.slice(0, 8).map((c: any) => (
@@ -255,18 +252,14 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   scanBtn: { width: 44, height: 44, borderRadius: radius.pill, backgroundColor: colors.creme, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center' },
   dailyLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: spacing.sm },
   chipRow: { height: 44 },
-  intentLink: { marginHorizontal: spacing.xl, flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
-  intentLinkText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.chambray },
-  intentLinkSub: { flex: 1, fontFamily: fonts.body, fontSize: 12, color: colors.clay },
+  intentLink: { marginHorizontal: spacing.xl, flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 },
+  intentLinkText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.chambray, flexShrink: 1 },
   areasLabel: { fontFamily: fonts.displayMedium, fontSize: 21, color: colors.espresso, marginBottom: spacing.md },
   seeAll: { fontFamily: fonts.bodyMedium, fontSize: 12.5, color: colors.chambray },
   reason: { fontFamily: fonts.body, fontSize: 10.5, color: colors.chambray, marginTop: 3, lineHeight: 14 },
   dismiss: { fontFamily: fonts.body, fontSize: 10.5, color: colors.clay, textDecorationLine: 'underline' },
-  chip: { height: 36, paddingHorizontal: 14, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  chipActive: { backgroundColor: colors.chambray, borderColor: colors.chambray },
+  chip: { height: 36, maxWidth: 180, paddingHorizontal: 14, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   chipText: { fontFamily: fonts.body, fontSize: 13, color: colors.espresso },
-  chipTextActive: { color: colors.creme, fontFamily: fonts.bodyMedium },
-  empty: { fontFamily: fonts.body, color: colors.clay, textAlign: 'center', paddingTop: spacing.xxxl },
   emptyTitle: { fontFamily: fonts.displayMedium, fontSize: 22, color: colors.espresso, textAlign: 'center' },
   emptySub: { fontFamily: fonts.body, fontSize: 14, color: colors.clay, textAlign: 'center', marginTop: spacing.sm },
   followTag: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 },

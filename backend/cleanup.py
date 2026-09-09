@@ -104,6 +104,7 @@ async def _collect_plan(db, uids: list, known_uids: set, residue: bool):
     await collect("recommendations", {"$or": [{"from_id": {"$in": uids}}, {"to_id": {"$in": uids}}]})
     await collect("invitations", {"$or": [{"from_id": {"$in": uids}}, {"to_id": {"$in": uids}}, {"target_id": {"$in": board_ids + club_ids}}]})
     await collect("reports", {"$or": [{"reporter_id": {"$in": uids}}, {"user_id": {"$in": uids}}]})
+    await collect("notifications", {"user_id": {"$in": uids}})
     await collect("user_sessions", {"user_id": {"$in": uids}})
     await collect("sessions", {"user_id": {"$in": uids}})
     await collect("user_recos", {"user_id": {"$in": uids}})

@@ -179,8 +179,7 @@ export default function SearchScreen() {
           ) : total === 0 && catalog.length === 0 && !catalogLoading ? (
             <View style={{ paddingVertical: spacing.xxl, alignItems: 'center' }}>
               <Text style={styles.emptyTitle}>{t('Rien pour l’instant.')}</Text>
-              <Text style={styles.emptySub}>{t('Essaie un autre mot, ou décris ton envie.')}</Text>
-              <Pressable testID="search-to-envie" onPress={() => setMode('envie')} accessibilityRole="button" style={[styles.chip, { marginTop: spacing.md, backgroundColor: colors.bisque, borderColor: colors.bisque }]}><Text style={styles.chipText}>{t('Je cherche un livre qui…')}</Text></Pressable>
+              <Text style={styles.emptySub}>{t('Essaie un autre mot, ou passe en mode « Par envie » juste au-dessus.')}</Text>
             </View>
           ) : (
             <>
@@ -253,14 +252,14 @@ export default function SearchScreen() {
                     </Pressable>
                   ))}
                   {catalog.length < catalogTotal && (
-                    <Pressable testID="search-see-more" onPress={catalogMore} style={styles.moreBtn}>
+                    <Pressable testID="search-see-more" onPress={catalogMore} accessibilityRole="button" style={styles.moreBtn}>
                       <Text style={styles.moreBtnText}>{t('Voir plus de livres')}</Text>
                     </Pressable>
                   )}
                   {q.trim().length >= 2 && (
-                    <Pressable testID="open-all-results" onPress={() => router.push({ pathname: '/browse', params: { q: q.trim(), title: q.trim() } })} style={[styles.moreBtn, { marginTop: spacing.sm }]}>
+                    <Pressable testID="open-all-results" onPress={() => router.push({ pathname: '/browse', params: { q: q.trim(), title: q.trim().slice(0, 24) } })} accessibilityRole="button" style={[styles.moreBtn, { marginTop: spacing.sm }]}>
                       <Feather name="arrow-right" size={13} color={colors.chambray} />
-                      <Text style={styles.moreBtnText}>{t('Voir toutes les œuvres liées à « {s} »', { s: q.trim() })}</Text>
+                      <Text style={[styles.moreBtnText, { flexShrink: 1 }]} numberOfLines={2}>{t('Voir toutes les œuvres liées à « {s} »', { s: q.trim() })}</Text>
                     </Pressable>
                   )}
                 </>
@@ -302,7 +301,7 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   bookCover: { width: 40, height: 56, borderRadius: radius.sm, backgroundColor: colors.bisque, alignItems: 'center', justifyContent: 'center' },
   bookCoverImg: { width: 40, height: 56, borderRadius: radius.sm, backgroundColor: colors.bisque },
   bookSummary: { fontFamily: fonts.body, fontSize: 11, color: colors.clay, lineHeight: 15, marginTop: 2 },
-  moreBtn: { marginTop: spacing.md, height: 42, borderRadius: radius.pill, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.chambray, backgroundColor: colors.creme, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  moreBtn: { marginTop: spacing.md, minHeight: 42, paddingVertical: 10, paddingHorizontal: spacing.md, borderRadius: radius.pill, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.chambray, backgroundColor: colors.creme, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
   moreBtnText: { fontFamily: fonts.bodyMedium, fontSize: 12.5, color: colors.chambray },
   readerAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.bisque, alignItems: 'center', justifyContent: 'center' },
   bookInitial: { fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso },

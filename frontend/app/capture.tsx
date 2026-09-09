@@ -19,7 +19,7 @@ export default function CaptureModal() {
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  // mode=camera : la caméra s'ouvre tout de suite (bouton central) ; mode=write : on écrit ou colle (« + » des citations)
+  // mode=camera : la caméra s'ouvre tout de suite (option « Photographier une page » du « + » de Journal) ; mode=write : on écrit ou colle (« + » des citations)
   const { mode, book_id: bookParam } = useLocalSearchParams<{ mode?: string; book_id?: string }>();
   const writeMode = mode === 'write';
   const autoCamera = React.useRef(false);
@@ -158,10 +158,10 @@ export default function CaptureModal() {
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: colors.glacier }} testID="screen-capture">
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-        <Pressable onPress={() => router.back()} testID="capture-close" style={styles.iconBtn}>
+        <Pressable onPress={() => router.back()} testID="capture-close" accessibilityRole="button" accessibilityLabel={t('Fermer')} style={styles.iconBtn}>
           <Feather name="x" size={22} color={colors.espresso} />
         </Pressable>
-        <Text style={styles.h1}>{imageUri ? t('Ta photo') : writeMode ? t('Nouvelle citation') : t('Capturer un passage')}</Text>
+        <Text style={[styles.h1, { flex: 1, textAlign: 'center' }]} numberOfLines={1}>{imageUri ? t('Ta photo') : writeMode ? t('Nouvelle citation') : t('Capturer un passage')}</Text>
         <View style={{ width: 40, alignItems: 'center' }}>
           <InfoTooltip
             testID="info-capture"
@@ -180,7 +180,7 @@ export default function CaptureModal() {
             </Pressable>
           </View>
         ) : premium && !premium.is_premium ? (
-          <Text style={styles.captureQuota} testID="capture-quota">{t('Captures IA : {used}/{limit} ce mois-ci', { used: premium.captures_used, limit: premium.captures_limit })}</Text>
+          <Text style={styles.captureQuota} testID="capture-quota">{t('Captures IA : {used}/{limit}', { used: premium.captures_used, limit: premium.captures_limit })}</Text>
         ) : null}
         {imageUri ? (
           <View style={styles.imgWrap}>
@@ -208,6 +208,7 @@ export default function CaptureModal() {
         <Text style={styles.label}>{t('Texte de la citation')}</Text>
         <TextInput
           testID="capture-text"
+          accessibilityLabel={t('Texte de la citation')}
           value={text} onChangeText={setText}
           placeholder={writeMode ? t('Écris ou colle ton passage…') : t('Transcris ou colle ton passage…')}
           placeholderTextColor={colors.clay}
@@ -238,11 +239,11 @@ export default function CaptureModal() {
         <View style={{ flexDirection: 'row', gap: spacing.md }}>
           <View style={{ flex: 1 }}>
             <Text style={styles.label}>{t('Page')}</Text>
-            <TextInput testID="capture-page" value={page} onChangeText={setPage} keyboardType="number-pad" style={styles.input} placeholder="142" placeholderTextColor={colors.clay} />
+            <TextInput testID="capture-page" accessibilityLabel={t('Page')} value={page} onChangeText={setPage} keyboardType="number-pad" style={styles.input} placeholder="142" placeholderTextColor={colors.clay} />
           </View>
           <View style={{ flex: 2 }}>
             <Text style={styles.label}>{t('Note personnelle')}</Text>
-            <TextInput testID="capture-note" value={note} onChangeText={setNote} style={styles.input} placeholder={t('Optionnel')} placeholderTextColor={colors.clay} />
+            <TextInput testID="capture-note" accessibilityLabel={t('Note personnelle')} value={note} onChangeText={setNote} style={styles.input} placeholder={t('Optionnel')} placeholderTextColor={colors.clay} />
           </View>
         </View>
 
@@ -264,6 +265,7 @@ export default function CaptureModal() {
           <View style={{ flexDirection: 'row', gap: 8, marginTop: spacing.sm }}>
             <TextInput
               testID="cap-theme-custom"
+              accessibilityLabel={t('Nouvelle thématique')}
               value={customTheme} onChangeText={setCustomTheme}
               onSubmitEditing={addCustomTheme}
               placeholder={t('Ta thématique (ex. mélancolie)')}
@@ -271,7 +273,7 @@ export default function CaptureModal() {
               style={[styles.input, { flex: 1, minHeight: 44 }]}
               autoFocus
             />
-            <Pressable testID="cap-theme-custom-add" onPress={addCustomTheme} disabled={!customTheme.trim()} style={[styles.customAddBtn, !customTheme.trim() && { opacity: 0.5 }]}>
+            <Pressable testID="cap-theme-custom-add" onPress={addCustomTheme} disabled={!customTheme.trim()} accessibilityRole="button" accessibilityLabel={t('Ajouter cette thématique')} style={[styles.customAddBtn, !customTheme.trim() && { opacity: 0.5 }]}>
               <Feather name="plus" size={20} color={colors.creme} />
             </Pressable>
           </View>
@@ -280,16 +282,16 @@ export default function CaptureModal() {
         <Text style={styles.visLabel}>{t('Qui peut voir cette citation ?')}</Text>
         <View style={{ flexDirection: 'row', gap: 8 }}>
           {([['private', 'Privée', 'lock'], ['followers', 'Abonnés', 'users'], ['public', 'Publique', 'globe']] as const).map(([v, lbl, icon]) => (
-            <Pressable key={v} testID={`vis-${v}`} onPress={() => setVisibility(v)} style={[styles.visChip, visibility === v && styles.visChipActive]}>
+            <Pressable key={v} testID={`vis-${v}`} onPress={() => setVisibility(v)} accessibilityRole="radio" accessibilityState={{ selected: visibility === v }} style={[styles.visChip, visibility === v && styles.visChipActive]}>
               <Feather name={icon} size={13} color={visibility === v ? colors.creme : colors.espresso} />
               <Text style={[styles.visChipText, visibility === v && { color: colors.creme }]}>{t(lbl)}</Text>
             </Pressable>
           ))}
         </View>
         {visibility !== 'private' && (
-          <Pressable testID="toggle-sensitive" onPress={() => setIsSensitive(v => !v)} style={styles.visRow}>
+          <Pressable testID="toggle-sensitive" onPress={() => setIsSensitive(v => !v)} accessibilityRole="checkbox" accessibilityState={{ checked: isSensitive }} style={styles.visRow}>
             <Feather name={isSensitive ? 'check-square' : 'square'} size={20} color={colors.chambray} />
-            <Text style={styles.visText}>{t('Contenu sensible (réservé aux 18 ans et plus)')}</Text>
+            <Text style={styles.visText} numberOfLines={2}>{t('Contenu sensible (réservé aux 18 ans et plus)')}</Text>
           </Pressable>
         )}
 
@@ -306,6 +308,7 @@ export default function CaptureModal() {
               <Feather name="search" size={15} color={colors.clay} />
               <TextInput
                 testID="cap-book-search"
+                accessibilityLabel={t('Chercher un livre')}
                 value={bookQuery}
                 onChangeText={setBookQuery}
                 placeholder={t('Cherche par titre ou auteur…')}
@@ -412,7 +415,6 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   pickerRowText: { flex: 1, fontFamily: fonts.bodyMedium, fontSize: 14.5, color: colors.espresso },
   pickerInitial: { width: 28, height: 38, borderRadius: 4, backgroundColor: colors.bisque, alignItems: 'center', justifyContent: 'center' },
   pickerInitialText: { fontFamily: fonts.displayMedium, fontSize: 15, color: colors.espresso },
-  pickerEmpty: { fontFamily: fonts.body, fontSize: 13.5, color: colors.clay, textAlign: 'center', paddingVertical: spacing.lg },
   pickerClose: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.chambray },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSoft, backgroundColor: colors.glacier },
   iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
@@ -434,12 +436,12 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   chipText: { fontFamily: fonts.body, fontSize: 13, color: colors.espresso, maxWidth: 160 },
   chipTextActive: { color: colors.creme, fontFamily: fonts.bodyMedium },
   visRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: spacing.lg },
-  visText: { fontFamily: fonts.body, fontSize: 14, color: colors.espresso },
+  visText: { flex: 1, fontFamily: fonts.body, fontSize: 14, color: colors.espresso },
   visLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1, textTransform: 'uppercase', marginTop: spacing.lg, marginBottom: spacing.sm },
   visChip: { flex: 1, height: 40, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.creme },
   visChipActive: { backgroundColor: colors.chambray, borderColor: colors.chambray },
   visChipText: { fontFamily: fonts.body, fontSize: 12.5, color: colors.espresso },
-  captureQuota: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: spacing.md },
+  captureQuota: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.clay, letterSpacing: 1.5, marginBottom: spacing.md },
   limitBox: { backgroundColor: colors.bisque, borderRadius: radius.md, padding: spacing.lg, marginBottom: spacing.md },
   limitTitle: { fontFamily: fonts.displayMedium, fontSize: 20, color: colors.espresso },
   limitText: { fontFamily: fonts.body, fontSize: 13, color: colors.espresso, lineHeight: 19, marginTop: 4 },

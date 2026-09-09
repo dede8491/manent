@@ -16,14 +16,14 @@ type Step = { icon: React.ComponentProps<typeof Feather>['name'] | null; title: 
 
 const STEPS: Step[] = [
   { icon: null, title: 'Bienvenue sur Manent', text: 'Garde une trace de tout ce que tu lis et ressens. Voici un tour des lieux — une minute, promis.' },
-  { icon: 'home', title: "L'accueil", text: "Ton livre en cours et sa progression, puis « Écrire mon entrée du jour » : une page, une humeur, quelques mots. Ta dernière entrée et tes jours de lecture restent sous les yeux." },
+  { icon: 'home', title: "L'accueil", text: "Ton livre en cours et sa progression, puis « Écrire mon entrée du jour » : une page, une humeur, quelques mots. En dessous, ta dernière entrée et « Mon évolution » : série de jours, semaine, objectif de l'année, rétrospective." },
   { icon: 'edit-3', title: 'Le journal', text: "Tes traces de lecture : les entrées (humeur, page atteinte, quelques mots, un prompt pour démarrer) et tes citations, dans le même onglet. Le « + » écrit une entrée, photographie une page ou saisit un passage. Privé par défaut, même sans réseau." },
   { icon: 'book-open', title: 'La bibliothèque', text: "Le « + » ouvre l'ajout d'une lecture par titre, ISBN ou Wattpad. Ta liste de lecture s'ordonne dans « Lecture suivante » : le prochain livre en tête, comme une file d'attente." },
-  { icon: 'compass', title: 'Découvrir', text: "« Pour toi », les origines des auteurs, les clubs publics, le fil des lectrices et tes citations : tout ce qui nourrit tes prochaines lectures. Le scan de code-barres y ajoute un livre en librairie." },
+  { icon: 'compass', title: 'Découvrir', text: "« Pour toi », les origines des auteurs, les clubs publics et le fil des lectrices : tout ce qui nourrit tes prochaines lectures. Le scan de code-barres y ajoute un livre en librairie." },
   { icon: 'award', title: 'La fiche de fin', text: "Quand tu termines un livre : tes humeurs au fil des sessions, tes citations préférées, ta note, en une fiche à garder ou à partager en image. Et en fin d'année, ta rétrospective." },
-  { icon: 'send', title: 'Partager', text: "Depuis une fiche livre : recommande-le à une lectrice avec un petit mot, propose-le à ton club, ou envoie le lien. Tu reçois les recommandations des autres dans ton profil." },
-  { icon: 'users', title: 'La communauté', text: "Épingle tes citations dans des tableaux par thème. Crée ton club de lecture (Premium) ou rejoins-en un : lectures communes, sondages, événements et messages." },
-  { icon: 'user', title: 'Ton profil', text: "Tes statistiques, ta série de jours, tes badges. Partage ton profil ou ta bibliothèque en image. Et si tu te poses une question, les petits « i » t'expliquent chaque écran. Bonne lecture." },
+  { icon: 'bell', title: 'Les notifications', text: "La cloche de l'accueil rassemble tout : les cœurs et commentaires sur tes citations, les nouvelles abonnées, les invitations à un tableau ou un club, les livres qu'on te recommande. Chaque type se règle dans Paramètres." },
+  { icon: 'users', title: 'Tableaux et clubs', text: "Depuis Découvrir → « Mes tableaux et clubs » : épingle tes citations par thème, crée ton club de lecture (Premium) ou rejoins-en un. Depuis une fiche livre, recommande-le à une lectrice ou à ton club." },
+  { icon: 'user', title: 'Ton profil', text: "Tes badges, ton abonnement et tes réglages ; ta série et ton objectif sont sur l'accueil. Partage ton profil ou ta bibliothèque en image. Et si tu te poses une question, les petits « i » t'expliquent chaque écran. Bonne lecture." },
 ];
 
 export function WelcomeTour() {

@@ -154,7 +154,7 @@ export default function ThemePage() {
                 <Pressable
                   key={b.catalog_id || i}
                   testID={`theme-discover-${i}`}
-                  onPress={() => router.push({ pathname: '/discover/book', params: { title: b.title, author: b.author || '', cover: b.cover || '', year: b.year || '', summary: b.summary || '' } })}
+                  onPress={() => router.push({ pathname: '/discover/book', params: { catalog_id: b.catalog_id || '', title: b.title, author: b.author || '', cover: b.cover || '', year: b.year || '', summary: b.summary || '' } })}
                   style={[styles.suggestCard, { width: gridCardW }]}
                 >
                   <Image source={{ uri: b.cover }} style={[styles.suggestCover, { height: gridCardW * 1.4 }]} resizeMode="cover" />
@@ -202,9 +202,6 @@ export default function ThemePage() {
 }
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, backgroundColor: colors.glacier },
-  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  headerLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 2, textTransform: 'uppercase' },
   hero: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.lg, alignItems: 'center' },
   title: { fontFamily: fonts.displayMedium, fontSize: 40, color: colors.espresso, textTransform: 'capitalize' },
   baseline: { fontFamily: fonts.body, fontSize: 13, color: colors.clay, marginTop: 4 },

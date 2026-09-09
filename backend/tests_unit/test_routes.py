@@ -20,12 +20,13 @@ import routes.catalog as catalog  # noqa: E402
 import routes.classification as classification  # noqa: E402
 import routes.club as club  # noqa: E402
 import routes.share as share  # noqa: E402
+import routes.push as push  # noqa: E402
 
 
 @pytest.fixture
 def fake_db(monkeypatch):
     db = AsyncMongoMockClient()["manent_test"]
-    for mod in (deps, server, journal, catalog, classification, club, share):
+    for mod in (deps, server, journal, catalog, classification, club, share, push):
         if hasattr(mod, "db"):
             monkeypatch.setattr(mod, "db", db)
     return db
@@ -122,3 +123,29 @@ async def test_upload_rejects_non_images(client):
     u = r.json().get("url", "")
     # Emergent Object Storage (URL /api/files/…) ou repli data URL si le stockage est indisponible
     assert r.status_code == 200 and (u.startswith("data:image/png") or ("/api/files/" in u and u.endswith(".png")))
+
+
+async def test_notification_center(client, fake_db):
+    headers, user = await register(client, "n@manent-tests.org", "Nora")
+    await push.store_notifications([user["user_id"]], {"title": "Léa", "message": "a aimé ta citation", "data": {"type": "quote_like", "quote_id": "q1"}}, idempotency_key="like_q1_x")
+    await push.store_notifications([user["user_id"]], {"title": "Léa", "message": "a aimé ta citation", "data": {"type": "quote_like", "quote_id": "q1"}}, idempotency_key="like_q1_x")
+    b = await client.get("/api/notifications/badge", headers=headers)
+    assert b.status_code == 200 and b.json()["unread"] == 1, "idempotent : une seule notification pour la même clé"
+    r = await client.get("/api/notifications", headers=headers)
+    assert r.status_code == 200 and r.json()["notifications"][0]["action_url"] == "/quote/q1"
+    assert (await client.get("/api/notifications/badge", headers=headers)).json()["unread"] == 0, "lue une fois la liste ouverte"
+
+
+async def test_notification_preferences_filter(client, fake_db):
+    headers, user = await register(client, "p@manent-tests.org", "Paule")
+    r = await client.get("/api/me/notifications", headers=headers)
+    assert r.status_code == 200 and all(k["enabled"] for k in r.json()["kinds"]) and len(r.json()["kinds"]) == 8
+    r = await client.patch("/api/me/notifications", headers=headers, json={"prefs": {"quote_like": False, "bogus": False}})
+    assert {k["key"]: k["enabled"] for k in r.json()["kinds"]}["quote_like"] is False
+    like = {"title": "Manent", "message": "Léa a aimé ta citation", "data": {"type": "quote_like", "quote_id": "q1"}}
+    assert await push.filter_recipients([user["user_id"]], push.notif_kind(like)) == []
+    follow = {"title": "Manent", "message": "Léa suit maintenant tes lectures", "action_url": "/reader/lea"}
+    assert push.notif_kind(follow) == "new_follower"
+    assert await push.filter_recipients([user["user_id"]], "new_follower") == [user["user_id"]]
+    assert push.notif_kind({"title": "Léa", "message": "« … »", "action_url": "/quote/q9"}) == "followed_quote"
+    assert push.notif_kind({"title": "Mon club", "message": "x", "action_url": "/club/c1"}) == "club"

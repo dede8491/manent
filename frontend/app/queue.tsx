@@ -94,7 +94,7 @@ export default function QueueScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.glacier }} testID="screen-queue">
-      <ScreenHeader title={t('Liste de lecture')} backTestID="queue-back" />
+      <ScreenHeader title={t('Lecture suivante')} backTestID="queue-back" />
 
       {loading ? (
         <View style={{ paddingTop: spacing.xxl, alignItems: 'center' }}><ManentLoader size={48} /></View>
@@ -102,15 +102,15 @@ export default function QueueScreen() {
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl }}>
           <Text style={styles.emptyTitle}>{t('Ta file est vide.')}</Text>
           <Text style={styles.emptySub}>{t('Scanne un livre en librairie ou ajoute-le « à lire » : il prendra sa place ici.')}</Text>
-          <Pressable testID="queue-scan" onPress={() => router.push('/discover/scan')} style={styles.emptyBtn}>
+          <Pressable testID="queue-scan" onPress={() => router.push('/discover/scan')} accessibilityRole="button" style={styles.emptyBtn}>
             <Feather name="maximize" size={15} color={colors.creme} />
             <Text style={styles.emptyBtnText}>{t('Scanner un livre')}</Text>
           </Pressable>
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + spacing.xxl }} scrollEnabled={dragIndex === null}>
-          <Text style={styles.title}>{t('Lecture suivante')}</Text>
-          <Text style={styles.sub}>{t(books.length > 1 ? '{n} livres t’attendent' : '{n} livre t’attend', { n: books.length })}</Text>
+          <Text style={styles.title}>{t(books.length > 1 ? '{n} livres t’attendent' : '{n} livre t’attend', { n: books.length })}</Text>
+          <Text style={styles.sub}>{t('Ordonne ta file : le prochain livre en tête.')}</Text>
 
           {first && (
             <View style={styles.featured} testID="queue-first">
@@ -187,9 +187,6 @@ export default function QueueScreen() {
 }
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.md, paddingBottom: spacing.sm },
-  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  headerLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 2, textTransform: 'uppercase' },
   title: { fontFamily: fonts.displayMedium, fontSize: 30, color: colors.espresso },
   sub: { fontFamily: fonts.body, fontSize: 13, color: colors.clay, marginTop: 2, marginBottom: spacing.lg },
   featured: { flexDirection: 'row', gap: spacing.lg, backgroundColor: colors.bisque, borderRadius: radius.lg, padding: spacing.lg },

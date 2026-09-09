@@ -21,7 +21,7 @@ export function InfoTooltip({ title, text, testID = 'info-tooltip', size = 16, c
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Pressable testID={testID} onPress={() => setOpen(true)} hitSlop={10} style={styles.iconBtn}>
+      <Pressable testID={testID} onPress={() => setOpen(true)} hitSlop={10} accessibilityRole="button" accessibilityLabel={t('En savoir plus')} style={styles.iconBtn}>
         <Feather name="info" size={size} color={color || colors.clay} />
       </Pressable>
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
@@ -32,7 +32,7 @@ export function InfoTooltip({ title, text, testID = 'info-tooltip', size = 16, c
             </View>
             <Text style={styles.title}>{title}</Text>
             <Text style={styles.text}>{text}</Text>
-            <Pressable testID={`${testID}-close`} onPress={() => setOpen(false)} style={styles.btn}>
+            <Pressable testID={`${testID}-close`} onPress={() => setOpen(false)} accessibilityRole="button" style={styles.btn}>
               <Text style={styles.btnText}>{t('Compris')}</Text>
             </Pressable>
           </Pressable>
@@ -44,7 +44,7 @@ export function InfoTooltip({ title, text, testID = 'info-tooltip', size = 16, c
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   iconBtn: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
-  overlay: { flex: 1, backgroundColor: 'rgba(58,33,25,0.45)', alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
+  overlay: { flex: 1, backgroundColor: colors.overlay, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
   card: { width: '100%', maxWidth: 380, backgroundColor: colors.creme, borderRadius: radius.lg, padding: spacing.xl, borderWidth: 1, borderColor: colors.borderSoft },
   cardIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.glacier, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.md },
   title: { fontFamily: fonts.displayMedium, fontSize: 23, color: colors.espresso, marginBottom: spacing.sm },
