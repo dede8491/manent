@@ -119,4 +119,6 @@ async def test_upload_rejects_non_images(client):
     assert r.status_code == 415
     png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
     r = await client.post("/api/upload", headers=headers, files={"file": ("x.bin", png, "application/octet-stream")})
-    assert r.status_code == 200 and r.json()["url"].startswith("data:image/png")
+    u = r.json().get("url", "")
+    # Emergent Object Storage (URL /api/files/…) ou repli data URL si le stockage est indisponible
+    assert r.status_code == 200 and (u.startswith("data:image/png") or ("/api/files/" in u and u.endswith(".png")))
