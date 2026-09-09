@@ -105,13 +105,16 @@ class SessionExchange(BaseModel):
     session_id: str
 
 
+from deps import SESSION_DAYS  # 90 jours, prolongés à chaque usage : on ne redemande pas le mot de passe
+
+
 async def create_session(user_id: str) -> dict:
     token = f"mnt_{uuid.uuid4().hex}{uuid.uuid4().hex[:16]}"
     session = {
         "session_token": token,
         "user_id": user_id,
         "created_at": now_utc(),
-        "expires_at": now_utc() + timedelta(days=7),
+        "expires_at": now_utc() + timedelta(days=SESSION_DAYS),
     }
     await db.user_sessions.insert_one(session.copy())
     return {"session_token": token}
@@ -1335,6 +1338,7 @@ class SettingsBody(BaseModel):
     profile_public: Optional[bool] = None
     recos_enabled: Optional[bool] = None
     birthdate: Optional[str] = None
+    tour_seen: Optional[bool] = None  # tour de bienvenue vu (stocké sur le compte : une seule fois, quel que soit l'appareil)
 
 
 @api.patch("/me/settings")
@@ -1347,10 +1351,10 @@ async def update_settings(body: SettingsBody, user=Depends(get_current_user)):
         upd["birthdate"] = bd
     if upd:
         await db.users.update_one({"user_id": user["user_id"]}, {"$set": upd})
-    u = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "language": 1, "default_public": 1, "profile_public": 1, "birthdate": 1, "recos_enabled": 1})
+    u = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "language": 1, "default_public": 1, "profile_public": 1, "birthdate": 1, "recos_enabled": 1, "tour_seen": 1})
     return {"language": (u or {}).get("language", "fr"), "default_public": (u or {}).get("default_public", False),
             "profile_public": (u or {}).get("profile_public", True), "birthdate": (u or {}).get("birthdate"),
-            "recos_enabled": (u or {}).get("recos_enabled", True)}
+            "recos_enabled": (u or {}).get("recos_enabled", True), "tour_seen": bool((u or {}).get("tour_seen"))}
 
 
 @api.get("/me/export")

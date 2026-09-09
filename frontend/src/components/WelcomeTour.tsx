@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Modal, Pressable } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '@/src/auth';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { fonts, radius, spacing } from '@/src/theme';
@@ -30,18 +31,22 @@ export function WelcomeTour() {
   const colors = useColors();
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
+  const { user, markSeen } = useAuth();
   const [show, setShow] = useState(false);
   const [step, setStep] = useState(0);
 
+  // Affiché une seule fois par compte : le drapeau est sur le profil (serveur), doublé d'une trace locale.
   useEffect(() => {
+    if (!user || user.tour_seen) return;
     AsyncStorage.getItem(TOUR_KEY)
-      .then(v => { if (!v) setShow(true); })
+      .then(v => { if (!v) setShow(true); else markSeen('tour_seen'); })
       .catch(() => {});
-  }, []);
+  }, [user, markSeen]);
 
   const close = () => {
     setShow(false);
     AsyncStorage.setItem(TOUR_KEY, '1').catch(() => {});
+    markSeen('tour_seen');
   };
 
   if (!show) return null;

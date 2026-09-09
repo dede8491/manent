@@ -9,12 +9,12 @@ import { PrimaryButton, GhostButton } from '@/src/components/Button';
 import { Wordmark } from '@/src/components/Wordmark';
 import { useT } from '@/src/i18n';
 
-// Écran d'accueil : un seul repère de marque (le mot-symbole), une promesse incarnée,
-// trois lignes qui disent tout ce que fait Manent. Fond glacier uni, aucune illustration.
+// Écran d'accueil : un seul repère de marque (le mot-symbole), la promesse du journal de lecture,
+// trois lignes qui disent ce que Manent garde pour toi. Fond glacier uni, aucune illustration.
 const LINES: { icon: React.ComponentProps<typeof Feather>['name']; text: string }[] = [
+  { icon: 'edit-3', text: 'Ton journal, une entrée par jour' },
   { icon: 'camera', text: 'Tes citations, photographiées' },
-  { icon: 'compass', text: 'Des livres choisis pour toi' },
-  { icon: 'users', text: 'Des clubs de lecture à rejoindre' },
+  { icon: 'award', text: 'Ta fiche de fin de livre, à partager' },
 ];
 
 export default function Welcome() {
@@ -35,8 +35,8 @@ export default function Welcome() {
         <Wordmark size={40} />
       </View>
       <View style={styles.middle}>
-        <Text style={styles.promise}>{t('Lis. Retiens.\nPartage.')}</Text>
-        <Text style={styles.subtext}>{t('Garde les passages qui te marquent, suis tes lectures, découvre des livres à ton image et lis à plusieurs dans un club.')}</Text>
+        <Text style={styles.promise}>{t('Lis. Ressens.\nGarde.')}</Text>
+        <Text style={styles.subtext}>{t('Garde une trace de tout ce que tu lis et ressens : ton livre en cours, quelques mots chaque jour, tes citations, et une fiche à garder quand tu tournes la dernière page.')}</Text>
         <View style={styles.lines}>
           {LINES.map((l, i) => (
             <Animated.View key={l.icon} style={[styles.line, { opacity: fades[i], transform: [{ translateY: fades[i].interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }] }]}>

@@ -1313,4 +1313,8 @@ export const EN: Record<string, string> = {
   'Clair': 'Light',
   'Sombre': 'Dark',
   'Tu as utilisé tes recherches par envie du jour. Reviens demain, ou passe par les filtres.': 'You have used today’s mood searches. Come back tomorrow, or use the filters.',
+  'Lis. Ressens.\nGarde.': 'Read. Feel.\nKeep.',
+  'Garde une trace de tout ce que tu lis et ressens : ton livre en cours, quelques mots chaque jour, tes citations, et une fiche à garder quand tu tournes la dernière page.': 'Keep a trace of everything you read and feel: your current book, a few words each day, your quotes, and a card to keep when you turn the last page.',
+  'Ton journal, une entrée par jour': 'Your journal, one entry a day',
+  'Ta fiche de fin de livre, à partager': 'Your end-of-book card, to share',
 };
