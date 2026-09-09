@@ -44,7 +44,8 @@ export default function Inbox() {
     const list: Item[] = [
       ...(inv.status === 'fulfilled' ? inv.value.invitations.map(i => ({ key: i.invite_id, created_at: i.created_at, status: i.status, kind: 'inv' as const, inv: i })) : []),
       ...(reco.status === 'fulfilled' ? reco.value.recommendations.map(r => ({ key: r.reco_id, created_at: r.created_at, status: r.status, kind: 'reco' as const, reco: r })) : []),
-      ...(notif.status === 'fulfilled' ? notif.value.notifications.filter(n => n.kind !== 'invitation').map(n => ({ key: n.notif_id, created_at: n.created_at, status: n.read ? 'read' : 'unread', kind: 'notif' as const, notif: n })) : []),
+      // Les invitations et recommandations ont déjà leur carte avec actions : on ne montre pas la notification en double.
+      ...(notif.status === 'fulfilled' ? notif.value.notifications.filter(n => n.kind !== 'invitation' && n.kind !== 'recommendation').map(n => ({ key: n.notif_id, created_at: n.created_at, status: n.read ? 'read' : 'unread', kind: 'notif' as const, notif: n })) : []),
     ].sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
     setItems(list);
   }, []);
@@ -75,7 +76,11 @@ export default function Inbox() {
   const pending = shown.filter(i => i.status === 'pending' || i.status === 'unread');
   const past = shown.filter(i => i.status !== 'pending' && i.status !== 'unread');
   const openNotif = (n: Notif) => { if (n.action_url && n.action_url.startsWith('/') && !n.action_url.startsWith('/inbox')) router.push(n.action_url as any); };
-  const notifIcon = (kind?: string): React.ComponentProps<typeof Feather>['name'] => kind === 'quote_like' ? 'heart' : kind === 'quote_comment' ? 'message-circle' : kind === 'club' ? 'users' : 'bell';
+  const NOTIF_ICONS: Record<string, React.ComponentProps<typeof Feather>['name']> = {
+    followed_quote: 'feather', quote_like: 'heart', quote_comment: 'message-circle', new_follower: 'user-plus',
+    recommendation: 'book', invitation: 'mail', club: 'users', book_update: 'book-open',
+  };
+  const notifIcon = (kind?: string): React.ComponentProps<typeof Feather>['name'] => (kind && NOTIF_ICONS[kind]) || 'bell';
 
   const card = (it: Item) => it.kind === 'notif' ? (
     <Pressable key={it.key} testID={`notif-${it.key}`} onPress={() => openNotif(it.notif!)} accessibilityRole="button" style={[styles.card, styles.notifRow, it.status === 'unread' && styles.cardUnread]}>
@@ -102,14 +107,14 @@ export default function Inbox() {
           <Pressable testID={`inv-decline-${it.key}`} onPress={() => decideInv(it.inv!, 'decline')} accessibilityRole="button" style={styles.ghost}><Text style={styles.ghostText}>{t('Décliner')}</Text></Pressable>
         </View>
       ) : (
-        <Pressable onPress={() => it.status === 'accepted' && openTarget(it.inv!)} style={{ marginTop: spacing.sm }}>
+        <Pressable onPress={() => it.status === 'accepted' && openTarget(it.inv!)} accessibilityRole="button" style={{ marginTop: spacing.sm }}>
           <Text style={styles.state}>{it.status === 'accepted' ? t('Rejoint  ›') : t('Déclinée')}</Text>
         </Pressable>
       )}
     </View>
   ) : (
     <View key={it.key} style={styles.card} testID={`reco-${it.key}`}>
-      <Pressable onPress={() => it.reco!.book && router.push({ pathname: '/discover/book', params: { catalog_id: it.reco!.book.catalog_id, title: it.reco!.book.title, author: it.reco!.book.author || '', cover: it.reco!.book.cover || '', summary: it.reco!.book.summary || '' } })} style={{ flexDirection: 'row', gap: spacing.md }}>
+      <Pressable onPress={() => it.reco!.book && router.push({ pathname: '/discover/book', params: { catalog_id: it.reco!.book.catalog_id, title: it.reco!.book.title, author: it.reco!.book.author || '', cover: it.reco!.book.cover || '', summary: it.reco!.book.summary || '' } })} accessibilityRole="button" style={{ flexDirection: 'row', gap: spacing.md }}>
         <BookCover uri={it.reco!.book?.cover} title={it.reco!.book?.title || ''} width={56} height={82} radius={6} initialSize={22} />
         <View style={{ flex: 1 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -137,13 +142,13 @@ export default function Inbox() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.glacier }} testID="screen-inbox">
       <ScreenHeader title={t('Notifications')} backTestID="inbox-back" />
-      <View style={styles.segments} accessibilityRole="tablist">
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={styles.segments} accessibilityRole="tablist">
         {([['all', 'Tout'], ['notif', 'Activité'], ['reco', 'Livres'], ['inv', 'Invitations']] as const).map(([k, label]) => (
           <Pressable key={k} testID={`inbox-filter-${k}`} onPress={() => setFilter(k)} accessibilityRole="tab" accessibilityState={{ selected: filter === k }} style={[styles.seg, filter === k && styles.segOn]}>
-            <Text style={[styles.segText, filter === k && styles.segTextOn]}>{t(label)}</Text>
+            <Text style={[styles.segText, filter === k && styles.segTextOn]} numberOfLines={1}>{t(label)}</Text>
           </Pressable>
         ))}
-      </View>
+      </ScrollView>
       {items === null ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ManentLoader size={56} /></View>
       ) : error && items.length === 0 ? (
@@ -171,9 +176,6 @@ export default function Inbox() {
 }
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.md, paddingBottom: spacing.xs },
-  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  headerLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 2, textTransform: 'uppercase' },
   segments: { flexDirection: 'row', gap: 6, paddingHorizontal: spacing.xl, paddingVertical: spacing.sm },
   seg: { height: 34, paddingHorizontal: 14, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, backgroundColor: colors.creme, justifyContent: 'center' },
   segOn: { backgroundColor: colors.chambray, borderColor: colors.chambray },

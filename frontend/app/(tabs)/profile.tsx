@@ -90,11 +90,11 @@ export default function Profile() {
         <InfoTooltip
           testID="info-profile"
           title={t('Comment ça marche')}
-          text={t("Tes livres, citations, tableaux et sujets, tes badges. Ta série de jours, ta semaine et ton objectif sont sur l'accueil. Les invitations et les livres que des lectrices t'ont envoyés sont dans la cloche de l'accueil ; « Partager ma bibliothèque » crée un lien ou une image pour tes réseaux. Tape sur ton avatar pour changer ta photo, et sur Paramètres pour la langue, le mode sombre et la confidentialité.")}
+          text={t("Ce que tu as rassemblé (livres, citations, tableaux, sujets), tes badges, ton abonnement et tes réglages. Ta série, ta semaine et ton objectif sont sur l'accueil ; tes notifications dans sa cloche. Tape sur ton avatar pour changer ta photo, sur « Partager » pour envoyer ton profil, et sur Paramètres pour la langue, l'apparence, les notifications et la confidentialité.")}
         />
       </View>
       <View style={styles.header}>
-        <Pressable testID="avatar-edit" onPress={pickAvatar} style={styles.avatar}>
+        <Pressable testID="avatar-edit" onPress={pickAvatar} accessibilityRole="button" accessibilityLabel={t('Changer ma photo de profil')} style={styles.avatar}>
           {user?.picture ? (
             <Image source={{ uri: user.picture }} style={{ width: 80, height: 80, borderRadius: 40 }} />
           ) : (
@@ -105,17 +105,17 @@ export default function Profile() {
         <Text style={styles.pseudo}>{user?.pseudo}</Text>
         <Text style={styles.handle}>@{user?.handle}</Text>
         <View style={styles.followRow}>
-          <Pressable testID="profile-followers" onPress={() => router.push({ pathname: '/follows', params: { tab: 'followers' } })} hitSlop={6}>
-            <Text style={styles.followText}><Text style={styles.followNum}>{follows?.followers_count ?? 0}</Text> {t((follows?.followers_count ?? 0) > 1 ? 'abonnées' : 'abonnée')}</Text>
+          <Pressable testID="profile-followers" onPress={() => router.push({ pathname: '/follows', params: { tab: 'followers' } })} hitSlop={6} accessibilityRole="button" style={{ flexShrink: 1 }}>
+            <Text style={styles.followText} numberOfLines={1}><Text style={styles.followNum}>{follows?.followers_count ?? 0}</Text> {t((follows?.followers_count ?? 0) > 1 ? 'abonnées' : 'abonnée')}</Text>
           </Pressable>
           <Text style={styles.followDot}>·</Text>
-          <Pressable testID="profile-following" onPress={() => router.push({ pathname: '/follows', params: { tab: 'following' } })} hitSlop={6}>
-            <Text style={styles.followText}><Text style={styles.followNum}>{follows?.following_count ?? 0}</Text> {t((follows?.following_count ?? 0) > 1 ? 'abonnements' : 'abonnement')}</Text>
+          <Pressable testID="profile-following" onPress={() => router.push({ pathname: '/follows', params: { tab: 'following' } })} hitSlop={6} accessibilityRole="button" style={{ flexShrink: 1 }}>
+            <Text style={styles.followText} numberOfLines={1}><Text style={styles.followNum}>{follows?.following_count ?? 0}</Text> {t((follows?.following_count ?? 0) > 1 ? 'abonnements' : 'abonnement')}</Text>
           </Pressable>
           <Text style={styles.followDot}>·</Text>
-          <Pressable testID="profile-share" onPress={shareProfile} hitSlop={6} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <Pressable testID="profile-share" onPress={shareProfile} hitSlop={6} accessibilityRole="button" accessibilityLabel={t('Partager mon profil')} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 0 }}>
             <Feather name="share" size={13} color={colors.chambray} />
-            <Text style={[styles.followText, { color: colors.chambray }]}>{t('Partager')}</Text>
+            <Text style={[styles.followText, { color: colors.chambray }]} numberOfLines={1}>{t('Partager')}</Text>
           </Pressable>
         </View>
       </View>
@@ -127,7 +127,7 @@ export default function Profile() {
       </View>
 
       {clubSummary && clubSummary.joined > 0 && (
-        <Pressable testID="profile-club-card" onPress={() => router.push('/(tabs)/community')} style={styles.clubCard}>
+        <Pressable testID="profile-club-card" onPress={() => router.push('/(tabs)/community')} accessibilityRole="button" style={styles.clubCard}>
           <View style={styles.clubIcon}><Feather name="users" size={16} color={colors.creme} /></View>
           <View style={{ flex: 1 }}>
             <Text style={styles.readingTitle}>{t('Club de lecture')}</Text>
@@ -147,7 +147,7 @@ export default function Profile() {
             {[...badges].sort((a, b) => Number(b.earned) - Number(a.earned)).map(b => (
               <View key={b.id} testID={`badge-${b.id}`} style={[styles.badge, !b.earned && styles.badgeLocked]}>
                 <View style={[styles.badgeIcon, b.earned && { backgroundColor: colors.chambray }]}>
-                  <Feather name={b.icon as any} size={18} color={b.earned ? '#F5EDE4' : colors.clay} />
+                  <Feather name={b.icon as any} size={18} color={b.earned ? colors.creme : colors.clay} />
                 </View>
                 <Text style={[styles.badgeTitle, !b.earned && { color: colors.clay }]} numberOfLines={1}>{b.title}</Text>
                 <Text style={styles.badgeDesc} numberOfLines={2}>{b.desc}</Text>
@@ -162,30 +162,30 @@ export default function Profile() {
           <>
             <Text style={styles.premiumTitle}>{t('Premium actif')}</Text>
             <Text style={styles.premiumText}>{t('Formule {plan} — captures IA illimitées, exports débloqués.', { plan: t(premium.plan === 'annuel' ? 'annuelle' : 'mensuelle') })}</Text>
-            <Pressable testID="btn-premium" onPress={() => router.push('/premium')} style={styles.premiumBtn}><Text style={styles.premiumBtnText}>{t('Gérer mon abonnement')}</Text></Pressable>
+            <Pressable testID="btn-premium-manage" onPress={() => router.push('/premium')} accessibilityRole="button" style={styles.premiumBtn}><Text style={styles.premiumBtnText}>{t('Gérer mon abonnement')}</Text></Pressable>
           </>
         ) : (
           <>
             <Text style={styles.premiumTitle}>Manent Premium</Text>
             <Text style={styles.premiumText}>{t('Captures IA illimitées, export PDF, quote cards sans filigrane.')}</Text>
-            {premium ? <Text style={styles.premiumUsage}>{t('Captures IA ce mois-ci : {used}/{limit}', { used: premium.captures_used, limit: premium.captures_limit })}</Text> : null}
-            <Pressable testID="btn-premium" onPress={() => router.push('/premium')} style={styles.premiumBtn}><Text style={styles.premiumBtnText}>{t('Découvrir Premium')}</Text></Pressable>
+            {premium ? <Text style={styles.premiumUsage}>{`${t('Captures IA : {used}/{limit}', { used: premium.captures_used, limit: premium.captures_limit })} ${t('ce mois-ci')}`}</Text> : null}
+            <Pressable testID="btn-premium-discover" onPress={() => router.push('/premium')} accessibilityRole="button" style={styles.premiumBtn}><Text style={styles.premiumBtnText}>{t('Découvrir Premium')}</Text></Pressable>
           </>
         )}
       </View>
 
       <View style={{ paddingHorizontal: spacing.xl, gap: spacing.sm, marginTop: spacing.lg }}>
-        <Pressable testID="row-share-profile" onPress={shareProfile} style={styles.row}><Feather name="user-plus" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Partager mon profil')}</Text></Pressable>
-        <Pressable testID="row-share-library" onPress={() => router.push('/share-library')} style={styles.row}><Feather name="share-2" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Partager ma bibliothèque')}</Text></Pressable>
+        {/* « Partager mon profil » est déjà dans la ligne sous le pseudo : pas de doublon ici. */}
+        <Pressable testID="row-share-library" onPress={() => router.push('/share-library')} accessibilityRole="button" style={styles.row}><Feather name="share-2" size={18} color={colors.espresso} /><Text style={styles.rowLabel} numberOfLines={2}>{t('Partager ma bibliothèque')}</Text></Pressable>
         {(user as any)?.is_admin && (
-          <Pressable testID="row-admin" onPress={() => router.push('/admin')} style={styles.row}>
-            <Feather name="shield" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Dashboard admin')}</Text>
+          <Pressable testID="row-admin" onPress={() => router.push('/admin')} accessibilityRole="button" style={styles.row}>
+            <Feather name="shield" size={18} color={colors.espresso} /><Text style={styles.rowLabel} numberOfLines={2}>{t('Dashboard admin')}</Text>
             {adminBadge > 0 && <View style={styles.badgeDot} testID="admin-badge"><Text style={styles.badgeDotText}>{adminBadge > 99 ? '99+' : adminBadge}</Text></View>}
           </Pressable>
         )}
-        <Pressable testID="row-carnet" onPress={() => router.push('/carnet')} style={styles.row}><Feather name="book-open" size={18} color={colors.espresso} /><Text style={[styles.rowLabel, { flex: 1 }]}>{t('Fiches d’études (PDF)')}</Text><View style={styles.premiumTag}><Text style={styles.premiumTagText}>PREMIUM</Text></View></Pressable>
-        <Pressable testID="row-settings" onPress={() => router.push('/settings')} style={styles.row}><Feather name="settings" size={18} color={colors.espresso} /><Text style={styles.rowLabel}>{t('Paramètres')}</Text></Pressable>
-        <Pressable testID="row-signout" onPress={signOut} style={styles.row}><Feather name="log-out" size={18} color={colors.espresso} /><Text style={styles.rowLabel}>{t('Se déconnecter')}</Text></Pressable>
+        <Pressable testID="row-carnet" onPress={() => router.push('/carnet')} accessibilityRole="button" style={styles.row}><Feather name="book-open" size={18} color={colors.espresso} /><Text style={styles.rowLabel} numberOfLines={2}>{t('Mes fiches de lecture')}</Text>{!premium?.is_premium && <View style={styles.premiumTag}><Text style={styles.premiumTagText}>PREMIUM</Text></View>}</Pressable>
+        <Pressable testID="row-settings" onPress={() => router.push('/settings')} accessibilityRole="button" style={styles.row}><Feather name="settings" size={18} color={colors.espresso} /><Text style={styles.rowLabel} numberOfLines={2}>{t('Paramètres')}</Text></Pressable>
+        <Pressable testID="row-signout" onPress={signOut} accessibilityRole="button" style={styles.row}><Feather name="log-out" size={18} color={colors.espresso} /><Text style={styles.rowLabel} numberOfLines={2}>{t('Se déconnecter')}</Text></Pressable>
       </View>
 
     </ScrollView>
@@ -203,7 +203,7 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   stat: { flex: 1, backgroundColor: colors.creme, borderRadius: radius.md, paddingVertical: spacing.md, paddingHorizontal: 4, alignItems: 'center', borderWidth: 1, borderColor: colors.borderSoft },
   statNum: { fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso },
   followRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
-  followText: { fontFamily: fonts.body, fontSize: 13, color: colors.clay },
+  followText: { fontFamily: fonts.body, fontSize: 13, color: colors.clay, flexShrink: 1 },
   followNum: { fontFamily: fonts.bodyMedium, color: colors.espresso },
   followDot: { fontFamily: fonts.body, fontSize: 13, color: colors.clay },
   statLbl: { fontFamily: fonts.bodyMedium, fontSize: 8.5, color: colors.clay, letterSpacing: 0.4, textTransform: 'uppercase', marginTop: 2, textAlign: 'center' },
@@ -220,14 +220,13 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   premium: { margin: spacing.xl, padding: spacing.lg, backgroundColor: colors.bisque, borderRadius: radius.md },
   premiumTitle: { fontFamily: fonts.displayMedium, fontSize: 22, color: colors.espresso },
   premiumText: { fontFamily: fonts.body, fontSize: 13, color: colors.espresso, marginTop: spacing.xs, lineHeight: 20 },
-  premiumUsage: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1, textTransform: 'uppercase', marginTop: spacing.sm },
-  premiumPrice: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase', marginTop: spacing.sm },
+  premiumUsage: { fontFamily: fonts.bodyMedium, fontSize: 12, color: colors.clay, marginTop: spacing.sm },
   premiumBtn: { marginTop: spacing.md, alignSelf: 'flex-start', paddingHorizontal: 18, height: 42, borderRadius: radius.md, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },
   premiumBtnText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.creme, letterSpacing: 0.3 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, height: 52, backgroundColor: colors.creme, borderRadius: radius.md, paddingHorizontal: spacing.md, borderWidth: 1, borderColor: colors.borderSoft },
-  premiumTag: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.bisque },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 52, paddingVertical: 8, backgroundColor: colors.creme, borderRadius: radius.md, paddingHorizontal: spacing.md, borderWidth: 1, borderColor: colors.borderSoft },
+  premiumTag: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.bisque, flexShrink: 0 },
   premiumTagText: { fontFamily: fonts.bodyMedium, fontSize: 9, color: colors.espresso, letterSpacing: 1.5 },
-  rowLabel: { fontFamily: fonts.body, fontSize: 15, color: colors.espresso },
+  rowLabel: { flex: 1, fontFamily: fonts.body, fontSize: 15, color: colors.espresso },
   badgeDot: { minWidth: 22, height: 22, borderRadius: 11, paddingHorizontal: 6, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },
   badgeDotText: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.creme },
 });

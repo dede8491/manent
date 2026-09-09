@@ -150,9 +150,6 @@ export default function BrowseScreen() {
 }
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.md, paddingBottom: spacing.xs },
-  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  headerLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 2, textTransform: 'uppercase', flex: 1, textAlign: 'center' },
   toolbar: { flexDirection: 'row', gap: 8, paddingHorizontal: spacing.xl, paddingVertical: spacing.sm },
   toolBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 38, paddingHorizontal: 14, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, backgroundColor: colors.creme, flexShrink: 1 },
   toolText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.espresso },

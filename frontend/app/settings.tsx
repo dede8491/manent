@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Modal, Platform, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
@@ -13,6 +12,7 @@ import { useI18n } from '@/src/i18n';
 import { api } from '@/src/api';
 import { PrimaryButton, GhostButton } from '@/src/components/Button';
 import ManentLoader from '@/src/components/ManentLoader';
+import { ScreenHeader } from '@/src/components/ScreenHeader';
 
 const PRIVACY_EN = `Manent complies with the GDPR (General Data Protection Regulation).
 
@@ -72,7 +72,6 @@ const TERMS = `Conditions d'utilisation — l'essentiel, sans jargon.
 
 export default function Settings() {
   const insets = useSafeAreaInsets();
-  const router = useRouter();
   const colors = useColors();
   const styles = useStyles(makeStyles);
   const { user, signOut } = useAuth();
@@ -146,8 +145,8 @@ export default function Settings() {
     try { await api('/me/notifications', { method: 'PATCH', body: JSON.stringify({ prefs: { [key]: next.find(k => k.key === key)!.enabled } }) }); } catch {}
   };
 
-  const Row = ({ icon, label, right, onPress, testID, danger }: any) => (
-    <Pressable testID={testID} onPress={onPress} disabled={!onPress} accessibilityRole={right ? 'switch' : 'button'} accessibilityLabel={label} style={styles.row}>
+  const Row = ({ icon, label, right, onPress, testID, danger, checked }: any) => (
+    <Pressable testID={testID} onPress={onPress} disabled={!onPress} accessibilityRole={right ? 'switch' : 'button'} accessibilityLabel={label} accessibilityState={right ? { checked: !!checked } : undefined} style={styles.row}>
       <Feather name={icon} size={18} color={danger ? colors.danger : colors.espresso} />
       <Text style={[styles.rowLabel, danger && { color: colors.danger }]} numberOfLines={2}>{label}</Text>
       {right}
@@ -156,13 +155,7 @@ export default function Settings() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.glacier }} testID="screen-settings">
-      <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-        <Pressable onPress={() => router.back()} testID="settings-back" style={styles.iconBtn}>
-          <Feather name="chevron-left" size={22} color={colors.espresso} />
-        </Pressable>
-        <Text style={styles.h1}>{t('Paramètres')}</Text>
-        <View style={{ width: 44 }} />
-      </View>
+      <ScreenHeader title={t('Paramètres')} backTestID="settings-back" />
       <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + spacing.xxl, gap: spacing.sm }}>
         <Text style={styles.section}>{t('Compte')}</Text>
         <View style={styles.card}>
@@ -171,18 +164,18 @@ export default function Settings() {
         </View>
 
         <Text style={styles.section}>{t('Langue')}</Text>
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          <Pressable testID="lang-fr" onPress={() => { setLang('fr'); saveSettings({ language: 'fr' }); }} style={[styles.langChip, lang === 'fr' && styles.langActive]}>
+        <View style={{ flexDirection: 'row', gap: 8 }} accessibilityRole="radiogroup">
+          <Pressable testID="lang-fr" onPress={() => { setLang('fr'); saveSettings({ language: 'fr' }); }} accessibilityRole="radio" accessibilityState={{ selected: lang === 'fr' }} style={[styles.langChip, lang === 'fr' && styles.langActive]}>
             <Text style={[styles.langText, lang === 'fr' && styles.langTextActive]}>Français</Text>
           </Pressable>
-          <Pressable testID="lang-en" onPress={() => { setLang('en'); saveSettings({ language: 'en' }); }} style={[styles.langChip, lang === 'en' && styles.langActive]}>
+          <Pressable testID="lang-en" onPress={() => { setLang('en'); saveSettings({ language: 'en' }); }} accessibilityRole="radio" accessibilityState={{ selected: lang === 'en' }} style={[styles.langChip, lang === 'en' && styles.langActive]}>
             <Text style={[styles.langText, lang === 'en' && styles.langTextActive]}>English</Text>
           </Pressable>
         </View>
 
         <Text style={styles.section}>{t('Apparence')}</Text>
         <View style={{ flexDirection: 'row', gap: 8, marginBottom: spacing.sm }} accessibilityRole="radiogroup">
-          {([['system', 'Comme le téléphone', 'smartphone'], ['light', 'Clair', 'sun'], ['dark', 'Sombre', 'moon']] as const).map(([k, label, icon]) => (
+          {([['system', 'Système', 'smartphone'], ['light', 'Clair', 'sun'], ['dark', 'Sombre', 'moon']] as const).map(([k, label, icon]) => (
             <Chip key={k} testID={`settings-scheme-${k}`} label={t(label)} icon={icon} role="radio" selected={schemePref === k} onPress={() => setSchemePref(k)} />
           ))}
         </View>
@@ -196,6 +189,7 @@ export default function Settings() {
               icon={k.key === 'followed_quote' ? 'feather' : k.key === 'quote_like' ? 'heart' : k.key === 'quote_comment' ? 'message-circle' : k.key === 'new_follower' ? 'user-plus' : k.key === 'recommendation' ? 'gift' : k.key === 'invitation' ? 'mail' : k.key === 'club' ? 'users' : 'book'}
               label={t(k.label)}
               onPress={() => toggleNotif(k.key)}
+              checked={k.enabled}
               right={
                 <View style={[styles.switch, k.enabled && { backgroundColor: colors.chambray }]}>
                   <View style={[styles.knob, k.enabled && { alignSelf: 'flex-end' }]} />
@@ -212,6 +206,7 @@ export default function Settings() {
           icon="globe"
           label={t('Profil public')}
           onPress={() => { const v = !profilePublic; setProfilePublic(v); saveSettings({ profile_public: v }); }}
+          checked={profilePublic}
           right={
             <View style={[styles.switch, profilePublic && { backgroundColor: colors.chambray }]}>
               <View style={[styles.knob, profilePublic && { alignSelf: 'flex-end' }]} />
@@ -224,6 +219,7 @@ export default function Settings() {
           icon="gift"
           label={t('Recevoir des recommandations')}
           onPress={() => { const v = !recosEnabled; setRecosEnabled(v); saveSettings({ recos_enabled: v }); }}
+          checked={recosEnabled}
           right={
             <View style={[styles.switch, recosEnabled && { backgroundColor: colors.chambray }]}>
               <View style={[styles.knob, recosEnabled && { alignSelf: 'flex-end' }]} />
@@ -236,6 +232,7 @@ export default function Settings() {
           icon="eye"
           label={t('Citations publiques par défaut')}
           onPress={() => { const v = !defaultPublic; setDefaultPublic(v); saveSettings({ default_public: v }); }}
+          checked={defaultPublic}
           right={
             <View style={[styles.switch, defaultPublic && { backgroundColor: colors.chambray }]}>
               <View style={[styles.knob, defaultPublic && { alignSelf: 'flex-end' }]} />
@@ -284,9 +281,6 @@ export default function Settings() {
 }
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSoft },
-  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  h1: { fontFamily: fonts.displayMedium, fontSize: 20, color: colors.espresso },
   section: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase', marginTop: spacing.lg, marginBottom: 2 },
   card: { backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },
   accountName: { fontFamily: fonts.displayMedium, fontSize: 20, color: colors.espresso },
@@ -295,7 +289,6 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   langActive: { backgroundColor: colors.chambray, borderColor: colors.chambray },
   langText: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.espresso },
   langTextActive: { color: colors.creme },
-  langSoon: { fontFamily: fonts.body, fontSize: 10, color: colors.clay, fontStyle: 'italic' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 52, backgroundColor: colors.creme, borderRadius: radius.md, paddingHorizontal: spacing.md, borderWidth: 1, borderColor: colors.borderSoft },
   rowLabel: { flex: 1, fontFamily: fonts.body, fontSize: 14.5, color: colors.espresso },
   switch: { width: 44, height: 26, borderRadius: 13, backgroundColor: colors.borderSoft, padding: 3, justifyContent: 'center' },

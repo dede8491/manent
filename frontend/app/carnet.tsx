@@ -42,7 +42,7 @@ export default function Carnet() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.glacier }} testID="screen-carnet">
-      <ScreenHeader title={t('Carnet de lecture')} backTestID="carnet-back" />
+      <ScreenHeader title={t('Mes fiches de lecture')} backTestID="carnet-back" />
 
       {isPremium === null || fiches === null ? (
         <View style={{ paddingTop: spacing.xxl, alignItems: 'center' }}>
@@ -51,18 +51,17 @@ export default function Carnet() {
       ) : !isPremium ? (
         <View style={styles.lockBox} testID="carnet-locked">
           <Feather name="lock" size={26} color={colors.chambray} />
-          <Text style={styles.lockTitle}>{t('Ton carnet de lecture')}</Text>
+          <Text style={styles.lockTitle}>{t('Tes fiches de lecture')}</Text>
           <Text style={styles.lockText}>{t('Retrouve toutes tes fiches de lecture au même endroit, exporte-les en PDF et partage-les. Réservé aux membres Premium.')}</Text>
-          <Pressable testID="carnet-premium-cta" onPress={() => router.push('/premium')} style={styles.premiumBtn}>
+          <Pressable testID="carnet-premium-cta" onPress={() => router.push('/premium')} accessibilityRole="button" style={styles.premiumBtn}>
             <Text style={styles.premiumBtnText}>{t('Découvrir Premium')}</Text>
           </Pressable>
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + spacing.xxl }}>
-          <Text style={styles.h1}>{t('Tes fiches de lecture')}</Text>
           {fiches.length === 0 ? (
             <View style={{ paddingVertical: spacing.xxl, alignItems: 'center' }}>
-              <Text style={styles.emptyTitle}>{t('Ton carnet est encore vierge.')}</Text>
+              <Text style={styles.emptyTitle}>{t('Aucune fiche pour l’instant.')}</Text>
               <Text style={styles.emptySub}>{t('Ouvre un livre de ta bibliothèque et commence sa fiche de lecture.')}</Text>
             </View>
           ) : (
@@ -101,9 +100,6 @@ export default function Carnet() {
 }
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, backgroundColor: colors.glacier },
-  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  headerLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 2, textTransform: 'uppercase' },
   h1: { fontFamily: fonts.displayMedium, fontSize: 28, color: colors.espresso },
   lockBox: { margin: spacing.xl, backgroundColor: colors.creme, borderRadius: 20, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.xl, alignItems: 'center', gap: spacing.sm },
   lockTitle: { fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso, textAlign: 'center' },
@@ -111,8 +107,6 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   premiumBtn: { marginTop: spacing.sm, height: 46, paddingHorizontal: spacing.xl, borderRadius: radius.pill, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },
   premiumBtnText: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.creme },
   card: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },
-  cover: { width: 44, height: 60, borderRadius: 6, backgroundColor: colors.bisque, alignItems: 'center', justifyContent: 'center' },
-  coverInitial: { fontFamily: fonts.displayMedium, fontSize: 22, color: colors.espresso },
   cardTitle: { fontFamily: fonts.displayMedium, fontSize: 18, color: colors.espresso },
   cardMeta: { fontFamily: fonts.body, fontSize: 12.5, color: colors.clay },
   cardDate: { fontFamily: fonts.body, fontSize: 11, color: colors.clay },

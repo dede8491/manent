@@ -85,14 +85,14 @@ export default function JournalTab() {
           <Text style={[styles.segText, segment === 'quotes' && styles.segTextOn]}>{t('Citations')}</Text>
         </Pressable>
       </View>
-      {segment === 'quotes' ? <QuotesManager initialBookId={bookFilter} /> : (
+      {segment === 'quotes' ? <QuotesManager initialBookId={bookFilter} onBookFilter={setBookFilter} /> : (
       <>
 
       {bookList.length > 1 && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }} contentContainerStyle={{ gap: 6, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm }}>
-          <Pressable testID="journal-filter-all" onPress={() => setBookFilter(null)} style={[styles.chip, !bookFilter && styles.chipOn]}><Text style={[styles.chipText, !bookFilter && styles.chipTextOn]}>{t('Tous')}</Text></Pressable>
+          <Pressable testID="journal-filter-all" onPress={() => setBookFilter(null)} accessibilityRole="button" accessibilityState={{ selected: !bookFilter }} style={[styles.chip, !bookFilter && styles.chipOn]}><Text style={[styles.chipText, !bookFilter && styles.chipTextOn]}>{t('Tous')}</Text></Pressable>
           {bookList.map((b: any) => (
-            <Pressable key={b.book_id} testID={`journal-filter-${b.book_id}`} onPress={() => setBookFilter(bookFilter === b.book_id ? null : b.book_id)} style={[styles.chip, bookFilter === b.book_id && styles.chipOn]}>
+            <Pressable key={b.book_id} testID={`journal-filter-${b.book_id}`} onPress={() => setBookFilter(bookFilter === b.book_id ? null : b.book_id)} accessibilityRole="button" accessibilityState={{ selected: bookFilter === b.book_id }} style={[styles.chip, bookFilter === b.book_id && styles.chipOn]}>
               <Text style={[styles.chipText, bookFilter === b.book_id && styles.chipTextOn]} numberOfLines={1}>{b.title}</Text>
             </Pressable>
           ))}
@@ -175,7 +175,6 @@ export default function JournalTab() {
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingBottom: spacing.md },
   h1: { fontFamily: fonts.displayMedium, fontSize: 32, color: colors.espresso },
-  sub: { fontFamily: fonts.body, fontSize: 12, color: colors.clay },
   writeBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 44, paddingHorizontal: 16, borderRadius: radius.pill, backgroundColor: colors.chambray },
   addBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },
   segments: { flexDirection: 'row', gap: 6, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm },

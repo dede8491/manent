@@ -29,7 +29,7 @@ Monétisation : Premium via RevenueCat (App Store / Google Play). Pas de paiemen
 | Helpers partagés | `backend/deps.py` : `db`, `now_utc`, `new_id`, `get_current_user` (server.py et les routes importent d'ici, une seule connexion Mongo) |
 | Règles de lecture | `backend/reading.py` : progression (ne recule jamais, bornée, termine le livre), événements de lecture, série de jours, visibilité d'une citation. **Toute nouvelle route qui touche à la progression ou à la visibilité passe par là.** |
 | IA | Clé Emergent (`EMERGENT_LLM_KEY`) via `ai_provider.py` pour la classification ; appels directs ailleurs (vision, résumés) |
-| Fichiers | Supabase Storage pour les photos, repli base64 en base si non configuré |
+| Fichiers | `/api/upload` : Emergent Object Storage (version Emergent conservée lors des fusions), repli base64 en base si non configuré |
 | Tests | `backend/tests_unit` : helpers purs + routes en mémoire (mongomock, httpx) ; `pytest` seul ne lance que ceux-là. `backend/tests` = anciens tests d'intégration sur base réelle, à ne pas lancer |
 
 Commandes de vérification avant tout commit :
@@ -38,7 +38,8 @@ Commandes de vérification avant tout commit :
 ## 3. Modules et écrans
 
 ```
-Accueil            app/(tabs)/home.tsx          livre en cours, écrire, dernière entrée, série douce
+Accueil            app/(tabs)/home.tsx          recherche + cloche (pastille), livre en cours, écrire, dernière entrée, « Mon évolution » (série, semaine, objectif, rétrospective)
+  Notifications    app/inbox.tsx                activité (citations, abonnées, clubs, livres) + invitations + recommandations, filtres
 Journal            app/(tabs)/journal.tsx       entrées par jour + citations (segments), filtre par livre
   Écrire           app/journal/new.tsx          page, humeur, prompt, texte, citations, publication ; brouillon + file hors ligne
   Entrée           app/journal/[id].tsx
@@ -52,9 +53,8 @@ Découvrir          app/(tabs)/discover.tsx      recherche, Pour toi, fil, colle
   Recherche        app/search.tsx → app/browse.tsx (résultats) → app/filters.tsx
   Intention        app/intent.tsx
 Communauté         app/(tabs)/community.tsx     tableaux et clubs (écran masqué de la barre)
-Profil             app/(tabs)/profile.tsx       stats, abonnements, objectif, badges, Premium, réglages
-  Paramètres       app/settings.tsx
-  Reçus            invitations + recommandations
+Profil             app/(tabs)/profile.tsx       compteurs d'inventaire, abonnées, club, badges, Premium, fiches de lecture, réglages (rien de ce qui est sur l'accueil)
+  Paramètres       app/settings.tsx             compte, langue, apparence, notifications (8 types), confidentialité, données
 Premium            app/premium.tsx
 Admin              app/admin.tsx                signalements, classification, prompts du journal, comptes
 Liens publics      /@handle, /q, /b, /c, /t     pages OG côté serveur + redirections côté app
@@ -72,7 +72,10 @@ Règles :
   l'organisation du code.
 - Les citations sont une trace de lecture : elles vivent dans l'onglet Journal (segment), jamais dans un onglet à part.
 - Tout écran secondaire a un en-tête standard : chevron retour à gauche, libellé en capitales au centre, action à droite.
-- Un même geste n'a qu'une porte d'entrée mémorisable (une barre de recherche, un flux d'ajout de livre, une boîte de réception).
+- Un même geste n'a qu'une porte d'entrée mémorisable (une barre de recherche, un flux d'ajout de livre, un centre de notifications).
+- Une même donnée ne s'affiche qu'à un endroit : la série, la semaine, l'objectif et la rétrospective sont sur l'accueil, jamais sur le profil ;
+  les compteurs d'inventaire (livres, citations, tableaux, sujets) sont sur le profil, jamais sur l'accueil.
+- Un même objet porte un seul nom : « fiche de lecture » (jamais « carnet », « fiche d'études »), « Lecture suivante » pour la file, « Notifications » pour la cloche.
 - Les liens partagés (`/q`, `/b`, `/c`, `/t`, `/@`) doivent rester valables : toute suppression d'écran garde une redirection.
 
 ## 5. Parcours de référence
@@ -112,8 +115,17 @@ Cibles tactiles : 44 × 44 minimum pour toute icône seule (`IconButton`), `hitS
 Composants partagés (à utiliser avant d'en créer un) : `ScreenHeader`, `IconButton`, `PrimaryButton` / `GhostButton`,
 `Chip`, `BottomSheet`, `Toast`, `ErrorState`, `ManentLoader`, `BookCover`, `QuoteCard`, `InfoTooltip`, `MoodTimeline`.
 
-Accessibilité : chaque contrôle sans texte porte un `accessibilityLabel` ; les onglets un `tabBarAccessibilityLabel` ;
-les listes longues sont virtualisées (`FlatList` / `SectionList`).
+Accessibilité : chaque contrôle sans texte porte un `accessibilityLabel` ; chaque `Pressable` un `accessibilityRole` (button, tab, radio,
+checkbox, switch) et, s'il a un état, un `accessibilityState` ; chaque `TextInput` un `accessibilityLabel` ; les onglets un
+`tabBarAccessibilityLabel` ; les listes longues sont virtualisées (`FlatList` / `SectionList`).
+
+Cadrage des textes (écran de 375 px) : jamais de hauteur fixe sur un bouton ou une ligne qui contient du texte (`minHeight` + `paddingVertical`) ;
+tout texte dans une ligne flex porte `flexShrink: 1` ou `flex: 1` et un `numberOfLines` ; les libellés en capitales restent courts (deux mots) ;
+les rangées de chips de plus de trois éléments défilent horizontalement ; les chips ont un `maxWidth` et `numberOfLines={1}`.
+
+Notifications : huit types (`routes/push.py` → `KINDS`), chacun activable dans Paramètres (`notif_prefs`), filtrés côté serveur avant
+envoi et stockage ; la cloche de l'accueil compte les notifications non lues + invitations et recommandations en attente ;
+le centre (`app/inbox.tsx`) ne montre pas en double une invitation ou une recommandation qui a déjà sa carte avec actions.
 
 ## 8. Décisions
 
@@ -127,6 +139,9 @@ les listes longues sont virtualisées (`FlatList` / `SectionList`).
 | 2026-09 | Backend conservé sur MongoDB ; Supabase limité aux photos | Migration hors de proportion avec le besoin |
 | 2026-09 | Club global « livre du mois » retiré du mobile, backend gelé | Écrans injoignables |
 | 2026-09 | Origines des auteurs déduites par la classification, plus d'« aires » manuelles | Demande produit |
+| 2026-09 | Statistiques d'évolution sur l'accueil, cloche de notifications en haut à droite, profil sans doublon | Demande produit |
+| 2026-09 | Notifications : huit types réglables un à un, un seul centre pour activité + invitations + recommandations | Demande produit |
+| 2026-09 | Session glissante de 90 jours, tour de bienvenue mémorisé côté serveur | Plus de reconnexion à chaque ouverture |
 
 ## 9. Problèmes connus
 
@@ -143,4 +158,8 @@ les listes longues sont virtualisées (`FlatList` / `SectionList`).
 4. Design system appliqué (ScreenHeader, IconButton, Button pilule, Chip, listes virtualisées, cache image, thème système). **Fait** ; reste à migrer écran par écran les en-têtes et boutons des écrans anciens (fiche livre, club, capture, citation, paramètres).
 5. Backend consolidé (module `reading`, déduplication, quotas IA par compte, force brute en base, validation, upload vérifié, lifespan, tests de routes). **Fait** ; reste le découpage de `server.py` en modules.
 
-Suivants : cache de réponses mobile (react-query est déjà installé), découpage de `server.py`, recherche dans le journal, réglage des notifications.
+6. Audit doublons, textes, cadrage, accessibilité (une donnée à un seul endroit, un nom par objet, textes cadrés à 375 px, rôles et libellés
+   d'accessibilité sur les écrans principaux, styles et composants morts supprimés). **Fait.**
+
+Suivants : cache de réponses mobile (react-query est déjà installé), découpage de `server.py`, recherche dans le journal, migration des
+chips « à la main » vers le composant `Chip`.

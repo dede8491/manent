@@ -152,12 +152,12 @@ export default function JournalNew() {
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: colors.glacier }}>
       <View style={{ flex: 1 }} testID="screen-journal-new">
         <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-          <Pressable onPress={() => router.back()} testID="journal-new-close" style={styles.iconBtn} hitSlop={8}>
+          <Pressable onPress={() => router.back()} testID="journal-new-close" accessibilityRole="button" accessibilityLabel={t('Fermer')} style={styles.iconBtn} hitSlop={8}>
             <Feather name="x" size={22} color={colors.espresso} />
           </Pressable>
-          <View style={{ alignItems: 'center' }}>
-            <Text style={styles.h1}>{editing ? t('Modifier l’entrée') : t('Entrée du jour')}</Text>
-            <Text style={styles.dateLabel}>{new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</Text>
+          <View style={{ flex: 1, alignItems: 'center', minWidth: 0 }}>
+            <Text style={styles.h1} numberOfLines={1}>{editing ? t('Modifier l’entrée') : t('Entrée du jour')}</Text>
+            <Text style={styles.dateLabel} numberOfLines={1}>{new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</Text>
           </View>
           <Pressable onPress={save} disabled={!canSave} testID="journal-new-save" style={[styles.saveBtn, !canSave && { opacity: 0.4 }]}>
             {saving ? <ManentLoader size={18} variant="sombre" /> : <Text style={styles.saveText}>{t('Enregistrer')}</Text>}
@@ -184,7 +184,7 @@ export default function JournalNew() {
               <View style={styles.noBook} testID="journal-new-nobook">
                 <Text style={styles.noBookTitle}>{t('Aucun livre en cours.')}</Text>
                 <Text style={styles.noBookSub}>{t('Ajoute le livre que tu lis pour commencer ton journal.')}</Text>
-                <Pressable testID="journal-new-addbook" onPress={() => router.push('/book/add')} style={styles.ghostBtn}>
+                <Pressable testID="journal-new-addbook" onPress={() => router.push({ pathname: '/book/add', params: { method: 'title' } })} style={styles.ghostBtn}>
                   <Feather name="plus" size={14} color={colors.espresso} /><Text style={styles.ghostText}>{t('Ajouter un livre')}</Text>
                 </Pressable>
               </View>
@@ -208,7 +208,7 @@ export default function JournalNew() {
                 {/* Page atteinte */}
                 <View style={styles.pageRow}>
                   <Text style={styles.label}>{unit === 'chapitre' ? t('Chapitre atteint') : t('Page atteinte')}</Text>
-                  <TextInput testID="journal-new-page" value={page} onChangeText={v => setPage(v.replace(/\D/g, ''))} keyboardType="number-pad" placeholder={unit === 'chapitre' ? '12' : '142'} placeholderTextColor={colors.clay} style={styles.pageInput} />
+                  <TextInput testID="journal-new-page" accessibilityLabel={t('Page atteinte')} value={page} onChangeText={v => setPage(v.replace(/\D/g, ''))} keyboardType="number-pad" placeholder={unit === 'chapitre' ? '12' : '142'} placeholderTextColor={colors.clay} style={styles.pageInput} />
                   {!!(book.type === 'wattpad' ? book.chapters : book.pages) && <Text style={styles.pageTotal}>/ {book.type === 'wattpad' ? book.chapters : book.pages}</Text>}
                 </View>
 
@@ -218,7 +218,7 @@ export default function JournalNew() {
                   {MOODS.map(m => {
                     const on = mood === m.value;
                     return (
-                      <Pressable key={m.value} testID={`journal-new-mood-${m.value}`} onPress={() => setMood(on ? null : m.value)} style={[styles.moodBtn, on && { backgroundColor: m.color, borderColor: m.color }]}>
+                      <Pressable key={m.value} testID={`journal-new-mood-${m.value}`} onPress={() => setMood(on ? null : m.value)} accessibilityRole="radio" accessibilityState={{ selected: on }} style={[styles.moodBtn, on && { backgroundColor: m.color, borderColor: m.color }]}>
                         <View style={[styles.moodDot, { backgroundColor: on ? colors.creme : m.color }]} />
                         <Text style={[styles.moodText, on && { color: m.value >= 4 || m.value === 1 ? '#FFFFFF' : colors.espresso, fontFamily: fonts.bodyMedium }]}>{t(m.label)}</Text>
                       </Pressable>
@@ -234,7 +234,7 @@ export default function JournalNew() {
                       <Text style={styles.promptText}>{prompt.text}</Text>
                     </Pressable>
                     <Pressable testID="journal-new-prompt-next" onPress={() => setPromptIdx(i => i + 1)} hitSlop={8}><Text style={styles.promptAction}>{t('Un autre')}</Text></Pressable>
-                    <Pressable testID="journal-new-prompt-hide" onPress={() => setPromptHidden(true)} hitSlop={8}><Feather name="x" size={14} color={colors.clay} /></Pressable>
+                    <Pressable testID="journal-new-prompt-hide" onPress={() => setPromptHidden(true)} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('Masquer le prompt')}><Feather name="x" size={14} color={colors.clay} /></Pressable>
                   </View>
                 )}
 
@@ -242,6 +242,7 @@ export default function JournalNew() {
                 <TextInput
                   ref={inputRef}
                   testID="journal-new-content"
+                  accessibilityLabel={t('Mon entrée du jour')}
                   value={content} onChangeText={setContent}
                   placeholder={t('Écris ce que tu as lu, ce que tu as ressenti…')} placeholderTextColor={colors.clay}
                   multiline textAlignVertical="top" style={styles.textarea}
@@ -251,7 +252,7 @@ export default function JournalNew() {
                 {attached.map(q => (
                   <View key={q.quote_id} style={styles.quoteChip} testID={`journal-new-quote-${q.quote_id}`}>
                     <Text style={styles.quoteChipText} numberOfLines={2}>« {q.text} »</Text>
-                    <Pressable onPress={() => toggleQuote(q.quote_id)} hitSlop={8}><Feather name="x" size={14} color={colors.clay} /></Pressable>
+                    <Pressable onPress={() => toggleQuote(q.quote_id)} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('Retirer cette citation')}><Feather name="x" size={14} color={colors.clay} /></Pressable>
                   </View>
                 ))}
                 {quotes.length > 0 && (
@@ -282,7 +283,7 @@ export default function JournalNew() {
           {quotes.map(q => {
             const on = quoteIds.includes(q.quote_id);
             return (
-              <Pressable key={q.quote_id} testID={`journal-new-pickquote-${q.quote_id}`} onPress={() => toggleQuote(q.quote_id)} style={styles.quoteRow}>
+              <Pressable key={q.quote_id} testID={`journal-new-pickquote-${q.quote_id}`} onPress={() => toggleQuote(q.quote_id)} accessibilityRole="checkbox" accessibilityState={{ checked: on }} style={styles.quoteRow}>
                 <Feather name={on ? 'check-square' : 'square'} size={18} color={on ? colors.chambray : colors.clay} />
                 <Text style={styles.quoteRowText} numberOfLines={3}>« {q.text} »{q.page ? `  · p. ${q.page}` : ''}</Text>
               </Pressable>

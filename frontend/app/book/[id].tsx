@@ -350,17 +350,17 @@ export default function BookDetail() {
                 title={t('Comment ça marche')}
                 text={t("Mets à jour ta page, ou photographie-la, pour suivre ta progression. Une fois terminé, note le livre : tes étoiles nourrissent « Pour toi ». Le résumé est la quatrième de couverture ; ton récapitulatif, ce qu'il te laisse. L'icône de partage recommande le livre à une lectrice ou à ton club. Tes citations du livre sont en bas.")}
               />
-              <Pressable onPress={() => setShareSheet(true)} testID="book-share" style={styles.iconBtn}>
+              <Pressable onPress={() => setShareSheet(true)} testID="book-share" style={styles.iconBtn} accessibilityRole="button" accessibilityLabel={t('Partager')}>
                 <Feather name="share" size={19} color={colors.espresso} />
               </Pressable>
-              <Pressable onPress={openDelete} testID="book-delete" style={styles.iconBtn}>
+              <Pressable onPress={openDelete} testID="book-delete" style={styles.iconBtn} accessibilityRole="button" accessibilityLabel={t('Supprimer ce livre')}>
                 <Feather name="trash-2" size={19} color={colors.clay} />
               </Pressable>
             </>
           )}
         >
           <View style={styles.top}>
-            <Pressable testID="book-cover-edit" onPress={changeCover}>
+            <Pressable testID="book-cover-edit" onPress={changeCover} accessibilityRole="button" accessibilityLabel={t('Changer la couverture')}>
               <BookCover uri={book.cover} title={book.title} width={96} height={140} radius={10} initialSize={40} />
               <View style={styles.coverEditBadge}><Feather name="camera" size={11} color={colors.creme} /></View>
             </Pressable>
@@ -374,7 +374,7 @@ export default function BookDetail() {
               {book.status !== 'a_lire' && (
                 <View style={{ flexDirection: 'row', gap: 4, marginTop: 6 }}>
                   {[1,2,3,4,5].map(i => (
-                    <Pressable key={i} testID={`star-${i}`} onPress={async () => { setRating(i); await saveField({ rating: i }); }} hitSlop={4}>
+                    <Pressable key={i} testID={`star-${i}`} onPress={async () => { setRating(i); await saveField({ rating: i }); }} hitSlop={4} accessibilityRole="button" accessibilityLabel={t('Noter {n} sur 5', { n: i })} accessibilityState={{ selected: i <= rating }}>
                       <Feather name="star" size={20} color={colors.chambray} style={{ opacity: i <= rating ? 1 : 0.3 }} />
                     </Pressable>
                   ))}
@@ -385,9 +385,9 @@ export default function BookDetail() {
         </BookHero>
         <View style={{ paddingHorizontal: spacing.xl }}>
 
-        <View style={styles.statusRow}>
+        <View style={styles.statusRow} accessibilityRole="radiogroup">
           {([['a_lire', 'À lire'], ['en_cours', 'En cours'], ['termine', 'Terminé']] as const).map(([sid, lbl]) => (
-            <Pressable key={sid} testID={`book-status-${sid}`} onPress={() => changeStatus(sid)} style={[styles.statusChip, book.status === sid && styles.statusChipActive]}>
+            <Pressable key={sid} testID={`book-status-${sid}`} onPress={() => changeStatus(sid)} style={[styles.statusChip, book.status === sid && styles.statusChipActive]} accessibilityRole="radio" accessibilityState={{ selected: book.status === sid }}>
               <Text style={[styles.statusChipText, book.status === sid && styles.statusChipTextActive]}>{t(lbl)}</Text>
             </Pressable>
           ))}
@@ -407,21 +407,18 @@ export default function BookDetail() {
                   <Text style={styles.laterText}>{t('Plus tard')}</Text>
                 </Pressable>
               </View>
-              <Pressable testID="btn-wrapup-now" onPress={() => router.push({ pathname: '/journal/wrapup/[bookId]', params: { bookId: String(id) } })} hitSlop={6} style={{ marginTop: 8 }}>
-                <Text style={styles.nextReading}>{t('Voir ma fiche de fin de livre')}  ›</Text>
-              </Pressable>
-              <Pressable testID="btn-next-reading" onPress={() => router.push('/queue')} hitSlop={6} style={{ marginTop: 6 }}>
+              <Pressable testID="btn-next-reading" onPress={() => router.push('/queue')} hitSlop={6} style={{ marginTop: 8 }}>
                 <Text style={styles.nextReading}>{t('Passer à la lecture suivante')}  ›</Text>
               </Pressable>
             </View>
-            <Pressable onPress={() => setFinishedBanner(false)} hitSlop={8}><Feather name="x" size={14} color={colors.clay} /></Pressable>
+            <Pressable onPress={() => setFinishedBanner(false)} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('Fermer')}><Feather name="x" size={14} color={colors.clay} /></Pressable>
           </View>
         )}
 
         {!!markPage && !isWattpad && markPage !== (book.progress_page || 0) && (
           <Pressable testID="btn-mark-quote-page" onPress={markQuotePage} style={styles.markPageBtn}>
             <Feather name="bookmark" size={14} color={colors.chambray} />
-            <Text style={styles.markPageText}>{t('Marquer la page {n} comme ma dernière page lue', { n: markPage })}</Text>
+            <Text style={styles.markPageText} numberOfLines={2}>{t('Marquer la page {n} comme ma dernière page lue', { n: markPage })}</Text>
           </Pressable>
         )}
 
@@ -436,17 +433,12 @@ export default function BookDetail() {
                 </Pressable>
               )}
             </View>
-            {quotes.length > 0 && (
-              <Pressable testID="btn-my-quotes" onPress={() => router.push({ pathname: '/(tabs)/journal', params: { segment: 'citations', book_id: String(id) } })} hitSlop={6} style={{ alignSelf: 'flex-start', marginTop: 6 }}>
-                <Text style={styles.editProgress}>{t(quotes.length > 1 ? 'Voir mes {n} citations' : 'Voir ma citation', { n: quotes.length })}</Text>
-              </Pressable>
-            )}
           </View>
         ) : (
           <View style={{ marginTop: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Text style={styles.progressText}>{(prog || 0) > 0 ? `${isWattpad ? t('Chapitre') : t('Page')} ${prog}` : t('Édition non référencée')}</Text>
+            <Text style={[styles.progressText, { flexShrink: 1 }]} numberOfLines={1}>{(prog || 0) > 0 ? `${isWattpad ? t('Chapitre') : t('Page')} ${prog}` : t('Édition non référencée')}</Text>
             <Pressable testID="btn-set-total" onPress={() => { setPageInput(''); setPageModal('total'); }} hitSlop={8}>
-              <Text style={styles.editProgress}>{isWattpad ? t('Nombre de chapitres ?') : t('Nombre de pages ?')}</Text>
+              <Text style={[styles.editProgress, { flexShrink: 1 }]} numberOfLines={1}>{isWattpad ? t('Nombre de chapitres ?') : t('Nombre de pages ?')}</Text>
             </Pressable>
           </View>
         )}
@@ -455,7 +447,7 @@ export default function BookDetail() {
           <View style={styles.summaryBox} testID="book-summary">
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
               <Text style={styles.summaryLabel}>{t('Résumé')}</Text>
-              <Pressable testID="book-summary-edit" onPress={() => { setSumInput(book.summary || summary || ''); setSumModal(true); }} hitSlop={10}>
+              <Pressable testID="book-summary-edit" onPress={() => { setSumInput(book.summary || summary || ''); setSumModal(true); }} hitSlop={10} accessibilityRole="button" accessibilityLabel={t('Modifier le résumé')}>
                 <Feather name="edit-2" size={13} color={colors.clay} />
               </Pressable>
             </View>
@@ -480,7 +472,7 @@ export default function BookDetail() {
                 {detecting
                   ? <ManentLoader size={20} />
                   : <Feather name="camera" size={16} color={colors.creme} />}
-                <Text style={styles.photoBtnText}>{detecting ? t('Analyse de la page…') : t('Photographier ma dernière page lue')}</Text>
+                <Text style={styles.photoBtnText} numberOfLines={2}>{detecting ? t('Analyse de la page…') : t('Photographier ma dernière page lue')}</Text>
               </Pressable>
             ) : detectedPage === -1 ? (
               <View style={styles.detectBox}>
@@ -532,7 +524,7 @@ export default function BookDetail() {
 
         {isEtude && (
           <>
-            <Text style={styles.sectionLabel}>{t('Fiche scolaire')}</Text>
+            <Text style={styles.sectionLabel}>{t('Fiche scolaire (révisions)')}</Text>
             <StudySheet key={book.book_id} sheet={book.sheet} onSave={(s) => saveField({ sheet: s })} />
             <Pressable testID="btn-export-pdf" onPress={exportPdf} disabled={exportingPdf} style={styles.pdfBtn}>
               {exportingPdf
@@ -578,6 +570,7 @@ export default function BookDetail() {
         <Text style={styles.sectionLabel}>{t('Mon récapitulatif')}</Text>
         <TextInput
           testID="book-recap"
+          accessibilityLabel={t('Mon récapitulatif')}
           value={recap} onChangeText={setRecap}
           onEndEditing={() => saveField({ recap })}
           placeholder={t('Ce que ce livre te laisse en tête…')}
@@ -595,8 +588,8 @@ export default function BookDetail() {
             </View>
           ))}
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            <TextInput testID="book-new-lesson" value={newLesson} onChangeText={setNewLesson} placeholder={t('Ajoute un enseignement…')} placeholderTextColor={colors.clay} style={[styles.input, { flex: 1 }]} />
-            <Pressable testID="btn-add-lesson" onPress={addLesson} style={styles.plusBtn}><Feather name="plus" size={20} color={colors.creme} /></Pressable>
+            <TextInput testID="book-new-lesson" accessibilityLabel={t('Nouvel enseignement')} value={newLesson} onChangeText={setNewLesson} placeholder={t('Ajoute un enseignement…')} placeholderTextColor={colors.clay} style={[styles.input, { flex: 1 }]} />
+            <Pressable testID="btn-add-lesson" onPress={addLesson} style={styles.plusBtn} accessibilityRole="button" accessibilityLabel={t('Ajouter cet enseignement')}><Feather name="plus" size={20} color={colors.creme} /></Pressable>
           </View>
         </View>
 
@@ -622,12 +615,17 @@ export default function BookDetail() {
           </>
         )}
 
-        <Text style={styles.sectionLabel}>Citations du livre ({quotes.length})</Text>
+        <Text style={styles.sectionLabel}>{t('Citations du livre ({n})', { n: quotes.length })}</Text>
         {quotes.length === 0 ? (
-          <Text style={styles.emptyQuotes}>{t("Aucune citation pour l'instant. Utilise la capture pour en ajouter.")}</Text>
-        ) : quotes.map(q => (
+          <Text style={styles.emptyQuotes}>{t('Aucune citation pour l’instant. Le « + » de l’onglet Journal photographie une page ou saisit un passage.')}</Text>
+        ) : quotes.slice(0, 3).map(q => (
           <QuoteCard key={q.quote_id} quote={q} onPress={() => router.push({ pathname: '/quote/[id]', params: { id: q.quote_id } })} />
         ))}
+        {quotes.length > 3 && (
+          <Pressable testID="btn-my-quotes" onPress={() => router.push({ pathname: '/(tabs)/journal', params: { segment: 'citations', book_id: String(id) } })} hitSlop={6} style={{ alignSelf: 'flex-start', marginTop: 6 }}>
+            <Text style={styles.editProgress}>{t('Voir mes {n} citations', { n: quotes.length })}</Text>
+          </Pressable>
+        )}
         </View>
       </ScrollView>
 
@@ -657,6 +655,7 @@ export default function BookDetail() {
       >
             <TextInput
               testID="page-modal-input"
+              accessibilityLabel={t('Numéro de page')}
               value={pageInput} onChangeText={setPageInput}
               keyboardType="number-pad" maxLength={5} autoFocus
               placeholder="0" placeholderTextColor={colors.clay}
@@ -673,13 +672,14 @@ export default function BookDetail() {
       <BottomSheet visible={rateSheet} onClose={() => setRateSheet(false)} title={t('Ton avis sur ce livre')} subtitle={book.title} testID="sheet-rate">
         <View style={{ flexDirection: 'row', gap: 10, marginTop: spacing.sm, marginBottom: spacing.md }}>
           {[1,2,3,4,5].map(i => (
-            <Pressable key={i} testID={`rate-star-${i}`} onPress={() => setRating(i)} hitSlop={4}>
+            <Pressable key={i} testID={`rate-star-${i}`} onPress={() => setRating(i)} hitSlop={4} accessibilityRole="button" accessibilityLabel={t('Noter {n} sur 5', { n: i })} accessibilityState={{ selected: i <= rating }}>
               <Feather name="star" size={30} color={colors.chambray} style={{ opacity: i <= rating ? 1 : 0.3 }} />
             </Pressable>
           ))}
         </View>
         <TextInput
           testID="rate-review-input"
+          accessibilityLabel={t('Mon avis')}
           value={reviewInput} onChangeText={v => setReviewInput(v.slice(0, 600))}
           multiline
           placeholder={t('Un mot sur cette lecture (optionnel)…')}
@@ -699,6 +699,7 @@ export default function BookDetail() {
       <BottomSheet visible={sumModal} onClose={() => setSumModal(false)} title={t('Résumé du livre')} testID="sheet-summary">
             <TextInput
               testID="summary-modal-input"
+              accessibilityLabel={t('Résumé du livre')}
               value={sumInput} onChangeText={setSumInput}
               multiline autoFocus
               placeholder={t('La quatrième de couverture, ou tes propres mots…')}
@@ -764,10 +765,10 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   reviewBox: { backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md, gap: 6 },
   reviewText: { fontFamily: fonts.display, fontSize: 15, color: colors.espresso, lineHeight: 21 },
   reviewPlaceholder: { fontFamily: fonts.body, fontSize: 13, color: colors.clay },
-  markPageBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: spacing.md, paddingHorizontal: spacing.md, height: 42, borderRadius: radius.md, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.chambray, backgroundColor: colors.creme },
+  markPageBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: spacing.md, paddingHorizontal: spacing.md, minHeight: 42, paddingVertical: 8, borderRadius: radius.md, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.chambray, backgroundColor: colors.creme },
   markPageText: { fontFamily: fonts.bodyMedium, fontSize: 12.5, color: colors.chambray, flexShrink: 1 },
   pageInput: { height: 56, borderWidth: 1, borderColor: colors.borderSoft, borderRadius: radius.md, fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso, backgroundColor: colors.creme, marginVertical: spacing.md, textAlign: 'center' },
-  photoBtn: { height: 48, borderRadius: radius.md, backgroundColor: colors.chambray, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  photoBtn: { minHeight: 48, paddingVertical: 10, borderRadius: radius.md, backgroundColor: colors.chambray, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   photoBtnText: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.creme },
   detectBox: { padding: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft },
   detectText: { fontFamily: fonts.body, fontSize: 14, color: colors.espresso, lineHeight: 20 },

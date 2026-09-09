@@ -50,7 +50,7 @@ export default function ForYou() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.glacier }} testID="screen-for-you">
-      <ScreenHeader title={t('Découverte')} backTestID="for-you-back" />
+      <ScreenHeader title={t('Pour toi')} backTestID="for-you-back" />
       {loading ? (
         <View style={{ paddingTop: spacing.xxl, alignItems: 'center' }}><ManentLoader size={48} /></View>
       ) : (
@@ -92,9 +92,6 @@ export default function ForYou() {
 }
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.md, paddingBottom: spacing.sm },
-  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  headerLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 2, textTransform: 'uppercase' },
   title: { fontFamily: fonts.displayMedium, fontSize: 30, color: colors.espresso },
   sub: { fontFamily: fonts.body, fontSize: 13, color: colors.clay, lineHeight: 19, marginTop: 4, marginBottom: spacing.lg },
   card: { backgroundColor: colors.creme, borderRadius: radius.md, padding: 6, borderWidth: 1, borderColor: colors.borderSoft },

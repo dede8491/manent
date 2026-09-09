@@ -63,8 +63,8 @@ export default function Retrospective() {
           <Text style={styles.lede}>{t('Ton année de lecture, en chiffres et en humeurs.')}</Text>
 
           <View style={styles.grid}>
-            {([[r.books_count, r.books_count > 1 ? 'livres terminés' : 'livre terminé'], [r.pages_total, 'pages lues'], [r.entries_count, r.entries_count > 1 ? 'entrées de journal' : 'entrée de journal'], [r.quotes_count, r.quotes_count > 1 ? 'citations gardées' : 'citation gardée'], [r.active_days, 'jours de lecture'], [r.longest_streak, 'jours d’affilée au mieux']] as const).map(([n, l]) => (
-              <View key={l} style={styles.stat}><Text style={styles.statNum}>{n}</Text><Text style={styles.statLbl}>{t(l)}</Text></View>
+            {([[r.books_count, r.books_count > 1 ? 'livres' : 'livre'], [r.pages_total, 'pages lues'], [r.entries_count, r.entries_count > 1 ? 'entrées' : 'entrée'], [r.quotes_count, r.quotes_count > 1 ? 'citations' : 'citation'], [r.active_days, 'jours de lecture'], [r.longest_streak, 'meilleure série']] as const).map(([n, l]) => (
+              <View key={l} style={styles.stat}><Text style={styles.statNum}>{n}</Text><Text style={styles.statLbl} numberOfLines={2} adjustsFontSizeToFit>{t(l)}</Text></View>
             ))}
           </View>
 
@@ -146,9 +146,6 @@ export default function Retrospective() {
 }
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.md, paddingBottom: spacing.xs },
-  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  headerLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 2, textTransform: 'uppercase' },
   year: { fontFamily: fonts.displayMedium, fontSize: 48, color: colors.espresso },
   yearChip: { height: 30, paddingHorizontal: 10, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, justifyContent: 'center' },
   yearChipOn: { backgroundColor: colors.chambray, borderColor: colors.chambray },

@@ -45,13 +45,13 @@ function BookCard({ b, onPress }: { b: Book; onPress: () => void }) {
   const progress = isWattpad ? b.progress_chapter : b.progress_page;
   const pct = total && progress ? Math.min(100, Math.round((progress / total) * 100)) : 0;
   return (
-    <Pressable onPress={onPress} testID={`book-card-${b.book_id}`} style={styles.card}>
+    <Pressable onPress={onPress} testID={`book-card-${b.book_id}`} accessibilityRole="button" style={styles.card}>
       <BookCover uri={(b as any).cover} title={b.title} width={52} height={72} initialSize={22} />
       <View style={{ flex: 1 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          {isWattpad && <Text style={styles.badge}>WATTPAD</Text>}
-          {isEtude && <Text style={styles.badge}>{t('ÉTUDES')}</Text>}
-          <Text style={styles.statusMeta}>{b.status === 'en_cours' ? t('EN COURS') : b.status === 'termine' ? t('TERMINÉ') : t('À LIRE')}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 }}>
+          {isWattpad && <Text style={styles.badge} numberOfLines={1}>WATTPAD</Text>}
+          {isEtude && <Text style={styles.badge} numberOfLines={1}>{t('ÉTUDES')}</Text>}
+          <Text style={[styles.statusMeta, { flexShrink: 1 }]} numberOfLines={1}>{b.status === 'en_cours' ? t('EN COURS') : b.status === 'termine' ? t('TERMINÉ') : t('À LIRE')}</Text>
         </View>
         <Text style={styles.title} numberOfLines={2}>{b.title}</Text>
         {b.author ? <Text style={styles.author} numberOfLines={1}>{b.author}</Text> : null}
@@ -93,22 +93,22 @@ export default function Library() {
     <View style={{ flex: 1, backgroundColor: colors.glacier }} testID="screen-library">
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
         <View style={styles.headerRow}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-            <Text style={styles.h1}>{t('Bibliothèque')}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1, minWidth: 0 }}>
+            <Text style={styles.h1} numberOfLines={1}>{t('Bibliothèque')}</Text>
             <InfoTooltip
               testID="info-library"
               title={t('Comment ça marche')}
-              text={t("Le « + » ajoute une lecture par titre, ISBN ou Wattpad. Tes livres se rangent en trois étapes : Liste de lecture, En cours, Terminés. La liste de lecture s'ordonne dans « Lecture suivante », le prochain livre en tête. Tes citations ont leur propre onglet, la plume en bas.")}
+              text={t("Le « + » ajoute une lecture par titre, ISBN ou Wattpad. Tes livres se rangent en trois étapes : Liste de lecture, En cours, Terminés. La liste de lecture s'ordonne dans « Lecture suivante », le prochain livre en tête. Tes citations sont dans l'onglet Journal, segment « Citations ».")}
             />
           </View>
-          <Pressable testID="btn-library-add" onPress={() => setAddSheet(true)} style={styles.addBtn}>
+          <Pressable testID="btn-library-add" onPress={() => setAddSheet(true)} accessibilityRole="button" accessibilityLabel={t('Ajouter une lecture')} style={styles.addBtn}>
             <Feather name="plus" size={22} color={colors.creme} />
           </Pressable>
         </View>
         <View style={styles.filterRow}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: spacing.xl }}>
             {FILTERS.map(f => (
-              <Pressable key={String(f.id)} testID={`lib-filter-${f.id ?? 'all'}`} onPress={() => setFilter(f.id)} style={[styles.chip, filter === f.id && styles.chipActive]}>
+              <Pressable key={String(f.id)} testID={`lib-filter-${f.id ?? 'all'}`} onPress={() => setFilter(f.id)} accessibilityRole="tab" accessibilityState={{ selected: filter === f.id }} style={[styles.chip, filter === f.id && styles.chipActive]}>
                 <Text style={[styles.chipText, filter === f.id && styles.chipTextActive]}>{t(f.label)}</Text>
               </Pressable>
             ))}
@@ -121,7 +121,7 @@ export default function Library() {
         renderItem={({ item }) => <BookCard b={item} onPress={() => router.push({ pathname: '/book/[id]', params: { id: item.book_id } })} />}
         contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + 80 }}
         ListHeaderComponent={filter === 'a_lire' && books.length > 0 ? (
-          <Pressable testID="btn-open-queue" onPress={() => router.push('/queue')} style={styles.queueBtn}>
+          <Pressable testID="btn-open-queue" onPress={() => router.push('/queue')} accessibilityRole="button" style={styles.queueBtn}>
             <Feather name="list" size={16} color={colors.chambray} />
             <View style={{ flex: 1 }}>
               <Text style={styles.queueTitle}>{t('Lecture suivante')}</Text>
@@ -139,7 +139,7 @@ export default function Library() {
           <View style={{ alignItems: 'center', paddingVertical: spacing.xxxl }}>
             <Text style={styles.emptyTitle}>{t("Ta bibliothèque t'attend.")}</Text>
             <Text style={styles.emptySub}>{t('Ajoute ton premier livre ou une histoire Wattpad.')}</Text>
-            <Pressable testID="empty-add-book" onPress={() => setAddSheet(true)} style={[styles.addBtn, { marginTop: spacing.lg }]}>
+            <Pressable testID="empty-add-book" onPress={() => setAddSheet(true)} accessibilityRole="button" accessibilityLabel={t('Ajouter une lecture')} style={[styles.addBtn, { marginTop: spacing.lg }]}>
               <Feather name="plus" size={22} color={colors.creme} />
             </Pressable>
           </View>
@@ -161,8 +161,6 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   chipText: { fontFamily: fonts.body, fontSize: 13, color: colors.espresso },
   chipTextActive: { color: colors.creme, fontFamily: fonts.bodyMedium },
   card: { flexDirection: 'row', gap: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, padding: spacing.md, borderWidth: 1, borderColor: colors.borderSoft },
-  cover: { width: 72, height: 108, borderRadius: radius.sm, backgroundColor: colors.bisque, alignItems: 'center', justifyContent: 'center' },
-  coverInitial: { fontFamily: fonts.displayMedium, fontSize: 40, color: colors.espresso },
   badge: { fontFamily: fonts.bodyMedium, fontSize: 9, color: colors.creme, backgroundColor: colors.clay, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 3, letterSpacing: 1 },
   statusMeta: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.clay, letterSpacing: 1.5 },
   title: { fontFamily: fonts.displayMedium, fontSize: 20, color: colors.espresso, marginTop: 2 },
