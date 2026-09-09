@@ -33,15 +33,17 @@ export default function Home() {
   const [home, setHome] = useState<JournalHome | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [nextUp, setNextUp] = useState<any>(null);
+  const [reading, setReading] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [birthModal, setBirthModal] = useState(false);
   const [birth, setBirth] = useState('');
   const [birthSaving, setBirthSaving] = useState(false);
 
   const load = useCallback(async () => {
-    const [h, d] = await Promise.allSettled([api<JournalHome>('/journal/home'), api<any>('/home/discover')]);
+    const [h, d, r] = await Promise.allSettled([api<JournalHome>('/journal/home'), api<any>('/home/discover'), api<any>('/stats/reading')]);
     if (h.status === 'fulfilled') { setHome(h.value); setLoadError(false); } else setLoadError(true);
     if (d.status === 'fulfilled') setNextUp(d.value?.next_up || null);
+    if (r.status === 'fulfilled') setReading(r.value);
   }, []);
   useFocusEffect(useCallback(() => { flush().then(load); }, [load, flush]));
   const onRefresh = async () => { setRefreshing(true); await flush(); await load(); setRefreshing(false); };
@@ -206,6 +208,49 @@ export default function Home() {
             </View>
           )}
 
+          {/* Mon évolution : série, semaine, objectif de l'année, rétrospective (les compteurs d'inventaire restent au profil) */}
+          {reading && (
+            <>
+              <Text style={styles.sectionLabel}>{t('Mon évolution')}</Text>
+              <View style={styles.evoCard} testID="home-evolution">
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+                  <View style={styles.streakBox}>
+                    <Text style={styles.streakNum}>{reading.streak}</Text>
+                    <Text style={styles.streakLbl}>{t(reading.streak > 1 ? 'jours d’affilée' : 'jour d’affilée')}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.evoTitle}>{t('Ta semaine de lecture')}</Text>
+                    <Text style={styles.evoSub}>{`${reading.week_pages} ${t(reading.week_pages > 1 ? 'pages lues' : 'page lue')} · ${reading.active_days_month} ${t(reading.active_days_month > 1 ? 'jours actifs' : 'jour actif')} ${t('ce mois-ci')}`}</Text>
+                  </View>
+                </View>
+                <View style={styles.weekRow} accessibilityLabel={t('Pages lues par jour cette semaine')}>
+                  {(reading.week || []).map((d: any, i: number) => {
+                    const max = Math.max(1, ...reading.week.map((x: any) => x.pages));
+                    const h = d.pages > 0 ? Math.max(8, Math.round((d.pages / max) * 40)) : (d.active ? 8 : 3);
+                    return (
+                      <View key={i} style={styles.dayCol}>
+                        <View style={styles.barTrack}><View style={[styles.bar, { height: h }, d.active && { backgroundColor: colors.chambray }]} /></View>
+                        <Text style={styles.dayLbl}>{d.label}</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+                <Pressable testID="home-goal" onPress={() => router.push('/(tabs)/profile')} accessibilityRole="button" style={styles.goalRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.evoSub}>{t('Objectif {year}', { year: reading.year })}{reading.yearly_goal ? ` · ${t('{done} / {goal} livres terminés', { done: reading.books_year, goal: reading.yearly_goal })}` : ` · ${t('Fixer un objectif')}`}</Text>
+                    {reading.yearly_goal ? <View style={styles.goalBar}><View style={[styles.goalFill, { width: `${Math.min(100, Math.round((reading.books_year / reading.yearly_goal) * 100))}%` }]} /></View> : null}
+                  </View>
+                  <Feather name="chevron-right" size={14} color={colors.clay} />
+                </Pressable>
+                <Pressable testID="home-retro" onPress={() => router.push({ pathname: '/journal/retrospective', params: { year: String(reading.year) } })} accessibilityRole="button" style={styles.retroRow}>
+                  <Feather name="calendar" size={14} color={colors.chambray} />
+                  <Text style={styles.retroText}>{t('Ma rétrospective {year}', { year: reading.year })}</Text>
+                  <Feather name="chevron-right" size={14} color={colors.clay} />
+                </Pressable>
+              </View>
+            </>
+          )}
+
           <View style={styles.links}>
             <Pressable testID="home-open-journal" onPress={() => router.push('/(tabs)/journal')} style={styles.linkBtn}>
               <Feather name="book-open" size={15} color={colors.espresso} /><Text style={styles.linkText}>{t('Mon journal')}</Text>
@@ -272,6 +317,22 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   entryBook: { fontFamily: fonts.bodyMedium, fontSize: 12, color: colors.chambray, marginBottom: 4 },
   entryText: { fontFamily: fonts.body, fontSize: 14.5, color: colors.espresso, lineHeight: 22 },
   entryQuote: { fontFamily: fonts.display, fontSize: 17, color: colors.espresso, lineHeight: 24 },
+  evoCard: { backgroundColor: colors.creme, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.lg },
+  streakBox: { width: 76, alignItems: 'center', paddingVertical: spacing.sm, backgroundColor: colors.bisque, borderRadius: radius.md },
+  streakNum: { fontFamily: fonts.displayMedium, fontSize: 28, color: colors.espresso, lineHeight: 32 },
+  streakLbl: { fontFamily: fonts.bodyMedium, fontSize: 8.5, color: colors.clay, letterSpacing: 1, textTransform: 'uppercase', textAlign: 'center' },
+  evoTitle: { fontFamily: fonts.displayMedium, fontSize: 18, color: colors.espresso },
+  evoSub: { fontFamily: fonts.body, fontSize: 12, color: colors.clay, marginTop: 2, lineHeight: 17 },
+  weekRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.md, paddingHorizontal: spacing.xs },
+  dayCol: { alignItems: 'center', gap: 4, flex: 1 },
+  barTrack: { height: 40, justifyContent: 'flex-end' },
+  bar: { width: 12, borderRadius: 3, backgroundColor: colors.borderSoft },
+  dayLbl: { fontFamily: fonts.bodyMedium, fontSize: 9, color: colors.clay, letterSpacing: 0.5, textTransform: 'uppercase' },
+  goalRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: spacing.md, paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.borderSoft },
+  goalBar: { height: 6, backgroundColor: colors.glacier, borderRadius: 3, overflow: 'hidden', marginTop: 6 },
+  goalFill: { height: 6, backgroundColor: colors.chambray },
+  retroRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: spacing.md },
+  retroText: { flex: 1, fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.espresso },
   links: { flexDirection: 'row', gap: 8, marginTop: spacing.lg },
   linkBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 42, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, backgroundColor: colors.creme },
   linkText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.espresso },
