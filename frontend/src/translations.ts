@@ -1399,4 +1399,7 @@ export const EN: Record<string, string> = {
   'Journal et captures IA sans limite, exports PDF, rétrospective complète, création de club.': 'Unlimited journal and AI captures, PDF exports, full retrospective, club creation.',
   'Mes fiches de lecture réunies et exportables en PDF': 'All my reading sheets together, exportable as PDF',
   'Créer ton club de lecture (rejoindre un club reste gratuit)': 'Create your book club (joining a club stays free)',
+  // ---- Mes fiches de lecture : livres terminés inclus
+  'Termine un livre, ou ouvre un livre de ta bibliothèque et commence sa fiche de lecture.': 'Finish a book, or open a book from your library and start its reading sheet.',
+  'Fiche de lecture à commencer': 'Reading sheet to start',
 };

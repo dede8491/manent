@@ -147,3 +147,17 @@ async def test_notification_preferences_filter(client, fake_db):
     assert await push.filter_recipients([user["user_id"]], "new_follower") == [user["user_id"]]
     assert push.notif_kind({"title": "Léa", "message": "« … »", "action_url": "/quote/q9"}) == "followed_quote"
     assert push.notif_kind({"title": "Mon club", "message": "x", "action_url": "/club/c1"}) == "club"
+
+
+async def test_fiches_list_includes_finished_books(client, fake_db):
+    headers, user = await register(client, email="fiche@manent-tests.org", pseudo="Fiche")
+    uid = user["user_id"]
+    await fake_db.books.insert_one({"book_id": "bk_f1", "user_id": uid, "type": "papier", "title": "Terminé sans fiche", "status": "termine", "finished_at": server.now_utc()})
+    await fake_db.books.insert_one({"book_id": "bk_f2", "user_id": uid, "type": "papier", "title": "Fiche commencée", "status": "en_cours", "fiche": {"summary": "x", "updated_at": server.now_utc()}})
+    await fake_db.books.insert_one({"book_id": "bk_f3", "user_id": uid, "type": "papier", "title": "Ni l'un ni l'autre", "status": "en_cours"})
+    r = await client.get("/api/fiches", headers=headers)
+    assert r.status_code == 200
+    rows = {x["book_id"]: x for x in r.json()["fiches"]}
+    assert set(rows) == {"bk_f1", "bk_f2"}, "un livre terminé a sa fiche de fin ; un livre en cours sans fiche n'apparaît pas"
+    assert rows["bk_f1"]["finished"] is True and rows["bk_f1"]["has_fiche"] is False
+    assert rows["bk_f2"]["finished"] is False and rows["bk_f2"]["has_fiche"] is True and rows["bk_f2"]["has_summary"] is True

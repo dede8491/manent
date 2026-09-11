@@ -2503,17 +2503,23 @@ async def save_fiche(book_id: str, body: FichePatch, user=Depends(get_current_us
 
 @api.get("/fiches")
 async def list_fiches(user=Depends(get_current_user)):
+    """« Mes fiches de lecture » : un livre y figure dès qu'il a une fiche de lecture commencée OU qu'il est terminé
+    (sa fiche de fin de livre existe alors, générée depuis le journal). Une seule liste, deux portes par livre."""
     books = await db.books.find(
-        {"user_id": user["user_id"], "fiche": {"$exists": True}},
-        {"_id": 0, "book_id": 1, "title": 1, "author": 1, "cover": 1, "rating": 1, "fiche.updated_at": 1, "fiche.summary": 1},
+        {"user_id": user["user_id"], "$or": [{"fiche": {"$exists": True}}, {"status": "termine"}]},
+        {"_id": 0, "book_id": 1, "title": 1, "author": 1, "cover": 1, "rating": 1, "status": 1, "finished_at": 1,
+         "fiche.updated_at": 1, "fiche.summary": 1},
     ).to_list(300)
     out = []
     for b in books:
-        f = b.pop("fiche", {}) or {}
-        b["updated_at"] = f.get("updated_at")
-        b["has_summary"] = bool(f.get("summary"))
+        f = b.pop("fiche", None)
+        finished_at = b.pop("finished_at", None)
+        b["has_fiche"] = f is not None
+        b["finished"] = b.pop("status", None) == "termine"
+        b["updated_at"] = (f or {}).get("updated_at") or finished_at
+        b["has_summary"] = bool((f or {}).get("summary"))
         out.append(b)
-    out.sort(key=lambda x: x.get("updated_at") or "", reverse=True)
+    out.sort(key=lambda x: str(x.get("updated_at") or ""), reverse=True)
     return {"fiches": out}
 
 
