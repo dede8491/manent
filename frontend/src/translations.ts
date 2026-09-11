@@ -1402,4 +1402,6 @@ export const EN: Record<string, string> = {
   // ---- Mes fiches de lecture : livres terminés inclus
   'Termine un livre, ou ouvre un livre de ta bibliothèque et commence sa fiche de lecture.': 'Finish a book, or open a book from your library and start its reading sheet.',
   'Fiche de lecture à commencer': 'Reading sheet to start',
+  // ---- Carte de citation : page discrète en grille
+  'chap. {n}': 'ch. {n}',
 };
