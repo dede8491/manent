@@ -362,6 +362,10 @@ Testé e2e via curl (création publique, discover, join, correspondance titre in
 - L'utilisatrice publie et lance elle-même l'analyse puis la suppression depuis le Dashboard admin en production. Aucun identifiant/URL de prod partagé (choix définitif de l'utilisatrice).
 - Contexte : la base de PROD n'est pas accessible depuis le pod (environnements isolés, confirmé support). Workflow validé avec l'utilisatrice : Publish → appel de la route sur le backend déployé (dry-run) → validation utilisatrice → apply. NE JAMAIS lancer apply sans validation explicite.
 
+## Diagnostic build iOS + health check déploiement (juin 2026)
+- Échec build iOS (955bfa99, profil sans capacité Associated Domains) : cause = le build a utilisé un ANCIEN instantané du code (version b3a2f28d, antérieur au commit 0460484 qui conditionne associatedDomains à EXPO_PUBLIC_IOS_APPLINKS=1 — l'archive contenait quotes.tsx, area/[key].tsx, book_search.py, tous supprimés depuis). Le code actuel ne peut PAS injecter l'entitlement (vérifié par deployment_agent : expo_release_build_ok true). Solution : re-Publish puis régénérer le build iOS.
+- Blocker corrigé : frontend/.env METRO_CACHE_ROOT mis entre guillemets. lint frontend/src : 0 issue. Health check final : warn uniquement (fallback localhost MONGO_URL dans deps.py, N+1 dans /api/feed — non bloquants). WARN accepté : GoogleService-Info.plist iOS non fourni (push iOS non configuré tant que l'utilisatrice ne fournit pas le fichier Firebase).
+
 ## Fusion 03d428f — Clubs accessibles, avatar sous citations, Premium complet (juin 2026)
 - Fusion sans conflit (5 fichiers frontend) : section « Clubs de lecture » en bas de Découvrir, « Mes tableaux et clubs » dans le profil, avatar rond + pseudo sous chaque citation (QuoteCard → profil lectrice), page Premium avec fiches PDF et création de club. tsc 0 erreur, lint 0 erreur, pytest 30/30, vérifié e2e (Découvrir/Profil/Premium OK).
 
