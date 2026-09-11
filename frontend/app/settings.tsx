@@ -1,17 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Modal, Platform, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { fonts, radius, spacing } from '@/src/theme';
-import { useColors, useStyles, useScheme, useToggleScheme } from '@/src/themeCtx';
+import { useColors, useStyles, useScheme, useSchemePref } from '@/src/themeCtx';
+import { Chip } from '@/src/components/Chip';
 import { useAuth } from '@/src/auth';
 import { useI18n } from '@/src/i18n';
 import { api } from '@/src/api';
 import { PrimaryButton, GhostButton } from '@/src/components/Button';
 import ManentLoader from '@/src/components/ManentLoader';
+import { ScreenHeader } from '@/src/components/ScreenHeader';
 
 const PRIVACY_EN = `Manent complies with the GDPR (General Data Protection Regulation).
 
@@ -25,7 +26,7 @@ Your rights (GDPR articles 15 to 21): access, rectification, portability ("Downl
 
 Hosting: your data is stored securely; page photos only pass through for transcription and are not kept by the AI model.
 
-Contact: bonjour@manent.app`;
+Contact: bonjour@manentlc.app`;
 
 const TERMS_EN = `Terms of use — the essentials, no jargon.
 
@@ -53,7 +54,7 @@ Tes droits (articles 15 à 21 du RGPD) : accès, rectification, portabilité (bo
 
 Hébergement : tes données sont stockées de manière sécurisée, les photos de pages transitent uniquement pour la transcription et ne sont pas conservées par le modèle d'IA.
 
-Contact : bonjour@manent.app`;
+Contact : bonjour@manentlc.app`;
 
 const TERMS = `Conditions d'utilisation — l'essentiel, sans jargon.
 
@@ -71,15 +72,15 @@ const TERMS = `Conditions d'utilisation — l'essentiel, sans jargon.
 
 export default function Settings() {
   const insets = useSafeAreaInsets();
-  const router = useRouter();
   const colors = useColors();
   const styles = useStyles(makeStyles);
   const { user, signOut } = useAuth();
   const scheme = useScheme();
-  const toggleScheme = useToggleScheme();
+  const { pref: schemePref, setPref: setSchemePref } = useSchemePref();
   const { lang, setLang, t } = useI18n();
   const [defaultPublic, setDefaultPublic] = useState(false);
   const [profilePublic, setProfilePublic] = useState(true);
+  const [recosEnabled, setRecosEnabled] = useState(true);
   const [doc, setDoc] = useState<null | 'privacy' | 'terms'>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -136,23 +137,25 @@ export default function Settings() {
     }
   };
 
-  const Row = ({ icon, label, right, onPress, testID, danger }: any) => (
-    <Pressable testID={testID} onPress={onPress} disabled={!onPress} style={styles.row}>
-      <Feather name={icon} size={18} color={danger ? '#B3552F' : colors.espresso} />
-      <Text style={[styles.rowLabel, danger && { color: '#B3552F' }]} numberOfLines={2}>{label}</Text>
+  const [notifKinds, setNotifKinds] = useState<{ key: string; label: string; description: string; enabled: boolean }[]>([]);
+  useEffect(() => { api<{ kinds: any[] }>('/me/notifications').then(r => setNotifKinds(r.kinds)).catch(() => {}); }, []);
+  const toggleNotif = async (key: string) => {
+    const next = notifKinds.map(k => k.key === key ? { ...k, enabled: !k.enabled } : k);
+    setNotifKinds(next);
+    try { await api('/me/notifications', { method: 'PATCH', body: JSON.stringify({ prefs: { [key]: next.find(k => k.key === key)!.enabled } }) }); } catch {}
+  };
+
+  const Row = ({ icon, label, right, onPress, testID, danger, checked }: any) => (
+    <Pressable testID={testID} onPress={onPress} disabled={!onPress} accessibilityRole={right ? 'switch' : 'button'} accessibilityLabel={label} accessibilityState={right ? { checked: !!checked } : undefined} style={styles.row}>
+      <Feather name={icon} size={18} color={danger ? colors.danger : colors.espresso} />
+      <Text style={[styles.rowLabel, danger && { color: colors.danger }]} numberOfLines={2}>{label}</Text>
       {right}
     </Pressable>
   );
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.glacier }} testID="screen-settings">
-      <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-        <Pressable onPress={() => router.back()} testID="settings-back" style={styles.iconBtn}>
-          <Feather name="chevron-left" size={22} color={colors.espresso} />
-        </Pressable>
-        <Text style={styles.h1}>{t('Paramètres')}</Text>
-        <View style={{ width: 40 }} />
-      </View>
+      <ScreenHeader title={t('Paramètres')} backTestID="settings-back" />
       <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + spacing.xxl, gap: spacing.sm }}>
         <Text style={styles.section}>{t('Compte')}</Text>
         <View style={styles.card}>
@@ -161,27 +164,41 @@ export default function Settings() {
         </View>
 
         <Text style={styles.section}>{t('Langue')}</Text>
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          <Pressable testID="lang-fr" onPress={() => { setLang('fr'); saveSettings({ language: 'fr' }); }} style={[styles.langChip, lang === 'fr' && styles.langActive]}>
+        <View style={{ flexDirection: 'row', gap: 8 }} accessibilityRole="radiogroup">
+          <Pressable testID="lang-fr" onPress={() => { setLang('fr'); saveSettings({ language: 'fr' }); }} accessibilityRole="radio" accessibilityState={{ selected: lang === 'fr' }} style={[styles.langChip, lang === 'fr' && styles.langActive]}>
             <Text style={[styles.langText, lang === 'fr' && styles.langTextActive]}>Français</Text>
           </Pressable>
-          <Pressable testID="lang-en" onPress={() => { setLang('en'); saveSettings({ language: 'en' }); }} style={[styles.langChip, lang === 'en' && styles.langActive]}>
+          <Pressable testID="lang-en" onPress={() => { setLang('en'); saveSettings({ language: 'en' }); }} accessibilityRole="radio" accessibilityState={{ selected: lang === 'en' }} style={[styles.langChip, lang === 'en' && styles.langActive]}>
             <Text style={[styles.langText, lang === 'en' && styles.langTextActive]}>English</Text>
           </Pressable>
         </View>
 
         <Text style={styles.section}>{t('Apparence')}</Text>
-        <Row
-          testID="settings-darkmode"
-          icon={scheme === 'dark' ? 'sun' : 'moon'}
-          label={t('Mode sombre')}
-          onPress={toggleScheme}
-          right={
-            <View style={[styles.switch, scheme === 'dark' && { backgroundColor: colors.chambray }]}>
-              <View style={[styles.knob, scheme === 'dark' && { alignSelf: 'flex-end' }]} />
-            </View>
-          }
-        />
+        <View style={{ flexDirection: 'row', gap: 8, marginBottom: spacing.sm }} accessibilityRole="radiogroup">
+          {([['system', 'Système', 'smartphone'], ['light', 'Clair', 'sun'], ['dark', 'Sombre', 'moon']] as const).map(([k, label, icon]) => (
+            <Chip key={k} testID={`settings-scheme-${k}`} label={t(label)} icon={icon} role="radio" selected={schemePref === k} onPress={() => setSchemePref(k)} />
+          ))}
+        </View>
+
+        <Text style={styles.section}>{t('Notifications')}</Text>
+        <Text style={styles.note}>{t('Chaque type se règle séparément. Il vaut pour les notifications sur ton téléphone et pour la cloche de l’accueil.')}</Text>
+        {notifKinds.map(k => (
+          <View key={k.key}>
+            <Row
+              testID={`settings-notif-${k.key}`}
+              icon={k.key === 'followed_quote' ? 'feather' : k.key === 'quote_like' ? 'heart' : k.key === 'quote_comment' ? 'message-circle' : k.key === 'new_follower' ? 'user-plus' : k.key === 'recommendation' ? 'gift' : k.key === 'invitation' ? 'mail' : k.key === 'club' ? 'users' : 'book'}
+              label={t(k.label)}
+              onPress={() => toggleNotif(k.key)}
+              checked={k.enabled}
+              right={
+                <View style={[styles.switch, k.enabled && { backgroundColor: colors.chambray }]}>
+                  <View style={[styles.knob, k.enabled && { alignSelf: 'flex-end' }]} />
+                </View>
+              }
+            />
+            <Text style={styles.note}>{t(k.description)}</Text>
+          </View>
+        ))}
 
         <Text style={styles.section}>{t('Confidentialité')}</Text>
         <Row
@@ -189,6 +206,7 @@ export default function Settings() {
           icon="globe"
           label={t('Profil public')}
           onPress={() => { const v = !profilePublic; setProfilePublic(v); saveSettings({ profile_public: v }); }}
+          checked={profilePublic}
           right={
             <View style={[styles.switch, profilePublic && { backgroundColor: colors.chambray }]}>
               <View style={[styles.knob, profilePublic && { alignSelf: 'flex-end' }]} />
@@ -197,10 +215,24 @@ export default function Settings() {
         />
         <Text style={styles.note}>{t('Public : les lecteurs voient ta bibliothèque, tes fiches et tes citations publiques. Privé : seuls ton pseudo et ta photo restent visibles.')}</Text>
         <Row
+          testID="settings-recos"
+          icon="gift"
+          label={t('Recevoir des recommandations')}
+          onPress={() => { const v = !recosEnabled; setRecosEnabled(v); saveSettings({ recos_enabled: v }); }}
+          checked={recosEnabled}
+          right={
+            <View style={[styles.switch, recosEnabled && { backgroundColor: colors.chambray }]}>
+              <View style={[styles.knob, recosEnabled && { alignSelf: 'flex-end' }]} />
+            </View>
+          }
+        />
+        <Text style={styles.note}>{t('Les lectrices que tu suis, ou qui te suivent, peuvent te recommander un livre. Désactivé, personne ne peut t’en envoyer.')}</Text>
+        <Row
           testID="settings-default-public"
           icon="eye"
           label={t('Citations publiques par défaut')}
           onPress={() => { const v = !defaultPublic; setDefaultPublic(v); saveSettings({ default_public: v }); }}
+          checked={defaultPublic}
           right={
             <View style={[styles.switch, defaultPublic && { backgroundColor: colors.chambray }]}>
               <View style={[styles.knob, defaultPublic && { alignSelf: 'flex-end' }]} />
@@ -239,7 +271,7 @@ export default function Settings() {
             <Text style={styles.modalTitle}>{t('Tu es sûr ?')}</Text>
             <Text style={styles.docText}>{t('Tes livres, citations, tableaux et clubs seront supprimés définitivement. Cette action est irréversible.')}</Text>
             <View style={{ height: spacing.lg }} />
-            <PrimaryButton testID="delete-confirm" title={busy === 'delete' ? t('Suppression…') : t('Supprimer définitivement')} onPress={deleteAccount} style={{ backgroundColor: '#B3552F' }} />
+            <PrimaryButton testID="delete-confirm" title={busy === 'delete' ? t('Suppression…') : t('Supprimer définitivement')} onPress={deleteAccount} style={{ backgroundColor: colors.danger }} />
             <GhostButton testID="delete-cancel" title={t('Garder mon compte')} onPress={() => setConfirmDelete(false)} />
           </View>
         </View>
@@ -249,9 +281,6 @@ export default function Settings() {
 }
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSoft },
-  iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  h1: { fontFamily: fonts.displayMedium, fontSize: 20, color: colors.espresso },
   section: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase', marginTop: spacing.lg, marginBottom: 2 },
   card: { backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },
   accountName: { fontFamily: fonts.displayMedium, fontSize: 20, color: colors.espresso },
@@ -260,7 +289,6 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   langActive: { backgroundColor: colors.chambray, borderColor: colors.chambray },
   langText: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.espresso },
   langTextActive: { color: colors.creme },
-  langSoon: { fontFamily: fonts.body, fontSize: 10, color: colors.clay, fontStyle: 'italic' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 52, backgroundColor: colors.creme, borderRadius: radius.md, paddingHorizontal: spacing.md, borderWidth: 1, borderColor: colors.borderSoft },
   rowLabel: { flex: 1, fontFamily: fonts.body, fontSize: 14.5, color: colors.espresso },
   switch: { width: 44, height: 26, borderRadius: 13, backgroundColor: colors.borderSoft, padding: 3, justifyContent: 'center' },

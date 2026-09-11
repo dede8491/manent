@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Modal, Pressable } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '@/src/auth';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { fonts, radius, spacing } from '@/src/theme';
@@ -9,17 +10,20 @@ import { useColors, useStyles } from '@/src/themeCtx';
 import { Wordmark } from '@/src/components/Wordmark';
 import { useT } from '@/src/i18n';
 
-const TOUR_KEY = 'manent_tour_done';
+const TOUR_KEY = 'manent_tour_done_v2';
 
 type Step = { icon: React.ComponentProps<typeof Feather>['name'] | null; title: string; text: string };
 
 const STEPS: Step[] = [
-  { icon: null, title: 'Bienvenue sur Manent', text: 'Ce que tes lectures te laissent. Voici un petit tour des lieux — une minute, promis.' },
-  { icon: 'grid', title: "L'accueil", text: "Ton fil de lecture : ta citation du matin, les passages des lecteurs que tu suis, les livres primés et les nouveautés. Les thèmes en haut t'ouvrent des univers." },
-  { icon: 'book-open', title: 'La bibliothèque', text: 'Tes lectures en trois étapes : À lire, En cours, Terminés. Mets à jour ta page pour suivre ta progression, et retrouve toutes tes citations au même endroit.' },
-  { icon: 'camera', title: 'La capture', text: "Le bouton central photographie une page : l'IA transcrit le passage pour toi. Relie-le à un livre, choisis sa visibilité, et il reste pour toujours." },
-  { icon: 'bookmark', title: 'La communauté', text: 'Épingle tes citations dans des tableaux par thème, et rejoins le Club de lecture : Livre du mois, discussions, événements et challenge de l’année.' },
-  { icon: 'user', title: 'Ton profil', text: 'Tes statistiques, ta série de jours de lecture, tes tableaux publics. Et si tu te poses une question, les petits « i » t’expliquent chaque écran. Bonne lecture.' },
+  { icon: null, title: 'Bienvenue sur Manent', text: 'Garde une trace de tout ce que tu lis et ressens. Voici un tour des lieux — une minute, promis.' },
+  { icon: 'home', title: "L'accueil", text: "Ton livre en cours et sa progression, puis « Écrire mon entrée du jour » : une page, une humeur, quelques mots. En dessous, ta dernière entrée et « Mon évolution » : série de jours, semaine, objectif de l'année, rétrospective." },
+  { icon: 'edit-3', title: 'Le journal', text: "Tes traces de lecture : les entrées (humeur, page atteinte, quelques mots, un prompt pour démarrer) et tes citations, dans le même onglet. Le « + » écrit une entrée, photographie une page ou saisit un passage. Privé par défaut, même sans réseau." },
+  { icon: 'book-open', title: 'La bibliothèque', text: "Le « + » ouvre l'ajout d'une lecture par titre, ISBN ou Wattpad. Ta liste de lecture s'ordonne dans « Lecture suivante » : le prochain livre en tête, comme une file d'attente." },
+  { icon: 'compass', title: 'Découvrir', text: "« Pour toi », les origines des auteurs, les clubs publics et le fil des lectrices : tout ce qui nourrit tes prochaines lectures. Le scan de code-barres y ajoute un livre en librairie." },
+  { icon: 'award', title: 'La fiche de fin', text: "Quand tu termines un livre : tes humeurs au fil des sessions, tes citations préférées, ta note, en une fiche à garder ou à partager en image. Et en fin d'année, ta rétrospective." },
+  { icon: 'bell', title: 'Les notifications', text: "La cloche de l'accueil rassemble tout : les cœurs et commentaires sur tes citations, les nouvelles abonnées, les invitations à un tableau ou un club, les livres qu'on te recommande. Chaque type se règle dans Paramètres." },
+  { icon: 'users', title: 'Tableaux et clubs', text: "Depuis Découvrir → « Mes tableaux et clubs » : épingle tes citations par thème, crée ton club de lecture (Premium) ou rejoins-en un. Depuis une fiche livre, recommande-le à une lectrice ou à ton club." },
+  { icon: 'user', title: 'Ton profil', text: "Tes badges, ton abonnement et tes réglages ; ta série et ton objectif sont sur l'accueil. Partage ton profil ou ta bibliothèque en image. Et si tu te poses une question, les petits « i » t'expliquent chaque écran. Bonne lecture." },
 ];
 
 export function WelcomeTour() {
@@ -27,18 +31,22 @@ export function WelcomeTour() {
   const colors = useColors();
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
+  const { user, markSeen } = useAuth();
   const [show, setShow] = useState(false);
   const [step, setStep] = useState(0);
 
+  // Affiché une seule fois par compte : le drapeau est sur le profil (serveur), doublé d'une trace locale.
   useEffect(() => {
+    if (!user || user.tour_seen) return;
     AsyncStorage.getItem(TOUR_KEY)
-      .then(v => { if (!v) setShow(true); })
+      .then(v => { if (!v) setShow(true); else markSeen('tour_seen'); })
       .catch(() => {});
-  }, []);
+  }, [user, markSeen]);
 
   const close = () => {
     setShow(false);
     AsyncStorage.setItem(TOUR_KEY, '1').catch(() => {});
+    markSeen('tour_seen');
   };
 
   if (!show) return null;

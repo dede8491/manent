@@ -11,6 +11,7 @@ import { PrimaryButton, GhostButton } from '@/src/components/Button';
 import { api } from '@/src/api';
 import ManentLoader from '@/src/components/ManentLoader';
 import { useT } from '@/src/i18n';
+import { BottomSheet } from '@/src/components/BottomSheet';
 
 type Method = 'title' | 'isbn' | 'wattpad';
 
@@ -33,17 +34,17 @@ export default function AddBook() {
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const params = useLocalSearchParams<{ title?: string; author?: string; cover?: string; q?: string; isbn?: string; pages?: string; year?: string }>();
-  const [method, setMethod] = useState<Method>('title');
+  const params = useLocalSearchParams<{ title?: string; author?: string; cover?: string; isbn?: string; pages?: string; year?: string; method?: string; scan?: string; catalog_id?: string }>();
+  const [method, setMethod] = useState<Method>(params.method === 'isbn' ? 'isbn' : params.method === 'wattpad' ? 'wattpad' : 'title');
   const selectedRef = useRef(false);
 
-  // Préremplissage depuis une suggestion (page thème, recherche accueil)
+  // Préremplissage depuis une suggestion (page thème, recherche, fiche catalogue)
   useEffect(() => {
     if (params.title && !selectedRef.current) {
       selectedRef.current = true;
       setSelected({
         title: params.title,
-        catalog_id: (params as any).catalog_id || undefined,
+        catalog_id: params.catalog_id || undefined,
         author: params.author || null,
         cover: params.cover || null,
         isbn: params.isbn || null,
@@ -51,12 +52,12 @@ export default function AddBook() {
         year: params.year || null,
       });
     }
-    if (params.q && !selectedRef.current) {
+    if (params.scan === '1' && !selectedRef.current) {
       selectedRef.current = true;
-      setQuery(String(params.q));
+      startScan();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.title, params.q]);
+  }, [params.title, params.scan]);
 
   // Recherche par titre en direct
   const [query, setQuery] = useState('');
@@ -162,7 +163,7 @@ export default function AddBook() {
     setManualBook(false);
   };
 
-  const add = async () => {
+  const add = async (forceStatus?: 'a_lire') => {
     if (!selected) return;
     setSaving(true);
     try {
@@ -180,12 +181,16 @@ export default function AddBook() {
           pages: selected.pages,
           year: selected.year,
           chapters: selected.chapters,
-          status, mode,
+          status: forceStatus || status, mode,
         }),
       });
       router.replace({ pathname: '/book/[id]', params: { id: b.book_id } });
+    } catch (e: any) {
+      if (e?.status === 402) setLimitSheet(true);
     } finally { setSaving(false); }
   };
+  const [limitSheet, setLimitSheet] = useState(false);
+  const addToQueue = () => { setLimitSheet(false); setStatus('a_lire'); add('a_lire'); };
 
   const isWattpadSel = selected?.type === 'wattpad';
 
@@ -196,7 +201,7 @@ export default function AddBook() {
           <Feather name="chevron-left" size={22} color={colors.espresso} />
         </Pressable>
         <Text style={styles.h1}>{t('Ajouter une lecture')}</Text>
-        <View style={{ width: 40 }} />
+        <View style={{ width: 44 }} />
       </View>
 
       <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + spacing.xxl }} keyboardShouldPersistTaps="handled">
@@ -403,13 +408,21 @@ export default function AddBook() {
           </View>
         </View>
       )}
+      <BottomSheet visible={limitSheet} onClose={() => setLimitSheet(false)} title={t('Un livre en cours à la fois')} subtitle={t('En gratuit, Manent suit un livre en cours à la fois, pour un journal concentré. Ajoute celui-ci à ta liste de lecture, ou passe en Premium.')} testID="sheet-books-limit" scroll={false}>
+        <Pressable testID="books-limit-queue" onPress={addToQueue} style={styles.limitBtn}><Text style={styles.limitBtnText}>{t('Ajouter à ma liste de lecture')}</Text></Pressable>
+        <Pressable testID="books-limit-premium" onPress={() => { setLimitSheet(false); router.push('/premium'); }} style={styles.limitGhost}><Text style={styles.limitGhostText}>{t('Découvrir Premium')}</Text></Pressable>
+      </BottomSheet>
     </KeyboardAvoidingView>
   );
 }
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
+  limitBtn: { height: 48, borderRadius: radius.pill, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },
+  limitBtnText: { fontFamily: fonts.bodyMedium, fontSize: 15, color: colors.creme },
+  limitGhost: { height: 44, alignItems: 'center', justifyContent: 'center', marginTop: spacing.sm },
+  limitGhostText: { fontFamily: fonts.bodyMedium, fontSize: 13.5, color: colors.chambray },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSoft },
-  iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   h1: { fontFamily: fonts.displayMedium, fontSize: 20, color: colors.espresso },
   tab: { flex: 1, height: 40, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.creme },
   tabActive: { backgroundColor: colors.espresso, borderColor: colors.espresso },

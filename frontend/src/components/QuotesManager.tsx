@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useCallback, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Modal } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
@@ -15,7 +15,9 @@ type Q = {
 
 type VisFilter = 'toutes' | 'publiques' | 'privees' | 'masquees';
 
-export function QuotesManager() {
+// Le filtre par livre est piloté par l'onglet Journal (un seul filtre pour les deux segments) ; il reste
+// autonome si le composant est utilisé seul.
+export function QuotesManager({ initialBookId, onBookFilter }: { initialBookId?: string | null; onBookFilter?: (id: string | null) => void } = {}) {
   const t = useT();
   const colors = useColors();
   const styles = useStyles(makeStyles);
@@ -23,7 +25,10 @@ export function QuotesManager() {
   const [quotes, setQuotes] = useState<Q[]>([]);
   const [search, setSearch] = useState('');
   const [vis, setVis] = useState<VisFilter>('toutes');
-  const [bookFilter, setBookFilter] = useState<string | null>(null);
+  const [localBookFilter, setLocalBookFilter] = useState<string | null>(initialBookId || null);
+  useEffect(() => { setLocalBookFilter(initialBookId || null); }, [initialBookId]);
+  const bookFilter = onBookFilter ? (initialBookId || null) : localBookFilter;
+  const setBookFilter = (id: string | null) => { setLocalBookFilter(id); onBookFilter?.(id); };
   const [themeFilter, setThemeFilter] = useState<string | null>(null);
   const [grid, setGrid] = useState(false);
   const [menuFor, setMenuFor] = useState<Q | null>(null);
@@ -134,7 +139,7 @@ export function QuotesManager() {
           </View>
         </View>
         {!selMode && (
-          <Pressable testID={`mq-menu-${q.quote_id}`} onPress={() => setMenuFor(q)} hitSlop={10} style={styles.dots}>
+          <Pressable testID={`mq-menu-${q.quote_id}`} onPress={() => setMenuFor(q)} hitSlop={10} accessibilityRole="button" accessibilityLabel={t('Options de la citation')} style={styles.dots}>
             <Feather name="more-horizontal" size={18} color={colors.clay} />
           </Pressable>
         )}
@@ -147,42 +152,37 @@ export function QuotesManager() {
       <View style={styles.searchRow}>
         <View style={styles.searchBox}>
           <Feather name="search" size={15} color={colors.clay} />
-          <TextInput testID="mq-search" value={search} onChangeText={setSearch} placeholder={t('Chercher dans tes citations…')} placeholderTextColor={colors.clay} style={styles.searchInput} />
+          <TextInput testID="mq-search" value={search} onChangeText={setSearch} placeholder={t('Chercher dans tes citations…')} placeholderTextColor={colors.clay} style={styles.searchInput} accessibilityLabel={t('Chercher dans mes citations')} />
         </View>
-        <Pressable testID="mq-toggle-grid" onPress={() => setGrid(v => !v)} style={styles.gridBtn}>
+        <Pressable testID="mq-toggle-grid" onPress={() => setGrid(v => !v)} accessibilityRole="button" accessibilityLabel={grid ? t('Vue liste') : t('Vue grille')} style={styles.gridBtn}>
           <Feather name={grid ? 'list' : 'grid'} size={17} color={colors.espresso} />
         </Pressable>
       </View>
-      <Text style={styles.countsBanner} testID="mq-counts">
+      <Text style={styles.countsBanner} testID="mq-counts" numberOfLines={1} adjustsFontSizeToFit>
         {t('{pub} publiques · {priv} privées · {hidden} masquées', { pub: counts.pub, priv: counts.priv, hidden: counts.hidden })}
       </Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipScroll} style={{ flexGrow: 0 }}>
         {([['toutes', 'Toutes'], ['publiques', 'Publiques'], ['privees', 'Privées'], ['masquees', 'Masquées']] as [VisFilter, string][]).map(([v, lbl]) => (
-          <Pressable key={v} testID={`mq-vis-${v}`} onPress={() => setVis(v)} style={[styles.chip, vis === v && styles.chipActive]}>
-            <Text style={[styles.chipText, vis === v && styles.chipTextActive]}>{t(lbl)}</Text>
+          <Pressable key={v} testID={`mq-vis-${v}`} onPress={() => setVis(v)} accessibilityRole="tab" accessibilityState={{ selected: vis === v }} style={[styles.chip, vis === v && styles.chipActive]}>
+            <Text style={[styles.chipText, vis === v && styles.chipTextActive]} numberOfLines={1}>{t(lbl)}</Text>
           </Pressable>
         ))}
         {books.map(([id, title]) => (
-          <Pressable key={id} onPress={() => setBookFilter(bookFilter === id ? null : id)} style={[styles.chip, bookFilter === id && styles.chipActive]}>
+          <Pressable key={id} testID={`mq-book-${id}`} onPress={() => setBookFilter(bookFilter === id ? null : id)} accessibilityRole="button" accessibilityState={{ selected: bookFilter === id }} style={[styles.chip, bookFilter === id && styles.chipActive]}>
             <Text style={[styles.chipText, bookFilter === id && styles.chipTextActive]} numberOfLines={1}>{title}</Text>
           </Pressable>
         ))}
         {themes.map(th => (
-          <Pressable key={th} onPress={() => setThemeFilter(themeFilter === th ? null : th)} style={[styles.chip, themeFilter === th && styles.chipActive]}>
-            <Text style={[styles.chipText, themeFilter === th && styles.chipTextActive]}>{th}</Text>
+          <Pressable key={th} onPress={() => setThemeFilter(themeFilter === th ? null : th)} accessibilityRole="button" accessibilityState={{ selected: themeFilter === th }} style={[styles.chip, themeFilter === th && styles.chipActive]}>
+            <Text style={[styles.chipText, themeFilter === th && styles.chipTextActive]} numberOfLines={1}>{th}</Text>
           </Pressable>
         ))}
       </ScrollView>
       <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingTop: spacing.md, paddingBottom: 140 }}>
         {shown.length === 0 ? (
           <View style={{ alignItems: 'center', paddingVertical: spacing.xxl }}>
-            <Text style={styles.emptyTitle}>{quotes.length === 0 ? t('Photographie ta première citation.') : t('Rien ne correspond à ces filtres.')}</Text>
-            {quotes.length === 0 && (
-              <Pressable testID="mq-empty-capture" onPress={() => router.push('/capture')} style={styles.captureBtn}>
-                <Feather name="camera" size={15} color={colors.creme} />
-                <Text style={styles.captureBtnText}>{t('Capturer un passage')}</Text>
-              </Pressable>
-            )}
+            <Text style={styles.emptyTitle}>{quotes.length === 0 ? t('Aucune citation pour l’instant.') : t('Rien ne correspond à ces filtres.')}</Text>
+            {quotes.length === 0 && <Text style={styles.writeLink}>{t('Le « + » en haut photographie une page ou te laisse écrire un passage.')}</Text>}
           </View>
         ) : grid ? (
           <View style={{ flexDirection: 'row', gap: spacing.md }}>
@@ -197,11 +197,11 @@ export function QuotesManager() {
       {selMode && (
         <View style={styles.bulkBar} testID="mq-bulk-bar">
           <Text style={styles.bulkCount}>{selected.size}</Text>
-          <Pressable testID="mq-bulk-public" onPress={() => applyAction(selIds, 'public')} style={styles.bulkBtn}><Feather name="globe" size={16} color={colors.creme} /></Pressable>
-          <Pressable testID="mq-bulk-private" onPress={() => applyAction(selIds, 'private')} style={styles.bulkBtn}><Feather name="lock" size={16} color={colors.creme} /></Pressable>
-          <Pressable testID="mq-bulk-hide" onPress={() => applyAction(selIds, 'hide')} style={styles.bulkBtn}><Feather name="eye-off" size={16} color={colors.creme} /></Pressable>
-          <Pressable testID="mq-bulk-delete" onPress={() => startDelete(quotes.filter(q => selected.has(q.quote_id)))} style={[styles.bulkBtn, { backgroundColor: '#B3552F' }]}><Feather name="trash-2" size={16} color={colors.creme} /></Pressable>
-          <Pressable testID="mq-bulk-cancel" onPress={() => setSelected(new Set())} style={styles.bulkGhost}><Text style={styles.bulkGhostText}>{t('Annuler')}</Text></Pressable>
+          <Pressable testID="mq-bulk-public" onPress={() => applyAction(selIds, 'public')} accessibilityRole="button" accessibilityLabel={t('Rendre publiques')} style={styles.bulkBtn}><Feather name="globe" size={16} color={colors.creme} /></Pressable>
+          <Pressable testID="mq-bulk-private" onPress={() => applyAction(selIds, 'private')} accessibilityRole="button" accessibilityLabel={t('Rendre privées')} style={styles.bulkBtn}><Feather name="lock" size={16} color={colors.creme} /></Pressable>
+          <Pressable testID="mq-bulk-hide" onPress={() => applyAction(selIds, 'hide')} accessibilityRole="button" accessibilityLabel={t('Masquer')} style={styles.bulkBtn}><Feather name="eye-off" size={16} color={colors.creme} /></Pressable>
+          <Pressable testID="mq-bulk-delete" onPress={() => startDelete(quotes.filter(q => selected.has(q.quote_id)))} accessibilityRole="button" accessibilityLabel={t('Supprimer')} style={[styles.bulkBtn, { backgroundColor: colors.danger }]}><Feather name="trash-2" size={16} color={colors.creme} /></Pressable>
+          <Pressable testID="mq-bulk-cancel" onPress={() => setSelected(new Set())} accessibilityRole="button" style={styles.bulkGhost}><Text style={styles.bulkGhostText}>{t('Annuler')}</Text></Pressable>
         </View>
       )}
 
@@ -227,7 +227,7 @@ export function QuotesManager() {
                   <Feather name={menuFor.is_hidden ? 'eye' : 'eye-off'} size={16} color={colors.espresso} /><Text style={styles.menuText}>{menuFor.is_hidden ? t('Afficher') : t('Masquer')}</Text>
                 </Pressable>
                 <Pressable testID="mq-action-delete" onPress={() => startDelete([menuFor])} style={styles.menuRow}>
-                  <Feather name="trash-2" size={16} color="#B3552F" /><Text style={[styles.menuText, { color: '#B3552F' }]}>{t('Supprimer')}</Text>
+                  <Feather name="trash-2" size={16} color={colors.danger} /><Text style={[styles.menuText, { color: colors.danger }]}>{t('Supprimer')}</Text>
                 </Pressable>
               </>
             )}
@@ -260,8 +260,7 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   metaText: { flex: 1, fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.clay, letterSpacing: 0.5, textTransform: 'uppercase' },
   dots: { padding: 2 },
   emptyTitle: { fontFamily: fonts.displayMedium, fontSize: 20, color: colors.espresso, textAlign: 'center' },
-  captureBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 44, paddingHorizontal: spacing.lg, borderRadius: radius.pill, backgroundColor: colors.chambray, marginTop: spacing.lg },
-  captureBtnText: { fontFamily: fonts.bodyMedium, fontSize: 13.5, color: colors.creme },
+  writeLink: { fontFamily: fonts.body, fontSize: 13, color: colors.clay, textDecorationLine: 'underline' },
   bulkBar: { position: 'absolute', bottom: 90, left: spacing.xl, right: spacing.xl, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.espresso, borderRadius: radius.pill, paddingHorizontal: spacing.md, height: 54 },
   bulkCount: { fontFamily: fonts.displayMedium, fontSize: 18, color: colors.creme, marginRight: 2 },
   bulkBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },

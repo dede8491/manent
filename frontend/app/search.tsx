@@ -1,14 +1,17 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, Pressable, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
 import { QuoteCard, Quote } from '@/src/components/QuoteCard';
 import { api } from '@/src/api';
+import { Avatar } from '@/src/components/Avatar';
 import { useT } from '@/src/i18n';
 import ManentLoader from '@/src/components/ManentLoader';
+import { ClassificationLines } from '@/src/components/ClassificationLines';
+import { IntentPanel } from '@/src/components/IntentPanel';
 
 type Scope = 'all' | 'quotes' | 'books';
 
@@ -18,41 +21,26 @@ export default function SearchScreen() {
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const [q, setQ] = useState('');
+  const params = useLocalSearchParams<{ mode?: string; q?: string }>();
+  const [mode, setMode] = useState<'mots' | 'envie'>(params.mode === 'envie' ? 'envie' : 'mots');
+  const [q, setQ] = useState(params.q || '');
   const [scope, setScope] = useState<Scope>('all');
-  const [theme, setTheme] = useState<string | null>(null);
-  const [bookId, setBookId] = useState<string | null>(null);
-  const [themes, setThemes] = useState<string[]>([]);
-  const [myBooks, setMyBooks] = useState<{ book_id: string; title: string }[]>([]);
   const [results, setResults] = useState<{ quotes: Quote[]; books: any[]; readers: any[] }>({ quotes: [], books: [], readers: [] });
   const [catalog, setCatalog] = useState<any[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogTotal, setCatalogTotal] = useState(0);
   const [catalogPage, setCatalogPage] = useState(1);
+  const [matched, setMatched] = useState<{ dim: string; key: string; label: string }[]>([]);
+  const [matchedSel, setMatchedSel] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(true);
   const timer = useRef<any>(null);
   const catalogTimer = useRef<any>(null);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const [t, b] = await Promise.all([
-          api<{ themes: string[] }>('/themes'),
-          api<{ books: any[] }>('/books'),
-        ]);
-        setThemes(t.themes);
-        setMyBooks(b.books.map((x: any) => ({ book_id: x.book_id, title: x.title })));
-      } catch {}
-    })();
-  }, []);
-
-  const run = useCallback(async (qv: string, scopeV: Scope, themeV: string | null, bookV: string | null) => {
+  const run = useCallback(async (qv: string, scopeV: Scope) => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
       if (qv.trim()) params.set('q', qv.trim());
-      if (themeV) params.set('theme', themeV);
-      if (bookV) params.set('book_id', bookV);
       params.set('scope', scopeV);
       const r = await api<{ quotes: Quote[]; books: any[]; readers: any[] }>(`/search?${params.toString()}`);
       setResults({ quotes: r.quotes || [], books: r.books || [], readers: r.readers || [] });
@@ -62,15 +50,15 @@ export default function SearchScreen() {
 
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => run(q, scope, theme, bookId), 350);
+    timer.current = setTimeout(() => run(q, scope), 350);
     return () => clearTimeout(timer.current);
-  }, [q, scope, theme, bookId, run]);
+  }, [q, scope, run]);
 
   // Recherche internet (catalogue) en parallèle de la recherche locale
   useEffect(() => {
     if (catalogTimer.current) clearTimeout(catalogTimer.current);
     const qv = q.trim();
-    if (qv.length < 2 || scope === 'quotes' || theme || bookId) {
+    if (qv.length < 2 || scope === 'quotes') {
       setCatalog([]);
       setCatalogLoading(false);
       return;
@@ -78,17 +66,20 @@ export default function SearchScreen() {
     setCatalogLoading(true);
     catalogTimer.current = setTimeout(async () => {
       try {
-        const r = await api<{ results: any[]; total: number }>(`/catalog/search?q=${encodeURIComponent(qv)}&page=1&size=10`);
+        const r = await api<{ results: any[]; total: number; matched_chips?: any[]; matched_filters?: Record<string, string[]> }>(`/catalog/search?q=${encodeURIComponent(qv)}&page=1&size=10`);
         setCatalog(r.results || []);
         setCatalogTotal(r.total || 0);
         setCatalogPage(1);
+        setMatched(r.matched_chips || []);
+        setMatchedSel(r.matched_filters || {});
       } catch {
         setCatalog([]);
+        setMatched([]);
       }
       setCatalogLoading(false);
     }, 450);
     return () => clearTimeout(catalogTimer.current);
-  }, [q, scope, theme, bookId]);
+  }, [q, scope]);
 
   const catalogMore = async () => {
     try {
@@ -99,10 +90,9 @@ export default function SearchScreen() {
     } catch {}
   };
 
-  const filtersActive = theme || bookId;
-  const showBooks = scope !== 'quotes' && !filtersActive;
+  const showBooks = scope !== 'quotes';
   const showQuotes = scope !== 'books';
-  const showReaders = scope === 'all' && !filtersActive;
+  const showReaders = scope === 'all';
   const total = (showQuotes ? results.quotes.length : 0) + (showBooks ? results.books.length : 0) + (showReaders ? results.readers.length : 0);
 
   return (
@@ -112,66 +102,84 @@ export default function SearchScreen() {
           <Pressable onPress={() => router.back()} testID="search-back" style={styles.iconBtn}>
             <Feather name="chevron-left" size={22} color={colors.espresso} />
           </Pressable>
-          <View style={styles.searchBox}>
-            <Feather name="search" size={16} color={colors.clay} />
-            <TextInput
-              testID="search-input"
-              value={q} onChangeText={setQ}
-              autoFocus
-              placeholder={t('Une phrase, un livre, un lecteur…')}
-              placeholderTextColor={colors.clay}
-              style={styles.searchInput}
-              returnKeyType="search"
-            />
-            {q ? (
-              <Pressable testID="search-clear" onPress={() => setQ('')} hitSlop={8}>
-                <Feather name="x" size={16} color={colors.clay} />
-              </Pressable>
-            ) : null}
-          </View>
+          {mode === 'mots' ? (
+            <View style={styles.searchBox}>
+              <Feather name="search" size={16} color={colors.clay} />
+              <TextInput
+                testID="search-input"
+                value={q} onChangeText={setQ}
+                autoFocus
+                placeholder={t('Une phrase, un livre, un lecteur…')}
+                placeholderTextColor={colors.clay}
+                style={styles.searchInput}
+                returnKeyType="search"
+                accessibilityLabel={t('Rechercher')}
+              />
+              {q ? (
+                <Pressable testID="search-clear" onPress={() => setQ('')} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('Effacer')}>
+                  <Feather name="x" size={16} color={colors.clay} />
+                </Pressable>
+              ) : null}
+            </View>
+          ) : <Text style={styles.modeTitle}>{t('Recherche par envie')}</Text>}
         </View>
 
-        <View style={styles.segmentRow}>
-          {([['all', 'Tout'], ['quotes', 'Citations'], ['books', 'Livres']] as [Scope, string][]).map(([s, label]) => (
-            <Pressable key={s} testID={`search-scope-${s}`} onPress={() => setScope(s)} style={[styles.segment, scope === s && styles.segmentActive]}>
-              <Text style={[styles.segmentText, scope === s && styles.segmentTextActive]}>{t(label)}</Text>
+        {/* Une seule porte, deux façons de chercher : des mots (titres, citations, lectrices, catalogue) ou une envie (IA) */}
+        <View style={styles.modeRow} accessibilityRole="tablist">
+          {([['mots', 'Par mots'], ['envie', 'Par envie']] as const).map(([m, label]) => (
+            <Pressable key={m} testID={`search-mode-${m}`} onPress={() => setMode(m)} accessibilityRole="tab" accessibilityState={{ selected: mode === m }} style={[styles.modeChip, mode === m && styles.modeChipOn]}>
+              <Feather name={m === 'mots' ? 'type' : 'feather'} size={13} color={mode === m ? colors.creme : colors.espresso} />
+              <Text style={[styles.modeText, mode === m && styles.modeTextOn]}>{t(label)}</Text>
             </Pressable>
           ))}
         </View>
+
+        {mode === 'mots' && (
+          <View style={styles.segmentRow}>
+            {([['all', 'Tout'], ['quotes', 'Citations'], ['books', 'Livres']] as [Scope, string][]).map(([s, label]) => (
+              <Pressable key={s} testID={`search-scope-${s}`} onPress={() => setScope(s)} accessibilityRole="tab" accessibilityState={{ selected: scope === s }} style={[styles.segment, scope === s && styles.segmentActive]}>
+                <Text style={[styles.segmentText, scope === s && styles.segmentTextActive]}>{t(label)}</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xxl }} keyboardShouldPersistTaps="handled">
-        <Text style={styles.filterLabel}>{t('Par sujet')}</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipScroll}>
-          {themes.map(t => (
-            <Pressable key={t} testID={`search-theme-${t}`} onPress={() => setTheme(theme === t ? null : t)} style={[styles.chip, theme === t && styles.chipActive]}>
-              <Text style={[styles.chipText, theme === t && styles.chipTextActive]}>{t}</Text>
-            </Pressable>
-          ))}
+      {mode === 'envie' ? (
+        <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xxl }} keyboardShouldPersistTaps="handled">
+          <IntentPanel />
         </ScrollView>
-
-        {myBooks.length > 0 && (
-          <>
-            <Text style={styles.filterLabel}>{t('Par livre')}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipScroll}>
-              {myBooks.map(b => (
-                <Pressable key={b.book_id} testID={`search-book-${b.book_id}`} onPress={() => setBookId(bookId === b.book_id ? null : b.book_id)} style={[styles.chip, bookId === b.book_id && styles.chipActive]}>
-                  <Text style={[styles.chipText, bookId === b.book_id && styles.chipTextActive]} numberOfLines={1}>{b.title}</Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </>
+      ) : (
+      <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xxl }} keyboardShouldPersistTaps="handled">
+        {matched.length > 0 && q.trim().length >= 2 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.chipScroll, { marginTop: spacing.sm }]}>
+            {matched.map((c: any) => (
+              <Pressable key={`${c.dim}:${c.key}`} testID={`search-matched-${c.dim}-${c.key}`} onPress={() => router.push({ pathname: '/browse', params: { f: JSON.stringify({ [c.dim]: [c.key] }), title: c.label } })} style={[styles.chip, styles.chipActive, { flexDirection: 'row', gap: 6 }]}>
+                <Text style={[styles.chipText, styles.chipTextActive]}>{c.label}</Text>
+                <Feather name="arrow-right" size={12} color={colors.creme} />
+              </Pressable>
+            ))}
+            {matched.length > 1 && (
+              <Pressable testID="search-matched-all" onPress={() => router.push({ pathname: '/browse', params: { f: JSON.stringify(matchedSel), title: q.trim() } })} style={styles.chip}>
+                <Text style={styles.chipText}>{t('Combiner')}</Text>
+              </Pressable>
+            )}
+          </ScrollView>
         )}
-
         <View style={{ paddingHorizontal: spacing.xl }}>
           {loading ? (
             <View style={{ paddingTop: spacing.xxl, alignItems: 'center' }}>
               <ManentLoader size={48} />
             </View>
+          ) : q.trim().length < 2 && total === 0 ? (
+            <View style={{ paddingVertical: spacing.xxl, alignItems: 'center' }}>
+              <Text style={styles.emptyTitle}>{t('Un titre, une autrice, un sujet, un pays…')}</Text>
+              <Text style={styles.emptySub}>{t('La recherche parcourt ta bibliothèque, tes citations, les lectrices et tout le catalogue en ligne.')}</Text>
+            </View>
           ) : total === 0 && catalog.length === 0 && !catalogLoading ? (
             <View style={{ paddingVertical: spacing.xxl, alignItems: 'center' }}>
               <Text style={styles.emptyTitle}>{t('Rien pour l’instant.')}</Text>
-              <Text style={styles.emptySub}>{t('Essaie un autre mot, ou retire un filtre.')}</Text>
+              <Text style={styles.emptySub}>{t('Essaie un autre mot, ou passe en mode « Par envie » juste au-dessus.')}</Text>
             </View>
           ) : (
             <>
@@ -181,7 +189,7 @@ export default function SearchScreen() {
                   {results.readers.map((r: any) => (
                     <Pressable key={r.handle} testID={`search-reader-${r.handle}`} onPress={() => router.push({ pathname: '/reader/[handle]', params: { handle: r.handle } })} style={styles.bookRow}>
                       <View style={styles.readerAvatar}>
-                        {r.picture ? <Image source={{ uri: r.picture }} style={{ width: 40, height: 40, borderRadius: 20 }} /> : <Text style={styles.bookInitial}>{(r.pseudo?.[0] || 'M').toUpperCase()}</Text>}
+                        <Avatar uri={r.picture} name={r.pseudo} size={40} />
                       </View>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.bookTitle} numberOfLines={1}>{r.pseudo}</Text>
@@ -237,20 +245,21 @@ export default function SearchScreen() {
                       <View style={{ flex: 1 }}>
                         <Text style={styles.bookTitle} numberOfLines={1}>{b.title}</Text>
                         <Text style={styles.bookAuthor} numberOfLines={1}>{[b.author, b.year].filter(Boolean).join('  ·  ')}</Text>
-                        {!!b.summary && <Text style={styles.bookSummary} numberOfLines={2}>{b.summary}</Text>}
+                        {(b.lines || []).length > 0 ? <ClassificationLines lines={b.lines} compact style={{ marginTop: 2 }} />
+                          : !!b.summary && <Text style={styles.bookSummary} numberOfLines={2}>{b.summary}</Text>}
                       </View>
                       <Feather name="plus-circle" size={19} color={colors.chambray} />
                     </Pressable>
                   ))}
                   {catalog.length < catalogTotal && (
-                    <Pressable testID="search-see-more" onPress={catalogMore} style={styles.moreBtn}>
+                    <Pressable testID="search-see-more" onPress={catalogMore} accessibilityRole="button" style={styles.moreBtn}>
                       <Text style={styles.moreBtnText}>{t('Voir plus de livres')}</Text>
                     </Pressable>
                   )}
                   {q.trim().length >= 2 && (
-                    <Pressable testID="open-subject-page" onPress={() => router.push({ pathname: '/theme/[name]', params: { name: q.trim().toLowerCase() } })} style={[styles.moreBtn, { marginTop: spacing.sm }]}>
-                      <Feather name="hash" size={13} color={colors.chambray} />
-                      <Text style={styles.moreBtnText}>{t('Ouvrir le sujet « {s} »', { s: q.trim().toLowerCase() })}</Text>
+                    <Pressable testID="open-all-results" onPress={() => router.push({ pathname: '/browse', params: { q: q.trim(), title: q.trim().slice(0, 24) } })} accessibilityRole="button" style={[styles.moreBtn, { marginTop: spacing.sm }]}>
+                      <Feather name="arrow-right" size={13} color={colors.chambray} />
+                      <Text style={[styles.moreBtnText, { flexShrink: 1 }]} numberOfLines={2}>{t('Voir toutes les œuvres liées à « {s} »', { s: q.trim() })}</Text>
                     </Pressable>
                   )}
                 </>
@@ -259,6 +268,7 @@ export default function SearchScreen() {
           )}
         </View>
       </ScrollView>
+      )}
     </View>
   );
 }
@@ -266,10 +276,16 @@ export default function SearchScreen() {
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   header: { paddingBottom: spacing.sm, backgroundColor: colors.glacier, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSoft },
   searchRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, gap: 4 },
-  iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, height: 44, paddingHorizontal: spacing.md, backgroundColor: colors.creme, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft },
   searchInput: { flex: 1, fontFamily: fonts.body, fontSize: 14, color: colors.espresso, paddingVertical: 0 },
-  segmentRow: { flexDirection: 'row', gap: 8, paddingHorizontal: spacing.xl, marginTop: spacing.md },
+  segmentRow: { flexDirection: 'row', gap: 8, paddingHorizontal: spacing.xl, marginTop: spacing.sm },
+  modeRow: { flexDirection: 'row', gap: 8, paddingHorizontal: spacing.xl, marginTop: spacing.md },
+  modeChip: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 36, paddingHorizontal: 14, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, backgroundColor: colors.creme },
+  modeChipOn: { backgroundColor: colors.chambray, borderColor: colors.chambray },
+  modeText: { fontFamily: fonts.body, fontSize: 13, color: colors.espresso },
+  modeTextOn: { color: colors.creme, fontFamily: fonts.bodyMedium },
+  modeTitle: { flex: 1, fontFamily: fonts.displayMedium, fontSize: 20, color: colors.espresso, paddingLeft: spacing.sm },
   segment: { flex: 1, height: 36, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center' },
   segmentActive: { backgroundColor: colors.espresso, borderColor: colors.espresso },
   segmentText: { fontFamily: fonts.body, fontSize: 13, color: colors.espresso },
@@ -285,7 +301,7 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   bookCover: { width: 40, height: 56, borderRadius: radius.sm, backgroundColor: colors.bisque, alignItems: 'center', justifyContent: 'center' },
   bookCoverImg: { width: 40, height: 56, borderRadius: radius.sm, backgroundColor: colors.bisque },
   bookSummary: { fontFamily: fonts.body, fontSize: 11, color: colors.clay, lineHeight: 15, marginTop: 2 },
-  moreBtn: { marginTop: spacing.md, height: 42, borderRadius: radius.pill, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.chambray, backgroundColor: colors.creme, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  moreBtn: { marginTop: spacing.md, minHeight: 42, paddingVertical: 10, paddingHorizontal: spacing.md, borderRadius: radius.pill, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.chambray, backgroundColor: colors.creme, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
   moreBtnText: { fontFamily: fonts.bodyMedium, fontSize: 12.5, color: colors.chambray },
   readerAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.bisque, alignItems: 'center', justifyContent: 'center' },
   bookInitial: { fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso },

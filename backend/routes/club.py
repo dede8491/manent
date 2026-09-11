@@ -613,7 +613,7 @@ async def admin_overview(user=Depends(get_current_user)):
     week_ago = now_utc() - timedelta(days=7)
     stats = {
         "members": await db.users.count_documents({}),
-        "active_members": len(await db.reading_events.distinct("user_id", {"date": {"$gte": week_ago.strftime('%Y-%m-%d')}})) if await db.reading_events.count_documents({}) else len(await db.quotes.distinct("user_id", {"created_at": {"$gte": week_ago}})),
+        "active_members": len(await db.reading_events.distinct("user_id", {"day": {"$gte": week_ago.strftime('%Y-%m-%d')}})) if await db.reading_events.count_documents({}) else len(await db.quotes.distinct("user_id", {"created_at": {"$gte": week_ago}})),
         "club_books": await db.club_books.count_documents({}),
         "readings": await db.club_readers.count_documents({"status": "reading"}),
         "finished": await db.club_readers.count_documents({"status": "finished"}),

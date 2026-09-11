@@ -11,13 +11,17 @@ import { useAuth } from '@/src/auth';
 import { useSubscription, rcEnabled } from '@/src/revenuecat';
 import ManentLoader from '@/src/components/ManentLoader';
 
-type Status = { is_premium: boolean; plan?: string | null; captures_used: number; captures_limit: number };
+type Status = { is_premium: boolean; plan?: string | null; captures_used: number; captures_limit: number; journal?: { used: number; limit: number | null } };
 
 const FEATURES = [
+  'Journal illimité (3 entrées par semaine en gratuit)',
+  'Autant de livres en cours que tu veux (1 en gratuit)',
+  'Fiche de fin de livre en image haute qualité, sans filigrane',
+  'Export PDF de ton journal, livre par livre',
+  'Rétrospective annuelle : pages, humeurs, auteurs de l\u2019année',
   'Captures IA illimitées (10/mois en gratuit)',
-  'Export PDF de tes fiches d\u2019études',
-  'Enregistrement des quote cards dans ta galerie',
-  'Quote cards sans filigrane',
+  'Mes fiches de lecture réunies et exportables en PDF',
+  'Créer ton club de lecture (rejoindre un club reste gratuit)',
   'Soutien à une app calme, sans publicité',
 ];
 

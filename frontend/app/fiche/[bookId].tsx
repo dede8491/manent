@@ -325,7 +325,7 @@ export default function FicheDeLecture() {
               {sentTo ? (
                 <Text style={styles.modalText} testID="fiche-club-sent">{t('Questions envoyées à « {name} ».', { name: sentTo })}</Text>
               ) : clubs.length === 0 ? (
-                <Text style={styles.modalText}>{t('Tu n’as pas encore de club. Crée-en un depuis Communauté.')}</Text>
+                <Text style={styles.modalText}>{t('Tu n’as pas encore de club. Crée-en un depuis Découvrir → « Mes tableaux et clubs ».')}</Text>
               ) : (
                 <View style={{ gap: spacing.sm, marginTop: spacing.sm }}>
                   {clubs.map(c => (
@@ -349,14 +349,12 @@ export default function FicheDeLecture() {
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderSoft, backgroundColor: colors.glacier },
-  iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   headerLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 2, textTransform: 'uppercase' },
   section: { marginBottom: spacing.xl },
   sectionHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.borderSoft, paddingBottom: 6 },
   sectionLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.chambray, letterSpacing: 2, textTransform: 'uppercase' },
   bookCard: { flexDirection: 'row', gap: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md, alignItems: 'center' },
-  cover: { width: 48, height: 66, borderRadius: 6, backgroundColor: colors.bisque, alignItems: 'center', justifyContent: 'center' },
-  coverInitial: { fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso },
   bookTitle: { fontFamily: fonts.displayMedium, fontSize: 19, color: colors.espresso },
   bookMeta: { fontFamily: fonts.body, fontSize: 12.5, color: colors.clay },
   input: { fontFamily: fonts.body, fontSize: 14, color: colors.espresso, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, paddingHorizontal: spacing.md, paddingVertical: 10, minHeight: 44 },

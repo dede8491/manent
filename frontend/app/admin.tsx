@@ -7,7 +7,10 @@ import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
 import { api } from '@/src/api';
 import ManentLoader from '@/src/components/ManentLoader';
-import { AuthorAdmin } from '@/src/components/AuthorAdmin';
+import { ClassificationAdmin } from '@/src/components/ClassificationAdmin';
+import { ClassificationDashboard } from '@/src/components/ClassificationDashboard';
+import { UsersAdmin } from '@/src/components/UsersAdmin';
+import { PromptsAdmin } from '@/src/components/PromptsAdmin';
 import { timeAgo } from '@/src/timeago';
 import { useT, useLang } from '@/src/i18n';
 
@@ -20,10 +23,13 @@ export default function AdminDashboard() {
   const router = useRouter();
   const [data, setData] = useState<any>(null);
   const [denied, setDenied] = useState(false);
+  const [badge, setBadge] = useState<{ reports: number; authors: number } | null>(null);
+  const [openBook, setOpenBook] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try { setData(await api('/club/admin/overview')); }
     catch { setDenied(true); }
+    try { setBadge(await api('/admin/badge')); } catch {}
   }, []);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -48,7 +54,7 @@ export default function AdminDashboard() {
           <Feather name="chevron-left" size={22} color={colors.espresso} />
         </Pressable>
         <Text style={styles.h1}>{t('Dashboard admin')}</Text>
-        <View style={{ width: 40 }} />
+        <View style={{ width: 44 }} />
       </View>
       {denied ? (
         <Text style={styles.denied}>{t('Réservé à l’administratrice du Club.')}</Text>
@@ -65,7 +71,18 @@ export default function AdminDashboard() {
             ))}
           </View>
 
-          <Text style={styles.sectionTitle}>{t('Signalements à modérer')}</Text>
+          {badge && badge.reports > 0 && (
+            <View style={styles.todoBox} testID="admin-todo">
+              <Feather name="bell" size={14} color={colors.chambray} />
+              <Text style={styles.todoText}>
+                {t(badge.reports > 1 ? '{n} signalements' : '{n} signalement', { n: badge.reports })}
+              </Text>
+            </View>
+          )}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Text style={styles.sectionTitle}>{t('Signalements à modérer')}</Text>
+            {data.reports.length > 0 && <View style={styles.countPill}><Text style={styles.countText}>{data.reports.length}</Text></View>}
+          </View>
           {data.reports.length === 0 ? (
             <Text style={styles.empty}>{t('Aucun signalement en attente. Tout va bien.')}</Text>
           ) : data.reports.map((r: any) => (
@@ -86,7 +103,10 @@ export default function AdminDashboard() {
               </View>
             </View>
           ))}
-          <AuthorAdmin />
+          <ClassificationDashboard onOpenBook={setOpenBook} />
+          <ClassificationAdmin openId={openBook} onOpened={() => setOpenBook(null)} />
+          <PromptsAdmin />
+          <UsersAdmin />
         </ScrollView>
       )}
     </View>
@@ -95,7 +115,7 @@ export default function AdminDashboard() {
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingBottom: spacing.sm },
-  iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   h1: { fontFamily: fonts.displayMedium, fontSize: 20, color: colors.espresso },
   denied: { fontFamily: fonts.body, fontSize: 14, color: colors.clay, textAlign: 'center', marginTop: spacing.xxl },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
@@ -103,12 +123,16 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   statNum: { fontFamily: fonts.displayMedium, fontSize: 24, color: colors.espresso },
   statLabel: { fontFamily: fonts.bodyMedium, fontSize: 9, color: colors.clay, letterSpacing: 0.8, textTransform: 'uppercase', marginTop: 2, textAlign: 'center' },
   sectionTitle: { fontFamily: fonts.displayMedium, fontSize: 21, color: colors.espresso, marginTop: spacing.xl, marginBottom: spacing.md },
+  todoBox: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.bisque, borderRadius: radius.md, padding: spacing.md, marginTop: spacing.lg },
+  todoText: { fontFamily: fonts.bodyMedium, fontSize: 12.5, color: colors.espresso, flex: 1 },
+  countPill: { minWidth: 22, height: 22, borderRadius: 11, paddingHorizontal: 6, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center', marginTop: spacing.xl - spacing.md },
+  countText: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.creme },
   empty: { fontFamily: fonts.body, fontSize: 13.5, color: colors.clay },
   reportCard: { backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md, marginBottom: spacing.sm },
   reportMeta: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.clay, letterSpacing: 0.5, textTransform: 'uppercase' },
   reportContent: { fontFamily: fonts.display, fontSize: 15, color: colors.espresso, lineHeight: 21, marginTop: 6 },
   ghostBtn: { height: 34, paddingHorizontal: 14, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, alignItems: 'center', justifyContent: 'center' },
   ghostBtnText: { fontFamily: fonts.body, fontSize: 12.5, color: colors.espresso },
-  dangerBtn: { height: 34, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: '#B3552F', flexDirection: 'row', alignItems: 'center', gap: 6, justifyContent: 'center' },
+  dangerBtn: { height: 34, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: colors.danger, flexDirection: 'row', alignItems: 'center', gap: 6, justifyContent: 'center' },
   dangerBtnText: { fontFamily: fonts.bodyMedium, fontSize: 12.5, color: colors.creme },
 });

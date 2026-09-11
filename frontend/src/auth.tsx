@@ -4,6 +4,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { api, loadToken, saveToken, clearToken, setCachedToken } from './api';
 import { rcEnabled } from './revenuecat';
 import { registerForPush } from './push';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const USER_CACHE = 'manent_user_cache';
 
 type User = {
   user_id: string;
@@ -14,6 +17,11 @@ type User = {
   reading_mode?: string | null;
   themes?: string[];
   premium?: boolean;
+  is_premium?: boolean;
+  is_admin?: boolean;
+  birthdate?: string | null;
+  tour_seen?: boolean;
+  created_at?: string;
 };
 
 type AuthCtx = {
@@ -25,6 +33,7 @@ type AuthCtx = {
   signOut: () => Promise<void>;
   refresh: () => Promise<void>;
   updateUser: (u: Partial<User>) => Promise<void>;
+  markSeen: (key: 'tour_seen') => Promise<void>;
 };
 
 const Ctx = createContext<AuthCtx | null>(null);
@@ -33,17 +42,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Reste connectée tant que le jeton est valide : seule une réponse 401 déconnecte. Une erreur réseau
+  // (avion, réseau lent au démarrage) garde le jeton et affiche la dernière version connue du profil.
   const refresh = useCallback(async () => {
+    const token = await loadToken();
+    if (!token) { setUser(null); return; }
+    setCachedToken(token);
     try {
-      const token = await loadToken();
-      if (!token) { setUser(null); return; }
-      setCachedToken(token);
       const { user } = await api<{ user: User }>('/auth/me');
       setUser(user);
-    } catch {
-      setUser(null);
-      await clearToken();
-      setCachedToken(null);
+      AsyncStorage.setItem(USER_CACHE, JSON.stringify(user)).catch(() => {});
+    } catch (e: any) {
+      if (e?.status === 401) {
+        setUser(null);
+        await clearToken();
+        setCachedToken(null);
+        AsyncStorage.removeItem(USER_CACHE).catch(() => {});
+        return;
+      }
+      try {
+        const cached = await AsyncStorage.getItem(USER_CACHE);
+        if (cached) setUser(JSON.parse(cached));
+      } catch {}
     }
   }, []);
 
@@ -86,6 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     await saveToken(r.session_token); setCachedToken(r.session_token);
     setUser(r.user);
+    AsyncStorage.setItem(USER_CACHE, JSON.stringify(r.user)).catch(() => {});
   };
 
   const signUp = async (email: string, password: string, pseudo: string, birthdate?: string) => {
@@ -94,19 +115,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     await saveToken(r.session_token); setCachedToken(r.session_token);
     setUser(r.user);
+    AsyncStorage.setItem(USER_CACHE, JSON.stringify(r.user)).catch(() => {});
   };
 
   const signOut = async () => {
     try { await api('/auth/logout', { method: 'POST' }); } catch {}
     await clearToken(); setCachedToken(null); setUser(null);
+    AsyncStorage.removeItem(USER_CACHE).catch(() => {});
   };
 
   const updateUser = async (patch: Partial<User>) => {
     const r = await api<{ user: User }>('/users/me', { method: 'PATCH', body: JSON.stringify(patch) });
     setUser(r.user);
+    AsyncStorage.setItem(USER_CACHE, JSON.stringify(r.user)).catch(() => {});
   };
 
-  return <Ctx.Provider value={{ user, loading, rcIdentityError, signIn, signUp, signOut, refresh, updateUser }}>{children}</Ctx.Provider>;
+  // Marque une information vue sur le compte (ex. tour de bienvenue) sans re-télécharger le profil
+  const markSeen = async (key: 'tour_seen') => {
+    setUser(u => (u ? { ...u, [key]: true } : u));
+    try { await api('/me/settings', { method: 'PATCH', body: JSON.stringify({ [key]: true }) }); } catch {}
+  };
+
+  return <Ctx.Provider value={{ user, loading, rcIdentityError, signIn, signUp, signOut, refresh, updateUser, markSeen }}>{children}</Ctx.Provider>;
 }
 
 export function useAuth() {
