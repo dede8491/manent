@@ -224,19 +224,26 @@ export default function Discover() {
           </View>
         )}
 
-        {pubClubs.length > 0 && (
-          <View style={{ marginTop: spacing.xl }} testID="home-public-clubs">
-            <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
-              <Text style={[styles.areasLabel, { flex: 1 }]} numberOfLines={1}>{t('Clubs publics')}</Text>
-              <Pressable testID="home-community" onPress={() => router.push('/(tabs)/community')} hitSlop={8} accessibilityRole="button" style={{ flexShrink: 0 }}><Text style={styles.seeAll} numberOfLines={1}>{t('Mes tableaux et clubs')}</Text></Pressable>
-            </View>
+        {/* Toujours visible, même sans club public : c'est la porte vers les tableaux et les clubs. */}
+        <View style={{ marginTop: spacing.xl }} testID="home-public-clubs">
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
+            <Text style={[styles.areasLabel, { flex: 1 }]} numberOfLines={1}>{t('Clubs de lecture')}</Text>
+            <Pressable testID="home-community" onPress={() => router.push('/(tabs)/community')} hitSlop={8} accessibilityRole="button" style={{ flexShrink: 0 }}><Text style={styles.seeAll} numberOfLines={1}>{t('Mes tableaux et clubs')}</Text></Pressable>
+          </View>
+          {pubClubs.length > 0 ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>
               {pubClubs.slice(0, 8).map((c: any) => (
                 <ClubCard key={c.club_id} testID={`home-club-${c.club_id}`} club={c} joining={joiningClub === c.club_id} onJoin={() => joinPublicClub(c.club_id)} />
               ))}
             </ScrollView>
-          </View>
-        )}
+          ) : (
+            <Pressable testID="home-community-empty" onPress={() => router.push('/(tabs)/community')} accessibilityRole="button" style={styles.clubEmpty}>
+              <Feather name="users" size={18} color={colors.chambray} />
+              <Text style={styles.clubEmptyText}>{t('Aucun club public pour l’instant. Rejoins-en un avec un code, ou crée le tien (Premium).')}</Text>
+              <Feather name="chevron-right" size={16} color={colors.clay} />
+            </Pressable>
+          )}
+        </View>
       </ScrollView>
 
     </View>
@@ -264,6 +271,8 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   emptySub: { fontFamily: fonts.body, fontSize: 14, color: colors.clay, textAlign: 'center', marginTop: spacing.sm },
   followTag: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 },
   followTagText: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.chambray, letterSpacing: 1, textTransform: 'uppercase' },
+  clubEmpty: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },
+  clubEmptyText: { flex: 1, fontFamily: fonts.body, fontSize: 13, color: colors.espresso, lineHeight: 18 },
   section: { marginTop: spacing.xl },
   sectionTitle: { fontFamily: fonts.displayMedium, fontSize: 21, color: colors.espresso, marginBottom: spacing.md },
 });

@@ -126,20 +126,6 @@ export default function Profile() {
         <View style={styles.stat}><Text style={styles.statNum}>{user?.themes?.length || 0}</Text><Text style={styles.statLbl} numberOfLines={1} adjustsFontSizeToFit>{t('sujets')}</Text></View>
       </View>
 
-      {clubSummary && clubSummary.joined > 0 && (
-        <Pressable testID="profile-club-card" onPress={() => router.push('/(tabs)/community')} accessibilityRole="button" style={styles.clubCard}>
-          <View style={styles.clubIcon}><Feather name="users" size={16} color={colors.creme} /></View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.readingTitle}>{t('Club de lecture')}</Text>
-            <Text style={styles.readingSub}>
-              {t(clubSummary.joined > 1 ? '{n} lectures rejointes' : '{n} lecture rejointe', { n: clubSummary.joined })}
-              {clubSummary.finished > 0 ? ` · ${t(clubSummary.finished > 1 ? '{n} terminées' : '{n} terminée', { n: clubSummary.finished })}` : ''}
-            </Text>
-          </View>
-          <Feather name="chevron-right" size={18} color={colors.clay} />
-        </Pressable>
-      )}
-
       {badges.length > 0 && (
         <View style={{ marginTop: spacing.md }} testID="badges-section">
           <Text style={styles.badgesLabel}>{t('Badges · {earned}/{total}', { earned: badges.filter(b => b.earned).length, total: badges.length })}</Text>
@@ -167,7 +153,7 @@ export default function Profile() {
         ) : (
           <>
             <Text style={styles.premiumTitle}>Manent Premium</Text>
-            <Text style={styles.premiumText}>{t('Captures IA illimitées, export PDF, quote cards sans filigrane.')}</Text>
+            <Text style={styles.premiumText}>{t('Journal et captures IA sans limite, exports PDF, rétrospective complète, création de club.')}</Text>
             {premium ? <Text style={styles.premiumUsage}>{`${t('Captures IA : {used}/{limit}', { used: premium.captures_used, limit: premium.captures_limit })} ${t('ce mois-ci')}`}</Text> : null}
             <Pressable testID="btn-premium-discover" onPress={() => router.push('/premium')} accessibilityRole="button" style={styles.premiumBtn}><Text style={styles.premiumBtnText}>{t('Découvrir Premium')}</Text></Pressable>
           </>
@@ -176,6 +162,13 @@ export default function Profile() {
 
       <View style={{ paddingHorizontal: spacing.xl, gap: spacing.sm, marginTop: spacing.lg }}>
         {/* « Partager mon profil » est déjà dans la ligne sous le pseudo : pas de doublon ici. */}
+        {/* Porte permanente vers l'écran Communauté (tableaux + clubs), avec le nombre de lectures de club en cours. */}
+        <Pressable testID="row-community" onPress={() => router.push('/(tabs)/community')} accessibilityRole="button" style={styles.row}>
+          <Feather name="users" size={18} color={colors.espresso} />
+          <Text style={styles.rowLabel} numberOfLines={2}>{t('Mes tableaux et clubs')}</Text>
+          {clubSummary && clubSummary.joined > 0 && <Text style={styles.rowMeta} numberOfLines={1}>{t(clubSummary.joined > 1 ? '{n} lectures rejointes' : '{n} lecture rejointe', { n: clubSummary.joined })}</Text>}
+          <Feather name="chevron-right" size={16} color={colors.clay} />
+        </Pressable>
         <Pressable testID="row-share-library" onPress={() => router.push('/share-library')} accessibilityRole="button" style={styles.row}><Feather name="share-2" size={18} color={colors.espresso} /><Text style={styles.rowLabel} numberOfLines={2}>{t('Partager ma bibliothèque')}</Text></Pressable>
         {(user as any)?.is_admin && (
           <Pressable testID="row-admin" onPress={() => router.push('/admin')} accessibilityRole="button" style={styles.row}>
@@ -207,10 +200,6 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   followNum: { fontFamily: fonts.bodyMedium, color: colors.espresso },
   followDot: { fontFamily: fonts.body, fontSize: 13, color: colors.clay },
   statLbl: { fontFamily: fonts.bodyMedium, fontSize: 8.5, color: colors.clay, letterSpacing: 0.4, textTransform: 'uppercase', marginTop: 2, textAlign: 'center' },
-  readingTitle: { fontFamily: fonts.displayMedium, fontSize: 18, color: colors.espresso },
-  readingSub: { fontFamily: fonts.body, fontSize: 12, color: colors.clay, marginTop: 2, lineHeight: 17 },
-  clubCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginHorizontal: spacing.xl, marginTop: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },
-  clubIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },
   badgesLabel: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase', paddingHorizontal: spacing.xl, marginBottom: spacing.sm },
   badge: { width: 128, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md, alignItems: 'center' },
   badgeLocked: { opacity: 0.55 },
@@ -227,6 +216,7 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   premiumTag: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.bisque, flexShrink: 0 },
   premiumTagText: { fontFamily: fonts.bodyMedium, fontSize: 9, color: colors.espresso, letterSpacing: 1.5 },
   rowLabel: { flex: 1, fontFamily: fonts.body, fontSize: 15, color: colors.espresso },
+  rowMeta: { flexShrink: 0, fontFamily: fonts.body, fontSize: 12, color: colors.chambray },
   badgeDot: { minWidth: 22, height: 22, borderRadius: 11, paddingHorizontal: 6, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },
   badgeDotText: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.creme },
 });

@@ -20,6 +20,8 @@ const FEATURES = [
   'Export PDF de ton journal, livre par livre',
   'Rétrospective annuelle : pages, humeurs, auteurs de l\u2019année',
   'Captures IA illimitées (10/mois en gratuit)',
+  'Mes fiches de lecture réunies et exportables en PDF',
+  'Créer ton club de lecture (rejoindre un club reste gratuit)',
   'Soutien à une app calme, sans publicité',
 ];
 
