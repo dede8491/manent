@@ -362,6 +362,9 @@ Testé e2e via curl (création publique, discover, join, correspondance titre in
 - L'utilisatrice publie et lance elle-même l'analyse puis la suppression depuis le Dashboard admin en production. Aucun identifiant/URL de prod partagé (choix définitif de l'utilisatrice).
 - Contexte : la base de PROD n'est pas accessible depuis le pod (environnements isolés, confirmé support). Workflow validé avec l'utilisatrice : Publish → appel de la route sur le backend déployé (dry-run) → validation utilisatrice → apply. NE JAMAIS lancer apply sans validation explicite.
 
+## Fusion 03d428f — Clubs accessibles, avatar sous citations, Premium complet (juin 2026)
+- Fusion sans conflit (5 fichiers frontend) : section « Clubs de lecture » en bas de Découvrir, « Mes tableaux et clubs » dans le profil, avatar rond + pseudo sous chaque citation (QuoteCard → profil lectrice), page Premium avec fiches PDF et création de club. tsc 0 erreur, lint 0 erreur, pytest 30/30, vérifié e2e (Découvrir/Profil/Premium OK).
+
 ## Fusion notifications — commits 3c0a8a9→ad52464 (juin 2026)
 - Fusion des 6 commits (accueil épuré sans boutons Journal/Découvrir, profil sans doublon + « Mes fiches de lecture », centre de notifications /inbox avec cloche+pastille testID home-notifications, 8 types réglables dans Paramètres via GET/PATCH /api/me/notifications, filtrage serveur routes/push.py store_notifications/filter_recipients/notif_kind idempotent, GET /api/notifications + /badge, index _idx au démarrage, navigation auditée). area/ et genre/ supprimés par la branche (ne pas recréer).
 - 2 conflits résolus : test_routes.py (assertion upload Emergent Object Storage conservée + 2 nouveaux tests notifications de la branche), _layout.tsx (isDeepLink version HEAD avec quote|book, superset).
