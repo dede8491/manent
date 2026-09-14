@@ -540,6 +540,7 @@ class BookCreate(BaseModel):
     mode: Literal['perso', 'etudes'] = 'perso'
     level: Optional[str] = None  # scolaire
     exam_date: Optional[str] = None
+    finished_year: Optional[int] = Field(None, ge=1900, le=2100)  # livre ajouté « Terminé » lu une année passée
 
 
 class BookPatch(BaseModel):
@@ -559,6 +560,7 @@ class BookPatch(BaseModel):
     exam_date: Optional[str] = None
     level: Optional[str] = None
     sheet: Optional[dict] = None  # fiche d'études: author_bio, characters, summary, themes
+    finished_year: Optional[int] = Field(None, ge=1900, le=2100)  # corriger l'année de lecture d'un livre terminé
 
 
 # ---- Couvertures : récupération automatique + migration ----
@@ -657,15 +659,25 @@ async def _check_in_progress_limit(user: dict, exclude_book_id: Optional[str] = 
         raise HTTPException(status_code=402, detail="books_in_progress_limit")
 
 
+def finished_at_for_year(year: Optional[int]) -> datetime:
+    """Date de fin pour une année de lecture déclarée : aujourd'hui si c'est l'année en cours (ou rien),
+    sinon le 30 juin de l'année dite, pour que l'objectif et la rétrospective de cette année-là le comptent."""
+    now = now_utc()
+    if not year or year >= now.year:
+        return now
+    return datetime(year, 6, 30, 12, 0, tzinfo=timezone.utc)
+
+
 @api.post("/books")
 async def create_book(body: BookCreate, user=Depends(get_current_user)):
     if body.status == "en_cours":
         await _check_in_progress_limit(user)
     book_id = new_id("bk")
+    finished_year = body.finished_year
     doc = {
         "book_id": book_id,
         "user_id": user["user_id"],
-        **body.dict(),
+        **body.dict(exclude={"finished_year"}),
         "rating": 0,
         "recap": "",
         "lessons": [],
@@ -681,7 +693,7 @@ async def create_book(body: BookCreate, user=Depends(get_current_user)):
             doc["progress_chapter"] = body.chapters
         elif body.pages:
             doc["progress_page"] = body.pages
-        doc["finished_at"] = now_utc()
+        doc["finished_at"] = finished_at_for_year(finished_year)
         doc["read_count"] = 1
     # Lecture suivante : un livre « à lire » rejoint la fin de la file
     if body.status == "a_lire":
@@ -817,6 +829,7 @@ async def patch_book(book_id: str, body: BookPatch, user=Depends(get_current_use
     if not book:
         raise HTTPException(status_code=404, detail="not_found")
     upd = {k: v for k, v in body.dict().items() if v is not None}
+    finished_year = upd.pop("finished_year", None)
     is_wattpad = book.get("type") == "wattpad"
     prog_key = "progress_chapter" if is_wattpad else "progress_page"
     total = (upd.get("chapters") or book.get("chapters")) if is_wattpad else (upd.get("pages") or book.get("pages"))
@@ -832,9 +845,12 @@ async def patch_book(book_id: str, body: BookPatch, user=Depends(get_current_use
         if total:
             upd[prog_key] = int(total)
         if book.get("status") != "termine":
-            upd["finished_at"] = now_utc()
+            upd["finished_at"] = finished_at_for_year(finished_year)
             upd["read_count"] = (book.get("read_count") or 0) + 1
             upd["is_rereading"] = False
+    # Année de lecture corrigée après coup (« je l'ai lu en 2024 ») : ne compte plus dans l'objectif de cette année
+    if finished_year and new_status != "termine" and book.get("status") == "termine":
+        upd["finished_at"] = finished_at_for_year(finished_year)
     elif new_status == "a_lire":
         upd[prog_key] = 0
         upd["is_rereading"] = False
@@ -2393,10 +2409,7 @@ async def reading_stats(user=Depends(get_current_user)):
     # objectif annuel
     u = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "yearly_goal": 1})
     year_start = datetime(today.year, 1, 1, tzinfo=timezone.utc)
-    books_year = await db.books.count_documents({
-        "user_id": user["user_id"], "status": "termine",
-        "$or": [{"finished_at": {"$gte": year_start}}, {"finished_at": {"$exists": False}}],
-    })
+    books_year = await db.books.count_documents({"user_id": user["user_id"], "status": "termine", "finished_at": {"$gte": year_start}})
     return {
         "streak": streak, "week": week, "week_pages": week_pages,
         "active_days_month": active_month, "total_pages": total_pages,

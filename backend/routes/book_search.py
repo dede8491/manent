@@ -107,7 +107,9 @@ async def search_isbn(isbn: str):
 
 def _clean_bnf_title(title: str) -> str:
     """Retire le bruit éditorial des titres BnF : mentions d'édition, « : roman », nom d'auteur résiduel."""
+    title = re.split(r'\s+[;/]\s+', title)[0]                # "… ; traduit du portugais par …" / "… / Paulo Coelho"
     title = re.sub(r'\s*\(\[?[ÉEé]d\..*$', '', title)   # "(Éd. collector) ..." / "([Éd. en gros caractères]) ..."
+    title = re.sub(r'\s*\([^)]*\b(?:[ée]d\.|édition)[^)]*\).*$', '', title, flags=re.I)  # "(Nouvelle éd.) Paulo Coelho"
     title = re.sub(r'\s*:\s*roman\b.*$', '', title, flags=re.I)
     return title.strip(' :;,')
 

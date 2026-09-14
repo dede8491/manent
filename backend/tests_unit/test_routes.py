@@ -161,3 +161,20 @@ async def test_fiches_list_includes_finished_books(client, fake_db):
     assert set(rows) == {"bk_f1", "bk_f2"}, "un livre terminé a sa fiche de fin ; un livre en cours sans fiche n'apparaît pas"
     assert rows["bk_f1"]["finished"] is True and rows["bk_f1"]["has_fiche"] is False
     assert rows["bk_f2"]["finished"] is False and rows["bk_f2"]["has_fiche"] is True and rows["bk_f2"]["has_summary"] is True
+
+
+async def test_finished_year_keeps_old_reads_out_of_this_years_goal(client, fake_db):
+    headers, user = await register(client, email="annee@manent-tests.org", pseudo="Année")
+    # Livre lu en 2024, ajouté aujourd'hui comme « Terminé »
+    r = await client.post("/api/books", json={"type": "papier", "title": "Lu en 2024", "status": "termine", "pages": 100, "finished_year": 2024}, headers=headers)
+    assert r.status_code == 200 and r.json()["finished_at"].startswith("2024-06-30")
+    # Livre terminé cette année, puis corrigé à 2023
+    r = await client.post("/api/books", json={"type": "papier", "title": "Lu cette année", "status": "termine", "pages": 100}, headers=headers)
+    b2 = r.json()
+    assert b2["finished_at"].startswith(str(server.now_utc().year))
+    stats = (await client.get("/api/stats/reading", headers=headers)).json()
+    assert stats["books_year"] == 1
+    r = await client.patch(f"/api/books/{b2['book_id']}", json={"finished_year": 2023}, headers=headers)
+    assert r.status_code == 200 and r.json()["finished_at"].startswith("2023-06-30")
+    stats = (await client.get("/api/stats/reading", headers=headers)).json()
+    assert stats["books_year"] == 0

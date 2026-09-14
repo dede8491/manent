@@ -57,6 +57,19 @@ export default function BookDetail() {
   const [sumModal, setSumModal] = useState(false);
   const [sumInput, setSumInput] = useState('');
   const [sumSaving, setSumSaving] = useState(false);
+  // Année de lecture d'un livre terminé (« Lu en 2024 ») : modifiable, pour sortir un vieux livre de l'objectif en cours.
+  const [yearSheet, setYearSheet] = useState(false);
+  const [yearInput, setYearInput] = useState('');
+  const [yearSaving, setYearSaving] = useState(false);
+  const finishedYear = book?.finished_at ? new Date(book.finished_at).getFullYear() : null;
+  const saveYear = async () => {
+    const y = parseInt(yearInput, 10);
+    if (!y || y < 1900 || y > new Date().getFullYear()) return;
+    setYearSaving(true);
+    try { setBook(await api<any>(`/books/${id}`, { method: 'PATCH', body: JSON.stringify({ finished_year: y }) })); setYearSheet(false); }
+    catch {}
+    finally { setYearSaving(false); }
+  };
   const [catalogMeta, setCatalogMeta] = useState<{ area_labels?: string[]; country_labels?: string[] } | null>(null);
   const [shareSheet, setShareSheet] = useState(false);
   const [rateSheet, setRateSheet] = useState(false);
@@ -443,6 +456,14 @@ export default function BookDetail() {
           </View>
         )}
 
+        {book.status === 'termine' && finishedYear && (
+          <Pressable testID="book-finished-year" onPress={() => { setYearInput(String(finishedYear)); setYearSheet(true); }} accessibilityRole="button" accessibilityLabel={t('Modifier l’année de lecture')} style={styles.yearRow}>
+            <Feather name="calendar" size={13} color={colors.chambray} />
+            <Text style={styles.yearText}>{t('Lu en {year}', { year: finishedYear })}</Text>
+            <Feather name="edit-2" size={12} color={colors.clay} />
+          </Pressable>
+        )}
+
         {(book.summary || summary) ? (
           <View style={styles.summaryBox} testID="book-summary">
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -696,6 +717,15 @@ export default function BookDetail() {
 
       <ShareBookSheet visible={shareSheet} onClose={() => setShareSheet(false)} book={{ catalog_id: book.catalog_id, title: book.title, author: book.author, cover: book.cover }} />
 
+      <BottomSheet visible={yearSheet} onClose={() => setYearSheet(false)} title={t('Année de lecture')} subtitle={t('Une année passée ne compte pas dans ton objectif de cette année.')} testID="sheet-year" scroll={false}>
+        <TextInput testID="year-input" value={yearInput} onChangeText={v => setYearInput(v.replace(/\D/g, '').slice(0, 4))} keyboardType="number-pad" maxLength={4} autoFocus placeholderTextColor={colors.clay} style={[styles.input, { textAlign: 'center', fontFamily: fonts.displayMedium, fontSize: 22 }]} accessibilityLabel={t('Année de lecture')} />
+        <Pressable testID="year-save" onPress={saveYear} disabled={yearSaving} accessibilityRole="button" style={[styles.detectConfirm, { marginTop: spacing.md }, yearSaving && { opacity: 0.6 }]}>
+          <Text style={styles.photoBtnText}>{t('Enregistrer')}</Text>
+        </Pressable>
+        <Pressable testID="year-cancel" onPress={() => setYearSheet(false)} accessibilityRole="button" style={[styles.cancelBtn, { marginTop: spacing.sm }]}>
+          <Text style={styles.cancelBtnText}>{t('Annuler')}</Text>
+        </Pressable>
+      </BottomSheet>
       <BottomSheet visible={sumModal} onClose={() => setSumModal(false)} title={t('Résumé du livre')} testID="sheet-summary">
             <TextInput
               testID="summary-modal-input"
@@ -747,6 +777,8 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   author: { fontFamily: fonts.body, fontSize: 14.5, color: colors.clay },
   progressBar: { height: 4, backgroundColor: colors.borderSoft, borderRadius: 2, overflow: 'hidden' },
   progressFill: { height: 4, backgroundColor: colors.chambray },
+  yearRow: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginTop: spacing.sm, minHeight: 32, paddingHorizontal: 10, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, backgroundColor: colors.creme },
+  yearText: { fontFamily: fonts.bodyMedium, fontSize: 12.5, color: colors.espresso },
   progressText: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.clay, letterSpacing: 1, marginTop: 4, textTransform: 'uppercase' },
   editProgress: { fontFamily: fonts.body, fontSize: 12, color: colors.chambray, textDecorationLine: 'underline', marginTop: 4 },
   coverEditBadge: { position: 'absolute', bottom: -6, right: -6, width: 26, height: 26, borderRadius: 13, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.creme },

@@ -1404,4 +1404,12 @@ export const EN: Record<string, string> = {
   'Fiche de lecture à commencer': 'Reading sheet to start',
   // ---- Carte de citation : page discrète en grille
   'chap. {n}': 'ch. {n}',
+  // ---- Année de lecture, erreur d'ajout visible
+  'Lu en': 'Read in',
+  'Lu en {year}': 'Read in {year}',
+  'Année de lecture': 'Year read',
+  'Modifier l’année de lecture': 'Change the year read',
+  'Une année passée ne compte pas dans ton objectif de cette année.': 'A past year does not count toward this year’s goal.',
+  'Impossible d’ajouter ce livre ({detail}). Réessaie, ou passe par la recherche par titre.': 'Could not add this book ({detail}). Try again, or use the title search.',
+  'Pas de réseau. Réessaie quand tu seras connectée.': 'No network. Try again once you are online.',
 };
