@@ -1412,4 +1412,14 @@ export const EN: Record<string, string> = {
   'Une année passée ne compte pas dans ton objectif de cette année.': 'A past year does not count toward this year’s goal.',
   'Impossible d’ajouter ce livre ({detail}). Réessaie, ou passe par la recherche par titre.': 'Could not add this book ({detail}). Try again, or use the title search.',
   'Pas de réseau. Réessaie quand tu seras connectée.': 'No network. Try again once you are online.',
+  // ---- Rejoindre un club : erreurs explicites ; Premium offert (admin)
+  'Ta session a expiré : reconnecte-toi, puis réessaie.': 'Your session has expired: sign in again, then retry.',
+  'Impossible pour l’instant ({detail}). Réessaie dans un moment.': 'Not possible right now ({detail}). Try again in a moment.',
+  'Code du club': 'Club code',
+  'Premium offert à @{h}.': 'Premium granted to @{h}.',
+  'Premium retiré à @{h}.': 'Premium removed from @{h}.',
+  'premium offert': 'complimentary premium',
+  'premium': 'premium',
+  'Premium offert': 'Complimentary Premium',
+  'Supprimer ce compte': 'Delete this account',
 };

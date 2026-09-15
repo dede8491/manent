@@ -178,3 +178,26 @@ async def test_finished_year_keeps_old_reads_out_of_this_years_goal(client, fake
     assert r.status_code == 200 and r.json()["finished_at"].startswith("2023-06-30")
     stats = (await client.get("/api/stats/reading", headers=headers)).json()
     assert stats["books_year"] == 0
+
+
+async def test_join_club_code_is_tolerant_and_admin_can_offer_premium(client, fake_db):
+    h1, u1 = await register(client, email="owner@manent-tests.org", pseudo="Owner")
+    h2, u2 = await register(client, email="guest@manent-tests.org", pseudo="Guest")
+    # Premium offert par l'admin (0 € pour les tests), puis création d'un club privé
+    await fake_db.users.update_one({"user_id": u1["user_id"]}, {"$set": {"is_admin": True}})
+    r = await client.patch(f"/api/admin/users/{u1['user_id']}/premium", json={"is_premium": True}, headers=h1)
+    assert r.status_code == 200 and r.json()["plan"] == "offert"
+    assert (await client.get("/api/premium/status", headers=h1)).json()["is_premium"] is True
+    r = await client.post("/api/clubs", json={"name": "Club test", "visibility": "private"}, headers=h1)
+    assert r.status_code == 200, r.text
+    club = r.json()
+    # Code tapé avec des espaces et en minuscules, ou lien d'invitation collé en entier : accepté
+    r = await client.post("/api/clubs/join", json={"code": f" {club['code'][:3].lower()} {club['code'][3:]} "}, headers=h2)
+    assert r.status_code == 200 and r.json()["club_id"] == club["club_id"]
+    r = await client.post("/api/clubs/join", json={"code": f"https://example.org/api/s/c/{club['code']}"}, headers=h2)
+    assert r.status_code == 200
+    assert (await client.get(f"/api/clubs/{club['club_id']}", headers=h2)).json()["members_count"] == 2
+    assert (await client.post("/api/clubs/join", json={"code": "ZZZZZZ"}, headers=h2)).status_code == 404
+    # Retrait du Premium offert
+    r = await client.patch(f"/api/admin/users/{u1['user_id']}/premium", json={"is_premium": False}, headers=h1)
+    assert r.status_code == 200 and (await client.get("/api/premium/status", headers=h1)).json()["is_premium"] is False

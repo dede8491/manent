@@ -242,7 +242,8 @@ async def admin_users(q: str = "", user=Depends(require_admin)):
     if q.strip():
         rx = {"$regex": re.escape(q.strip().lstrip("@")), "$options": "i"}
         flt = {"$or": [{"pseudo": rx}, {"handle": rx}, {"email": rx}]}
-    users = await db.users.find(flt, {"_id": 0, "user_id": 1, "pseudo": 1, "handle": 1, "email": 1, "picture": 1, "is_admin": 1, "created_at": 1}) \
+    users = await db.users.find(flt, {"_id": 0, "user_id": 1, "pseudo": 1, "handle": 1, "email": 1, "picture": 1, "is_admin": 1, "created_at": 1,
+                                      "is_premium": 1, "premium_plan": 1}) \
         .sort("created_at", -1).to_list(5000)
     uids = [u["user_id"] for u in users]
 
@@ -258,6 +259,25 @@ async def admin_users(q: str = "", user=Depends(require_admin)):
         u["last_login"] = last.get(u["user_id"])
         u["is_me"] = u["user_id"] == user["user_id"]
     return {"users": [clean_doc(u) for u in users], "total": len(users)}
+
+
+class AdminPremiumBody(BaseModel):
+    is_premium: bool
+
+
+@api.patch("/admin/users/{user_id}/premium")
+async def admin_set_premium(user_id: str, body: AdminPremiumBody, user=Depends(require_admin)):
+    """Premium offert (tests, bêta-testeuses) : active ou retire Premium sans passer par l'App Store.
+    Un achat réel via RevenueCat écrase ce réglage par le plan payé."""
+    target = await db.users.find_one({"user_id": user_id}, {"_id": 0, "user_id": 1})
+    if not target:
+        raise HTTPException(status_code=404, detail="user_not_found")
+    if body.is_premium:
+        await db.users.update_one({"user_id": user_id}, {"$set": {"is_premium": True, "premium_plan": "offert", "premium_since": now_utc()}})
+    else:
+        await db.users.update_one({"user_id": user_id}, {"$set": {"is_premium": False}, "$unset": {"premium_plan": "", "premium_since": ""}})
+    logger.info("premium %s for %s by admin @%s", "granted" if body.is_premium else "removed", user_id, user.get("handle"))
+    return {"user_id": user_id, "is_premium": body.is_premium, "plan": "offert" if body.is_premium else None}
 
 
 @api.delete("/admin/users/{user_id}")
@@ -2006,7 +2026,9 @@ async def _notify_clubs_progress(user: dict, book: dict, upd: dict):
 
 @api.post("/clubs/join")
 async def join_club(body: ClubJoin, user=Depends(get_current_user)):
-    club = await db.clubs.find_one({"code": body.code.strip().upper()}, {"_id": 0})
+    # Tolérant : espaces, tirets, minuscules, ou un lien d'invitation collé en entier (on garde les 6 derniers caractères).
+    code = re.sub(r"[^A-Z0-9]", "", (body.code or "").upper())[-6:]
+    club = await db.clubs.find_one({"code": code}, {"_id": 0}) if len(code) == 6 else None
     if not club:
         raise HTTPException(status_code=404, detail="unknown_code")
     if user["user_id"] not in club.get("members", []):

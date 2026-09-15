@@ -2,6 +2,7 @@
 import React, { useEffect } from 'react';
 import { View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api } from '@/src/api';
 import ManentLoader from '@/src/components/ManentLoader';
 
@@ -13,8 +14,14 @@ export default function ClubInviteLink() {
       try {
         const r = await api<{ club_id: string }>('/clubs/join', { method: 'POST', body: JSON.stringify({ code: (code || '').toUpperCase() }) });
         router.replace({ pathname: '/club/[id]', params: { id: r.club_id } });
-      } catch {
-        router.replace('/(tabs)/community');
+      } catch (e: any) {
+        if (e?.status === 401) {
+          // Pas encore de compte : le lien est gardé, l'onboarding le rejouera après la création du compte.
+          await AsyncStorage.setItem('pending_deep_link', `/c/${(code || '').toUpperCase()}`).catch(() => {});
+          router.replace('/onboarding');
+          return;
+        }
+        router.replace({ pathname: '/(tabs)/community', params: { join: '1', code: (code || '').toUpperCase() } });
       }
     })();
   }, [code, router]);
