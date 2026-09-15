@@ -43,6 +43,8 @@ export default function CaptureModal() {
   const [showCustom, setShowCustom] = useState(false);
   const [premium, setPremium] = useState<{ is_premium: boolean; captures_used: number; captures_limit: number } | null>(null);
   const [limitReached, setLimitReached] = useState(false);
+  // Créer un livre depuis le sélecteur : en gratuit, un seul livre en cours (402 books_in_progress_limit).
+  const [bookError, setBookError] = useState<null | 'limit' | 'other'>(null);
 
   React.useEffect(() => {
     if (mode === 'camera' && !autoCamera.current) {
@@ -228,7 +230,7 @@ export default function CaptureModal() {
         )}
 
         <Text style={styles.label}>{t('Livre de rattachement')}</Text>
-        <Pressable testID="cap-book-picker" onPress={() => { setBookQuery(''); setBookModal(true); }} style={styles.pickerBtn}>
+        <Pressable testID="cap-book-picker" onPress={() => { setBookQuery(''); setBookError(null); setBookModal(true); }} style={styles.pickerBtn}>
           <Feather name="book" size={15} color={colors.clay} />
           <Text style={[styles.pickerText, !bookId && { color: colors.clay }]} numberOfLines={1}>
             {bookId ? (books.find(b => b.book_id === bookId)?.title || '') : t('Aucun')}
@@ -342,12 +344,13 @@ export default function CaptureModal() {
                   onPress={async () => {
                     const title = bookQuery.trim();
                     if (!title) return;
+                    setBookError(null);
                     try {
                       const b = await api<any>('/books', { method: 'POST', body: JSON.stringify({ type: 'papier', title, status: 'en_cours' }) });
                       setBooks(prev => [b, ...prev]);
                       setBookId(b.book_id);
                       setBookModal(false);
-                    } catch {}
+                    } catch (e: any) { setBookError(e?.status === 402 ? 'limit' : 'other'); }
                   }}
                   style={styles.pickerRow}
                 >
@@ -356,6 +359,16 @@ export default function CaptureModal() {
                 </Pressable>
               }
             />
+            {bookError === 'limit' ? (
+              <View style={[styles.limitBox, { marginTop: spacing.md, marginBottom: 0 }]} testID="cap-book-limit">
+                <Text style={styles.limitText}>{t('Un livre en cours à la fois en gratuit. Termine l’autre, ou passe en Premium.')}</Text>
+                <Pressable testID="cap-book-limit-premium" onPress={() => { setBookModal(false); router.push('/premium'); }} style={styles.limitBtn}>
+                  <Text style={styles.limitBtnText}>{t('Passer en Premium')}</Text>
+                </Pressable>
+              </View>
+            ) : bookError === 'other' ? (
+              <Text style={[styles.limitText, { marginTop: spacing.md }]} testID="cap-book-error">{t('Enregistrement impossible. Réessaie.')}</Text>
+            ) : null}
             <Pressable testID="cap-book-close" onPress={() => setBookModal(false)} style={{ alignSelf: 'center', padding: spacing.md, minHeight: 44 }}>
               <Text style={styles.pickerClose}>{t('Fermer')}</Text>
             </Pressable>

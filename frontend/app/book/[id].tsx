@@ -40,6 +40,8 @@ export default function BookDetail() {
   const [lessons, setLessons] = useState<string[]>([]);
   const [detecting, setDetecting] = useState(false);
   const [detectedPage, setDetectedPage] = useState<number | null>(null);
+  // Quota mensuel de captures IA épuisé (402 capture_limit_reached) : la saisie manuelle reste possible.
+  const [visionLimit, setVisionLimit] = useState(false);
   const [photoDone, setPhotoDone] = useState<number | null>(null);
   const [limitSheet, setLimitSheet] = useState(false);
   const guardLimit = (e: any) => { if (e?.status === 402) { setLimitSheet(true); return true; } return false; };
@@ -254,13 +256,13 @@ export default function BookDetail() {
       res = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.8 });
     }
     if (res.canceled || !res.assets?.[0]?.uri) return;
-    setDetecting(true);
+    setDetecting(true); setVisionLimit(false);
     try {
       const b64 = await toBase64(res.assets[0].uri);
       const r = await api<{ page_number: number }>('/vision', { method: 'POST', body: JSON.stringify({ image_base64: b64, mode: 'page_number' }) });
       setDetectedPage(r.page_number > 0 ? r.page_number : -1);
-    } catch {
-      setDetectedPage(-1);
+    } catch (e: any) {
+      if (e?.status === 402) setVisionLimit(true); else setDetectedPage(-1);
     } finally { setDetecting(false); }
   };
 
@@ -488,7 +490,19 @@ export default function BookDetail() {
 
         {!isWattpad && (
           <View style={{ marginTop: spacing.md }}>
-            {detectedPage === null ? (
+            {visionLimit ? (
+              <View style={styles.detectBox} testID="vision-limit-box">
+                <Text style={styles.detectText}>{t('Tes captures IA du mois sont utilisées. Indique la page à la main, ou passe en Premium.')}</Text>
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: spacing.sm }}>
+                  <Pressable testID="vision-limit-manual" onPress={() => { setVisionLimit(false); setPageInput(String(prog || 0)); setPageModal('progress'); }} style={styles.detectConfirm}>
+                    <Text style={styles.photoBtnText}>{t('Indiquer la page')}</Text>
+                  </Pressable>
+                  <Pressable testID="vision-limit-premium" onPress={() => { setVisionLimit(false); router.push('/premium'); }} style={styles.detectGhost}>
+                    <Text style={styles.detectGhostText}>{t('Découvrir Premium')}</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : detectedPage === null ? (
               <Pressable testID="btn-photo-page" onPress={photoProgress} disabled={detecting} style={styles.photoBtn}>
                 {detecting
                   ? <ManentLoader size={20} />

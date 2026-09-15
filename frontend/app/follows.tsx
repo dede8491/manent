@@ -23,9 +23,16 @@ export default function FollowsScreen() {
   const [tab, setTab] = useState<'followers' | 'following'>(tabParam === 'following' ? 'following' : 'followers');
   const [data, setData] = useState<{ followers: Row[]; following: Row[]; followers_count: number; following_count: number; pseudo?: string } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [isPrivate, setIsPrivate] = useState(false);
 
   const load = useCallback(async () => {
-    try { setData(await api(handle ? `/readers/${encodeURIComponent(handle)}/follows` : '/me/follows')); } catch { setData({ followers: [], following: [], followers_count: 0, following_count: 0 }); }
+    setIsPrivate(false);
+    try { setData(await api(handle ? `/readers/${encodeURIComponent(handle)}/follows` : '/me/follows')); }
+    catch (e: any) {
+      // Profil privé (403 private_profile) : on le dit, plutôt que d'afficher des listes vides trompeuses.
+      if (e?.status === 403 && e?.detail?.detail === 'private_profile') setIsPrivate(true);
+      setData({ followers: [], following: [], followers_count: 0, following_count: 0 });
+    }
   }, [handle]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -56,7 +63,12 @@ export default function FollowsScreen() {
       </View>
       {!data ? <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ManentLoader /></View> : (
         <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: insets.bottom + spacing.xxl }}>
-          {rows.length === 0 ? (
+          {isPrivate ? (
+            <View style={{ alignItems: 'center', paddingVertical: spacing.xxl, gap: spacing.sm }} testID="follows-private">
+              <Feather name="lock" size={22} color={colors.clay} />
+              <Text style={styles.emptyTitle}>{t('Ce profil est privé.')}</Text>
+            </View>
+          ) : rows.length === 0 ? (
             <View style={{ alignItems: 'center', paddingVertical: spacing.xxl }}>
               <Text style={styles.emptyTitle}>{tab === 'followers' ? t('Personne pour l’instant.') : t('Aucun abonnement pour l’instant.')}</Text>
               <Text style={styles.emptySub}>{tab === 'followers' ? t('Partage ton profil pour que d’autres lectrices te suivent.') : t('Cherche une lectrice et suis-la pour retrouver ses citations dans ton fil.')}</Text>

@@ -25,6 +25,7 @@ export default function AdminDashboard() {
   const [denied, setDenied] = useState(false);
   const [badge, setBadge] = useState<{ reports: number; authors: number } | null>(null);
   const [openBook, setOpenBook] = useState<string | null>(null);
+  const [actionError, setActionError] = useState('');
 
   const load = useCallback(async () => {
     try { setData(await api('/club/admin/overview')); }
@@ -34,10 +35,11 @@ export default function AdminDashboard() {
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const resolve = async (reportId: string, action: 'ignore' | 'delete') => {
+    setActionError('');
     try {
       await api(`/club/admin/reports/${reportId}`, { method: 'POST', body: JSON.stringify({ action }) });
       setData((prev: any) => ({ ...prev, reports: prev.reports.filter((r: any) => r.report_id !== reportId) }));
-    } catch {}
+    } catch (e: any) { setActionError(e?.status === 403 ? t('Action réservée aux admins.') : t('Action impossible. Réessaie.')); }
   };
 
   const STATS: [string, string][] = [
@@ -83,6 +85,7 @@ export default function AdminDashboard() {
             <Text style={styles.sectionTitle}>{t('Signalements à modérer')}</Text>
             {data.reports.length > 0 && <View style={styles.countPill}><Text style={styles.countText}>{data.reports.length}</Text></View>}
           </View>
+          {actionError ? <Text style={[styles.empty, { marginBottom: spacing.sm }]} testID="admin-action-error">{actionError}</Text> : null}
           {data.reports.length === 0 ? (
             <Text style={styles.empty}>{t('Aucun signalement en attente. Tout va bien.')}</Text>
           ) : data.reports.map((r: any) => (

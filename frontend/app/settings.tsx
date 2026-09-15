@@ -89,10 +89,11 @@ export default function Settings() {
   useEffect(() => {
     (async () => {
       try {
-        const s = await api<{ language: 'fr' | 'en'; default_public: boolean; profile_public: boolean }>('/me/settings', { method: 'PATCH', body: JSON.stringify({}) });
+        const s = await api<{ language: 'fr' | 'en'; default_public: boolean; profile_public: boolean; recos_enabled?: boolean }>('/me/settings', { method: 'PATCH', body: JSON.stringify({}) });
         if (s.language === 'en' || s.language === 'fr') setLang(s.language);
         setDefaultPublic(s.default_public);
         setProfilePublic(s.profile_public !== false);
+        setRecosEnabled(s.recos_enabled !== false);
       } catch {}
     })();
   }, []);

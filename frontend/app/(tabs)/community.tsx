@@ -41,6 +41,7 @@ export default function Community() {
   const [clubName, setClubName] = useState('');
   const [clubDesc, setClubDesc] = useState('');
   const [clubVisibility, setClubVisibility] = useState<'private' | 'public'>('private');
+  const [createError, setCreateError] = useState('');
   const [joinModal, setJoinModal] = useState(false);
   // Arrivée depuis un lien d'invitation qui n'a pas pu rejoindre seul (/c/CODE) : feuille « Rejoindre » ouverte, code prérempli.
   const linkParams = useLocalSearchParams<{ join?: string; code?: string }>();
@@ -90,12 +91,19 @@ export default function Community() {
 
   const createClub = async () => {
     if (!clubName.trim()) return;
+    setCreateError('');
     setCreating(true);
     try {
       const c = await api<any>('/clubs', { method: 'POST', body: JSON.stringify({ name: clubName.trim(), description: clubDesc, visibility: clubVisibility }) });
       setClubModal(false); setClubName(''); setClubDesc(''); setClubVisibility('private');
       await load();
       router.push({ pathname: '/club/[id]', params: { id: c.club_id } });
+    } catch (e: any) {
+      // Créer un club est Premium : le 402 mène à l'offre, le reste s'explique sous le formulaire.
+      if (e?.status === 402) { setClubModal(false); router.push('/premium'); return; }
+      setCreateError(e?.status === 401 ? t('Ta session a expiré : reconnecte-toi, puis réessaie.')
+        : e?.status ? t('Impossible pour l’instant ({detail}). Réessaie dans un moment.', { detail: `HTTP ${e.status}` })
+        : t('Pas de réseau. Réessaie quand tu seras connectée.'));
     } finally { setCreating(false); }
   };
 
@@ -204,7 +212,7 @@ export default function Community() {
       <ClubHome
         clubs={clubs}
         onOpenClub={(cid: string) => router.push({ pathname: '/club/[id]', params: { id: cid } })}
-        onCreateClub={() => setClubModal(true)}
+        onCreateClub={() => { setCreateError(''); setClubModal(true); }}
         onJoinClub={() => { setJoinError(''); setJoinModal(true); }}
       />
       )}
@@ -247,6 +255,7 @@ export default function Community() {
                 </Pressable>
               ))}
             </View>
+            {createError ? <Text style={[styles.joinError, { marginTop: spacing.sm }]} testID="create-club-error">{createError}</Text> : null}
             <View style={{ height: spacing.md }} />
             <PrimaryButton testID="btn-create-club" title={t('Créer le club')} onPress={createClub} loading={creating} disabled={!clubName.trim()} />
             <GhostButton title={t('Annuler')} onPress={() => setClubModal(false)} />

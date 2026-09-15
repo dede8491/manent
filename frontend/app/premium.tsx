@@ -53,7 +53,10 @@ export default function Premium() {
         } else if (!isSubscribed && status.is_premium) {
           setStatus(await api<Status>('/premium/deactivate', { method: 'POST' }));
         }
-      } catch {}
+      } catch (e: any) {
+        // RevenueCat dit « abonnée » mais le serveur n'a pas encore reçu le webhook : on l'explique au lieu de rester muet.
+        if (e?.status === 403 && e?.detail?.detail === 'subscription_not_verified') setErrMsg(t('Abonnement reçu par l’App Store mais pas encore vérifié côté Manent. Réessaie dans une minute ou utilise « Restaurer mes achats ».'));
+      }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSubscribed, customerInfo, status?.is_premium]);

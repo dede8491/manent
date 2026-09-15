@@ -12,6 +12,8 @@ import { useT } from '@/src/i18n';
 import { PrimaryButton, GhostButton } from '@/src/components/Button';
 import ManentLoader from '@/src/components/ManentLoader';
 import { BottomSheet } from '@/src/components/BottomSheet';
+import { ErrorState } from '@/src/components/ErrorState';
+import { Toast } from '@/src/components/Toast';
 
 export default function ClubDetail() {
   const t = useT();
@@ -44,8 +46,14 @@ export default function ClubDetail() {
   const [msgPage, setMsgPage] = useState('');
   const [revealed, setRevealed] = useState<Set<string>>(new Set());
   const scrollRef = useRef<ScrollView>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  // 'gone' : plus membre (403 not_a_member) ou club supprimé (404) ; 'error' : panne, on propose de réessayer.
+  const [loadError, setLoadError] = useState<null | 'gone' | 'error'>(null);
+  // Les actions réservées à la créatrice répondent 403 owner_only : on le dit, au lieu de fermer la feuille en silence.
+  const explain = (e: any, fallback: string) => setToast(e?.status === 403 && e?.detail?.detail === 'owner_only' ? t('Seule la créatrice du club peut modifier ceci.') : fallback);
 
   const load = useCallback(async () => {
+    setLoadError(null);
     try {
       const c = await api<any>(`/clubs/${id}`);
       setClub(c);
@@ -56,7 +64,9 @@ export default function ClubDetail() {
       } else setProgress(null);
       try { setCPolls((await api<any>(`/clubs/${id}/polls`)).polls); } catch {}
       try { setCEvents((await api<any>(`/clubs/${id}/events`)).events); } catch {}
-    } catch {}
+    } catch (e: any) {
+      setLoadError(e?.status === 404 || (e?.status === 403 && e?.detail?.detail === 'not_a_member') ? 'gone' : 'error');
+    }
   }, [id]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -84,7 +94,7 @@ export default function ClubDetail() {
       await api(`/clubs/${id}/polls`, { method: 'POST', body: JSON.stringify({ question: pollForm.q.trim(), options }) });
       setPollForm(null);
       setCPolls((await api<any>(`/clubs/${id}/polls`)).polls);
-    } catch {}
+    } catch (e) { setPollForm(null); explain(e, t('Enregistrement impossible. Réessaie.')); }
   };
 
   const submitEvent = async () => {
@@ -93,7 +103,7 @@ export default function ClubDetail() {
       await api(`/clubs/${id}/events`, { method: 'POST', body: JSON.stringify({ title: evForm.title.trim(), date: evForm.date.trim(), location: evForm.loc.trim() || undefined }) });
       setEvForm(null);
       setCEvents((await api<any>(`/clubs/${id}/events`)).events);
-    } catch {}
+    } catch (e) { setEvForm(null); explain(e, t('Enregistrement impossible. Réessaie.')); }
   };
 
   const attendEvent = async (eventId: string) => {
@@ -124,18 +134,23 @@ export default function ClubDetail() {
     setBookModal(true);
   };
   const setClubBook = async (b: any) => {
-    const c = await api<any>(`/clubs/${id}`, { method: 'PATCH', body: JSON.stringify({ book: { book_id: b.book_id, title: b.title, author: b.author } }) });
-    setClub(c);
+    try {
+      const c = await api<any>(`/clubs/${id}`, { method: 'PATCH', body: JSON.stringify({ book: { book_id: b.book_id, title: b.title, author: b.author } }) });
+      setClub(c);
+    } catch (e) { explain(e, t('Enregistrement impossible. Réessaie.')); }
     setBookModal(false);
   };
   const savePassage = async () => {
     if (!passageText.trim()) return;
-    const c = await api<any>(`/clubs/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ weekly_passage: { text: passageText.trim(), page: passagePage ? parseInt(passagePage, 10) : null, book_title: club.book?.title || null } }),
-    });
-    setClub(c);
-    setPassageModal(false); setPassageText(''); setPassagePage('');
+    try {
+      const c = await api<any>(`/clubs/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ weekly_passage: { text: passageText.trim(), page: passagePage ? parseInt(passagePage, 10) : null, book_title: club.book?.title || null } }),
+      });
+      setClub(c);
+      setPassageText(''); setPassagePage('');
+    } catch (e) { explain(e, t('Enregistrement impossible. Réessaie.')); }
+    setPassageModal(false);
   };
   const leave = async () => {
     await api(`/clubs/${id}/leave`, { method: 'POST' });
@@ -144,12 +159,15 @@ export default function ClubDetail() {
 
   const saveChallenge = async () => {
     if (!chTitle.trim() || !chGoal) return;
-    const c = await api<any>(`/clubs/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ challenge: { title: chTitle.trim(), goal_pages: parseInt(chGoal, 10) } }),
-    });
-    setClub(c);
-    setChallengeModal(false); setChTitle(''); setChGoal('');
+    try {
+      const c = await api<any>(`/clubs/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ challenge: { title: chTitle.trim(), goal_pages: parseInt(chGoal, 10) } }),
+      });
+      setClub(c);
+      setChTitle(''); setChGoal('');
+    } catch (e) { explain(e, t('Enregistrement impossible. Réessaie.')); }
+    setChallengeModal(false);
   };
 
   const saveMyProgress = async () => {
@@ -165,7 +183,7 @@ export default function ClubDetail() {
       const m = await api<any>(`/clubs/${id}/recap`, { method: 'POST' });
       setMessages(prev => [...prev, m]);
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
-    } catch {}
+    } catch (e) { explain(e, t('Action impossible. Réessaie.')); }
   };
 
   const openReco = async () => {
@@ -187,10 +205,18 @@ export default function ClubDetail() {
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
   };
 
-  if (!club) {
+  if (!club || loadError === 'gone') {
     return (
-      <View style={{ flex: 1, backgroundColor: colors.glacier, alignItems: 'center', justifyContent: 'center' }}>
-        <ManentLoader size={48} />
+      <View style={{ flex: 1, backgroundColor: colors.glacier, alignItems: 'center', justifyContent: 'center', paddingTop: insets.top }} testID="screen-club-loading">
+        {loadError === 'gone' ? (
+          <View style={styles.goneBox} testID="club-gone">
+            <Feather name="lock" size={22} color={colors.clay} />
+            <Text style={styles.goneTitle}>{t('Tu ne fais pas (ou plus) partie de ce club.')}</Text>
+            <GhostButton title={t('Retour aux clubs')} onPress={() => router.replace('/(tabs)/community')} testID="club-gone-back" />
+          </View>
+        ) : loadError === 'error' ? (
+          <ErrorState onRetry={load} testID="club-error" />
+        ) : <ManentLoader size={48} />}
       </View>
     );
   }
@@ -531,11 +557,14 @@ export default function ClubDetail() {
             <PrimaryButton testID="passage-save" title={t('Publier le passage')} onPress={savePassage} disabled={!passageText.trim()} />
             <GhostButton title={t('Annuler')} onPress={() => setPassageModal(false)} />
       </BottomSheet>
+      <Toast visible={!!toast} text={toast || ''} onHide={() => setToast(null)} testID="toast-club" />
     </KeyboardAvoidingView>
   );
 }
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
+  goneBox: { alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.xl },
+  goneTitle: { fontFamily: fonts.displayMedium, fontSize: 20, color: colors.espresso, textAlign: 'center' },
   progressSummary: { fontFamily: fonts.display, fontSize: 16, color: colors.espresso, marginBottom: spacing.md, lineHeight: 22 },
   memberRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   memberAvatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.bisque, alignItems: 'center', justifyContent: 'center' },

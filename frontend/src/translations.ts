@@ -1422,4 +1422,21 @@ export const EN: Record<string, string> = {
   'premium': 'premium',
   'Premium offert': 'Complimentary Premium',
   'Supprimer ce compte': 'Delete this account',
+  // ---- Navigation vérifiée : modification des sujets depuis Découvrir
+  'Mes sujets': 'My topics',
+  // ---- Échecs visibles : clubs, tableaux, citations, captures, Premium, admin
+  'Ce club est sur invitation : demande son code à sa créatrice.': 'This club is invitation-only: ask its creator for the code.',
+  'Impossible de rejoindre ce club pour l’instant.': 'Cannot join this club right now.',
+  'Tu ne fais pas (ou plus) partie de ce club.': 'You are not (or no longer) a member of this club.',
+  'Retour aux clubs': 'Back to clubs',
+  'Seule la créatrice du club peut modifier ceci.': 'Only the club creator can change this.',
+  'Ce tableau est privé.': 'This board is private.',
+  'Seule la propriétaire du tableau peut faire ça.': 'Only the board owner can do that.',
+  'Impossible d’épingler dans ce tableau.': 'Cannot pin to this board.',
+  'Tu ne peux supprimer que tes commentaires.': 'You can only delete your own comments.',
+  'Un livre en cours à la fois en gratuit. Termine l’autre, ou passe en Premium.': 'One book in progress at a time on the free plan. Finish the other one, or go Premium.',
+  'Tes captures IA du mois sont utilisées. Indique la page à la main, ou passe en Premium.': 'Your AI captures for this month are used up. Enter the page by hand, or go Premium.',
+  'Indiquer la page': 'Enter the page',
+  'Abonnement reçu par l’App Store mais pas encore vérifié côté Manent. Réessaie dans une minute ou utilise « Restaurer mes achats ».': 'Subscription received from the App Store but not verified by Manent yet. Try again in a minute or use “Restore purchases”.',
+  'Action réservée aux admins.': 'Admins only.',
 };

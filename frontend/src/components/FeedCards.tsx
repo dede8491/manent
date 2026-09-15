@@ -22,19 +22,6 @@ export function BookCardFeed({ title, author, cover, onPress, width = 118, testI
 }
 
 // ---- Carte livre primé (ruban Chambray) ----
-export function AwardCard({ title, author, cover, prize, year, onPress, testID }: any) {
-  const styles = useStyles(makeStyles);
-  return (
-    <Pressable testID={testID} onPress={onPress} style={{ width: 118 }}>
-      <View>
-        <BookCover uri={cover} title={title} width={118} height={177} radius={8} initialSize={32} />
-        <View style={styles.ribbon}><Text style={styles.ribbonText} numberOfLines={1}>{prize} {year}</Text></View>
-      </View>
-      <Text style={styles.bookTitle} numberOfLines={2}>{title}</Text>
-      {!!author && <Text style={styles.bookAuthor} numberOfLines={1}>{author}</Text>}
-    </Pressable>
-  );
-}
 
 // ---- Carte collection thématique (3 couvertures en éventail) ----
 export function CollectionCard({ theme, quotes, covers, label, onPress, testID }: any) {
@@ -55,60 +42,8 @@ export function CollectionCard({ theme, quotes, covers, label, onPress, testID }
 }
 
 // ---- Reprendre ta lecture (carte large) ----
-export function ResumeCard({ book, onPress, onPhoto, t, testID, nextTitle, onNext }: any) {
-  const styles = useStyles(makeStyles);
-  const colors = useColors();
-  const isWp = book.type === 'wattpad';
-  const total = isWp ? book.chapters : book.pages;
-  const prog = isWp ? book.progress_chapter : book.progress_page;
-  const pct = total && prog ? Math.min(100, Math.round((prog / total) * 100)) : 0;
-  return (
-    <View style={styles.resume}>
-      <Pressable testID={testID} onPress={onPress} style={{ flexDirection: 'row', gap: spacing.md }}>
-        <BookCover uri={book.cover} title={book.title} width={56} height={84} radius={8} initialSize={22} />
-        <View style={{ flex: 1 }}>
-          <Text style={styles.resumeLabel}>{t('Reprendre ta lecture')}</Text>
-          <Text style={styles.resumeTitle} numberOfLines={1}>{book.title}</Text>
-          <View style={styles.resumeBar}><View style={[styles.resumeFill, { width: `${pct}%` }]} /></View>
-          <Text style={styles.resumeMeta}>{prog || 0} / {total || '—'} {isWp ? 'chap.' : 'p.'}{total ? ` · ${pct}%` : ''}</Text>
-          <Pressable testID={`${testID}-photo`} onPress={onPhoto} style={styles.photoBtn}>
-            <Feather name="camera" size={12} color={colors.creme} />
-            <Text style={styles.photoBtnText}>{t('Photographier ma page')}</Text>
-          </Pressable>
-        </View>
-      </Pressable>
-      {!!nextTitle && (
-        <Pressable testID={`${testID}-next`} onPress={onNext} style={styles.nextRow} hitSlop={6}>
-          <Feather name="corner-down-right" size={13} color={colors.clay} />
-          <Text style={styles.nextText} numberOfLines={1}>{t('Ensuite : {title}', { title: nextTitle })}</Text>
-          <Feather name="chevron-right" size={14} color={colors.clay} />
-        </Pressable>
-      )}
-    </View>
-  );
-}
 
 // ---- Lecture suivante (quand rien n'est en cours) ----
-export function NextUpCard({ book, onStart, onOpenQueue, t, testID }: any) {
-  const styles = useStyles(makeStyles);
-  const colors = useColors();
-  return (
-    <View style={styles.resume} testID={testID}>
-      <Pressable onPress={onOpenQueue} style={{ flexDirection: 'row', gap: spacing.md }}>
-        <BookCover uri={book.cover} title={book.title} width={56} height={84} radius={8} initialSize={22} />
-        <View style={{ flex: 1 }}>
-          <Text style={styles.resumeLabel}>{t('Lecture suivante')}</Text>
-          <Text style={styles.resumeTitle} numberOfLines={2}>{book.title}</Text>
-          {!!book.author && <Text style={styles.resumeAuthor} numberOfLines={1}>{book.author}</Text>}
-          <Pressable testID={`${testID}-start`} onPress={onStart} style={styles.photoBtn}>
-            <Feather name="play" size={12} color={colors.creme} />
-            <Text style={styles.photoBtnText}>{t('Commencer')}</Text>
-          </Pressable>
-        </View>
-      </Pressable>
-    </View>
-  );
-}
 
 const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   addDot: { position: 'absolute', bottom: 6, right: 6, width: 26, height: 26, borderRadius: 13, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },
