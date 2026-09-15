@@ -62,9 +62,6 @@ export default function Themes() {
     setLoading(true);
     try {
       await updateUser({ reading_mode: mode, themes: selected });
-      if (!isEdit) {
-        try { await api('/dev/seed', { method: 'POST' }); } catch {}
-      }
       // En modification depuis Découvrir : on revient d'où l'on vient ; à l'inscription : cap sur l'accueil.
       if (isEdit) { if (router.canGoBack()) router.back(); else router.replace('/(tabs)/discover'); }
       else router.replace('/(tabs)/home');
