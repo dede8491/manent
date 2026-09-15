@@ -71,6 +71,10 @@ export default function AddBook() {
   const [status, setStatus] = useState<'a_lire' | 'en_cours' | 'termine'>('en_cours');
   const [mode, setMode] = useState<'perso' | 'etudes'>('perso');
   const [saving, setSaving] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
+  // Année de lecture d'un livre ajouté « Terminé » : par défaut cette année ; une année passée ne compte pas dans l'objectif en cours.
+  const thisYear = new Date().getFullYear();
+  const [finishedYear, setFinishedYear] = useState(String(thisYear));
 
   // Scanner ISBN
   const [permission, requestPermission] = useCameraPermissions();
@@ -165,28 +169,34 @@ export default function AddBook() {
 
   const add = async (forceStatus?: 'a_lire') => {
     if (!selected) return;
-    setSaving(true);
+    setSaving(true); setAddError(null);
     try {
       const isWattpad = selected.type === 'wattpad';
+      const finalStatus = forceStatus || status;
+      const fy = parseInt(finishedYear, 10);
       const b = await api<any>('/books', {
         method: 'POST',
         body: JSON.stringify({
           type: isWattpad ? 'wattpad' : (mode === 'etudes' ? 'etude' : 'papier'),
           title: selected.title,
-          author: selected.author,
-          isbn: selected.isbn,
+          author: selected.author || null,
+          isbn: selected.isbn || null,
           catalog_id: selected.catalog_id || undefined,
-          wattpad_url: selected.wattpad_url,
-          cover: selected.cover,
-          pages: selected.pages,
-          year: selected.year,
-          chapters: selected.chapters,
-          status: forceStatus || status, mode,
+          wattpad_url: selected.wattpad_url || null,
+          cover: selected.cover || null,
+          pages: selected.pages ? parseInt(String(selected.pages), 10) || null : null,
+          year: selected.year != null ? String(selected.year) : null,
+          chapters: selected.chapters ? parseInt(String(selected.chapters), 10) || null : null,
+          status: finalStatus, mode,
+          finished_year: finalStatus === 'termine' && fy >= 1900 && fy <= thisYear ? fy : undefined,
         }),
       });
       router.replace({ pathname: '/book/[id]', params: { id: b.book_id } });
     } catch (e: any) {
-      if (e?.status === 402) setLimitSheet(true);
+      if (e?.status === 402) { setLimitSheet(true); return; }
+      // Une erreur muette laissait croire que rien ne se passait : on l'affiche, avec le détail du serveur s'il y en a un.
+      const detail = typeof e?.detail?.detail === 'string' ? e.detail.detail : (e?.status ? `HTTP ${e.status}` : '');
+      setAddError(e?.status ? t('Impossible d’ajouter ce livre ({detail}). Réessaie, ou passe par la recherche par titre.', { detail }) : t('Pas de réseau. Réessaie quand tu seras connectée.'));
     } finally { setSaving(false); }
   };
   const [limitSheet, setLimitSheet] = useState(false);
@@ -224,13 +234,24 @@ export default function AddBook() {
             </Pressable>
 
             <Text style={styles.label}>{t('Statut')}</Text>
-            <View style={{ flexDirection: 'row', gap: 8 }}>
+            <View style={{ flexDirection: 'row', gap: 8 }} accessibilityRole="radiogroup">
               {([['a_lire', 'À lire'], ['en_cours', 'En cours'], ['termine', 'Terminé']] as const).map(([id, lbl]) => (
-                <Pressable key={id} testID={`status-${id}`} onPress={() => setStatus(id)} style={[styles.chip, status === id && styles.chipActive]}>
+                <Pressable key={id} testID={`status-${id}`} onPress={() => setStatus(id)} accessibilityRole="radio" accessibilityState={{ selected: status === id }} style={[styles.chip, status === id && styles.chipActive]}>
                   <Text style={[styles.chipText, status === id && styles.chipTextActive]}>{t(lbl)}</Text>
                 </Pressable>
               ))}
             </View>
+            {status === 'termine' && (
+              <>
+                <Text style={styles.label}>{t('Lu en')}</Text>
+                <TextInput
+                  testID="add-finished-year" value={finishedYear} onChangeText={v => setFinishedYear(v.replace(/\D/g, '').slice(0, 4))}
+                  keyboardType="number-pad" maxLength={4} placeholder={String(thisYear)} placeholderTextColor={colors.clay}
+                  style={[styles.input, { width: 120 }]} accessibilityLabel={t('Année de lecture')}
+                />
+                <Text style={styles.hint}>{t('Une année passée ne compte pas dans ton objectif de cette année.')}</Text>
+              </>
+            )}
 
             {!isWattpadSel && (
               <>
@@ -247,7 +268,8 @@ export default function AddBook() {
             )}
 
             <View style={{ height: spacing.xl }} />
-            <PrimaryButton testID="btn-add-book" title={t('Ajouter à ma bibliothèque')} onPress={add} loading={saving} />
+            {!!addError && <Text style={styles.addError} testID="add-error">{addError}</Text>}
+            <PrimaryButton testID="btn-add-book" title={t('Ajouter à ma bibliothèque')} onPress={() => add()} loading={saving} />
             <GhostButton title={t('Annuler')} onPress={() => router.back()} />
           </>
         ) : (
@@ -429,6 +451,8 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   tabText: { fontFamily: fonts.bodyMedium, fontSize: 13, color: colors.espresso, letterSpacing: 0.3 },
   tabTextActive: { color: colors.creme },
   label: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1.5, textTransform: 'uppercase', marginTop: spacing.lg, marginBottom: spacing.xs },
+  hint: { fontFamily: fonts.body, fontSize: 12, color: colors.clay, marginTop: 6, lineHeight: 17 },
+  addError: { fontFamily: fonts.body, fontSize: 13, color: colors.danger, lineHeight: 18, marginBottom: spacing.sm },
   input: { height: 52, borderWidth: 1, borderColor: colors.borderSoft, borderRadius: radius.md, paddingHorizontal: spacing.md, fontFamily: fonts.body, fontSize: 15, color: colors.espresso, backgroundColor: colors.creme },
   goBtn: { width: 52, height: 52, borderRadius: radius.md, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },
   searchBox: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 52, paddingHorizontal: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft },

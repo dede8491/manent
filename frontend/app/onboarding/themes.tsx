@@ -7,6 +7,7 @@ import { useColors, useStyles } from '@/src/themeCtx';
 import { PrimaryButton } from '@/src/components/Button';
 import { api } from '@/src/api';
 import { useAuth } from '@/src/auth';
+import { ScreenHeader } from '@/src/components/ScreenHeader';
 import { useT } from '@/src/i18n';
 
 const MODES = [
@@ -61,17 +62,17 @@ export default function Themes() {
     setLoading(true);
     try {
       await updateUser({ reading_mode: mode, themes: selected });
-      if (!isEdit) {
-        try { await api('/dev/seed', { method: 'POST' }); } catch {}
-      }
-      router.replace('/(tabs)/home');
+      // En modification depuis Découvrir : on revient d'où l'on vient ; à l'inscription : cap sur l'accueil.
+      if (isEdit) { if (router.canGoBack()) router.back(); else router.replace('/(tabs)/discover'); }
+      else router.replace('/(tabs)/home');
     } finally { setLoading(false); }
   };
 
   return (
-    <View style={[styles.c, { paddingTop: insets.top + spacing.lg, paddingBottom: insets.bottom + spacing.lg }]} testID="onboarding-themes">
+    <View style={[styles.c, { paddingTop: isEdit ? 0 : insets.top + spacing.lg, paddingBottom: insets.bottom + spacing.lg }]} testID="onboarding-themes">
+      {isEdit && <ScreenHeader title={t('Mes sujets')} backTestID="themes-back" />}
       <ScrollView contentContainerStyle={{ padding: spacing.xl }} showsVerticalScrollIndicator={false}>
-        <Text style={styles.step}>{t('Étape 2 sur 2')}</Text>
+        {!isEdit && <Text style={styles.step}>{t('Étape 2 sur 2')}</Text>}
         <Text style={styles.title}>{t('Tu lis surtout pour…')}</Text>
         <View style={styles.modeRow}>
           {MODES.map(m => (

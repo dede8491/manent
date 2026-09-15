@@ -11,7 +11,7 @@ import { useT } from '@/src/i18n';
 import ManentLoader from '@/src/components/ManentLoader';
 import { ScreenHeader } from '@/src/components/ScreenHeader';
 
-type Fiche = { book_id: string; title: string; author?: string; rating?: number; updated_at?: string; has_summary?: boolean };
+type Fiche = { book_id: string; title: string; author?: string; rating?: number; updated_at?: string; has_summary?: boolean; has_fiche?: boolean; finished?: boolean };
 
 export default function Carnet() {
   const t = useT();
@@ -62,34 +62,46 @@ export default function Carnet() {
           {fiches.length === 0 ? (
             <View style={{ paddingVertical: spacing.xxl, alignItems: 'center' }}>
               <Text style={styles.emptyTitle}>{t('Aucune fiche pour l’instant.')}</Text>
-              <Text style={styles.emptySub}>{t('Ouvre un livre de ta bibliothèque et commence sa fiche de lecture.')}</Text>
+              <Text style={styles.emptySub}>{t('Termine un livre, ou ouvre un livre de ta bibliothèque et commence sa fiche de lecture.')}</Text>
             </View>
           ) : (
             <View style={{ gap: spacing.md, marginTop: spacing.md }}>
               {fiches.map(f => (
-                <Pressable
-                  key={f.book_id}
-                  testID={`carnet-fiche-${f.book_id}`}
-                  onPress={() => router.push({ pathname: '/fiche/[bookId]', params: { bookId: f.book_id } })}
-                  style={styles.card}
-                >
-                  <BookCover uri={(f as any).cover} title={f.title} width={44} height={60} initialSize={22} />
-                  <View style={{ flex: 1, gap: 2 }}>
-                    <Text style={styles.cardTitle} numberOfLines={1}>{f.title}</Text>
-                    {!!f.author && <Text style={styles.cardMeta} numberOfLines={1}>{f.author}</Text>}
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                      {(f.rating || 0) > 0 && (
-                        <View style={{ flexDirection: 'row', gap: 1 }}>
-                          {[1, 2, 3, 4, 5].map(n => (
-                            <Ionicons key={n} name={n <= (f.rating || 0) ? 'star' : 'star-outline'} size={11} color={n <= (f.rating || 0) ? colors.chambray : colors.bisque} />
-                          ))}
-                        </View>
-                      )}
-                      {!!f.updated_at && <Text style={styles.cardDate}>{fmtDate(f.updated_at)}</Text>}
+                <View key={f.book_id} style={styles.card} testID={`carnet-fiche-${f.book_id}`}>
+                  <Pressable
+                    testID={`carnet-open-${f.book_id}`}
+                    onPress={() => router.push({ pathname: '/fiche/[bookId]', params: { bookId: f.book_id } })}
+                    accessibilityRole="button"
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}
+                  >
+                    <BookCover uri={(f as any).cover} title={f.title} width={44} height={60} initialSize={22} />
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <Text style={styles.cardTitle} numberOfLines={1}>{f.title}</Text>
+                      {!!f.author && <Text style={styles.cardMeta} numberOfLines={1}>{f.author}</Text>}
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        {(f.rating || 0) > 0 && (
+                          <View style={{ flexDirection: 'row', gap: 1 }}>
+                            {[1, 2, 3, 4, 5].map(n => (
+                              <Ionicons key={n} name={n <= (f.rating || 0) ? 'star' : 'star-outline'} size={11} color={n <= (f.rating || 0) ? colors.chambray : colors.bisque} />
+                            ))}
+                          </View>
+                        )}
+                        {!!f.updated_at && <Text style={styles.cardDate}>{fmtDate(f.updated_at)}</Text>}
+                      </View>
                     </View>
+                    <Feather name="chevron-right" size={18} color={colors.clay} />
+                  </Pressable>
+                  {/* Deux portes par livre : la fiche de lecture (à remplir, exportable) et, s'il est terminé, la fiche de fin (générée depuis le journal). */}
+                  <View style={styles.links}>
+                    <Text style={styles.linkHint} numberOfLines={1}>{f.has_fiche ? t('Fiche de lecture') : t('Fiche de lecture à commencer')}</Text>
+                    {f.finished && (
+                      <Pressable testID={`carnet-wrapup-${f.book_id}`} onPress={() => router.push({ pathname: '/journal/wrapup/[bookId]', params: { bookId: f.book_id } })} accessibilityRole="button" hitSlop={6} style={styles.linkBtn}>
+                        <Feather name="award" size={12} color={colors.chambray} />
+                        <Text style={styles.linkText} numberOfLines={1}>{t('Fiche de fin de livre')}</Text>
+                      </Pressable>
+                    )}
                   </View>
-                  <Feather name="chevron-right" size={18} color={colors.clay} />
-                </Pressable>
+                </View>
               ))}
             </View>
           )}
@@ -106,7 +118,11 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   lockText: { fontFamily: fonts.body, fontSize: 13.5, color: colors.clay, textAlign: 'center', lineHeight: 20 },
   premiumBtn: { marginTop: spacing.sm, height: 46, paddingHorizontal: spacing.xl, borderRadius: radius.pill, backgroundColor: colors.chambray, alignItems: 'center', justifyContent: 'center' },
   premiumBtnText: { fontFamily: fonts.bodyMedium, fontSize: 14, color: colors.creme },
-  card: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },
+  card: { backgroundColor: colors.creme, borderRadius: radius.md, borderWidth: 1, borderColor: colors.borderSoft, padding: spacing.md },
+  links: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, marginTop: spacing.sm, paddingTop: spacing.sm, borderTopWidth: 1, borderTopColor: colors.borderSoft },
+  linkHint: { flexShrink: 1, fontFamily: fonts.body, fontSize: 11.5, color: colors.clay },
+  linkBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, minHeight: 30, paddingHorizontal: 10, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderSoft, flexShrink: 0 },
+  linkText: { fontFamily: fonts.bodyMedium, fontSize: 12, color: colors.chambray },
   cardTitle: { fontFamily: fonts.displayMedium, fontSize: 18, color: colors.espresso },
   cardMeta: { fontFamily: fonts.body, fontSize: 12.5, color: colors.clay },
   cardDate: { fontFamily: fonts.body, fontSize: 11, color: colors.clay },

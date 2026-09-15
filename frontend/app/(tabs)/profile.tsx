@@ -176,7 +176,7 @@ export default function Profile() {
             {adminBadge > 0 && <View style={styles.badgeDot} testID="admin-badge"><Text style={styles.badgeDotText}>{adminBadge > 99 ? '99+' : adminBadge}</Text></View>}
           </Pressable>
         )}
-        <Pressable testID="row-carnet" onPress={() => router.push('/carnet')} accessibilityRole="button" style={styles.row}><Feather name="book-open" size={18} color={colors.espresso} /><Text style={styles.rowLabel} numberOfLines={2}>{t('Mes fiches de lecture')}</Text>{!premium?.is_premium && <View style={styles.premiumTag}><Text style={styles.premiumTagText}>PREMIUM</Text></View>}</Pressable>
+        <Pressable testID="row-carnet" onPress={() => router.push('/carnet')} accessibilityRole="button" style={styles.row}><Feather name="book-open" size={18} color={colors.espresso} /><Text style={styles.rowLabel} numberOfLines={2}>{t('Mes fiches de lecture')}</Text>{!premium?.is_premium && <View style={styles.premiumTag}><Text style={styles.premiumTagText}>PREMIUM</Text></View>}<Feather name="chevron-right" size={16} color={colors.clay} /></Pressable>
         <Pressable testID="row-settings" onPress={() => router.push('/settings')} accessibilityRole="button" style={styles.row}><Feather name="settings" size={18} color={colors.espresso} /><Text style={styles.rowLabel} numberOfLines={2}>{t('Paramètres')}</Text></Pressable>
         <Pressable testID="row-signout" onPress={signOut} accessibilityRole="button" style={styles.row}><Feather name="log-out" size={18} color={colors.espresso} /><Text style={styles.rowLabel} numberOfLines={2}>{t('Se déconnecter')}</Text></Pressable>
       </View>

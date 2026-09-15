@@ -7,6 +7,7 @@ import { useColors, useStyles } from '@/src/themeCtx';
 import { api } from '@/src/api';
 import { InfoTooltip } from '@/src/components/InfoTooltip';
 import { ClubCard } from '@/src/components/ClubCard';
+import { Toast } from '@/src/components/Toast';
 import { useT } from '@/src/i18n';
 
 // Onglet Club : tes clubs, créer (Premium) / rejoindre par code, clubs publics.
@@ -24,6 +25,7 @@ export function ClubHome({ clubs, onOpenClub, onCreateClub, onJoinClub }: {
   const [premium, setPremium] = useState<boolean | null>(null);
   const [pubClubs, setPubClubs] = useState<any[]>([]);
   const [joining, setJoining] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
   useFocusEffect(React.useCallback(() => {
     (async () => {
@@ -45,11 +47,16 @@ export function ClubHome({ clubs, onOpenClub, onCreateClub, onJoinClub }: {
       await api(`/clubs/${cid}/join`, { method: 'POST' });
       setPubClubs(prev => prev.filter(c => c.club_id !== cid));
       onOpenClub(cid);
-    } catch {}
-    finally { setJoining(null); }
+    } catch (e: any) {
+      // Un club passé en fermé entre-temps ne se rejoint plus qu'avec son code.
+      setToast(e?.status === 403 && e?.detail?.detail === 'private_club'
+        ? t('Ce club est sur invitation : demande son code à sa créatrice.')
+        : t('Impossible de rejoindre ce club pour l’instant.'));
+    } finally { setJoining(null); }
   };
 
   return (
+    <View style={{ flex: 1 }}>
     <ScrollView contentContainerStyle={{ paddingBottom: 100 }} testID="club-home">
       <View style={{ marginTop: spacing.xl }}>
         <View style={styles.sectionHeaderRow}>
@@ -108,6 +115,8 @@ export function ClubHome({ clubs, onOpenClub, onCreateClub, onJoinClub }: {
         )}
       </View>
     </ScrollView>
+    <Toast visible={!!toast} text={toast || ''} onHide={() => setToast(null)} testID="toast-club-home" />
+    </View>
   );
 }
 

@@ -149,3 +149,66 @@ async def test_notification_preferences_filter(client, fake_db):
     assert await push.filter_recipients([user["user_id"]], "new_follower") == [user["user_id"]]
     assert push.notif_kind({"title": "Léa", "message": "« … »", "action_url": "/quote/q9"}) == "followed_quote"
     assert push.notif_kind({"title": "Mon club", "message": "x", "action_url": "/club/c1"}) == "club"
+
+
+async def test_fiches_list_includes_finished_books(client, fake_db):
+    headers, user = await register(client, email="fiche@manent-tests.org", pseudo="Fiche")
+    uid = user["user_id"]
+    await fake_db.books.insert_one({"book_id": "bk_f1", "user_id": uid, "type": "papier", "title": "Terminé sans fiche", "status": "termine", "finished_at": server.now_utc()})
+    await fake_db.books.insert_one({"book_id": "bk_f2", "user_id": uid, "type": "papier", "title": "Fiche commencée", "status": "en_cours", "fiche": {"summary": "x", "updated_at": server.now_utc()}})
+    await fake_db.books.insert_one({"book_id": "bk_f3", "user_id": uid, "type": "papier", "title": "Ni l'un ni l'autre", "status": "en_cours"})
+    r = await client.get("/api/fiches", headers=headers)
+    assert r.status_code == 200
+    rows = {x["book_id"]: x for x in r.json()["fiches"]}
+    assert set(rows) == {"bk_f1", "bk_f2"}, "un livre terminé a sa fiche de fin ; un livre en cours sans fiche n'apparaît pas"
+    assert rows["bk_f1"]["finished"] is True and rows["bk_f1"]["has_fiche"] is False
+    assert rows["bk_f2"]["finished"] is False and rows["bk_f2"]["has_fiche"] is True and rows["bk_f2"]["has_summary"] is True
+
+
+async def test_finished_year_keeps_old_reads_out_of_this_years_goal(client, fake_db):
+    headers, user = await register(client, email="annee@manent-tests.org", pseudo="Année")
+    # Livre lu en 2024, ajouté aujourd'hui comme « Terminé »
+    r = await client.post("/api/books", json={"type": "papier", "title": "Lu en 2024", "status": "termine", "pages": 100, "finished_year": 2024}, headers=headers)
+    assert r.status_code == 200 and r.json()["finished_at"].startswith("2024-06-30")
+    # Livre terminé cette année, puis corrigé à 2023
+    r = await client.post("/api/books", json={"type": "papier", "title": "Lu cette année", "status": "termine", "pages": 100}, headers=headers)
+    b2 = r.json()
+    assert b2["finished_at"].startswith(str(server.now_utc().year))
+    stats = (await client.get("/api/stats/reading", headers=headers)).json()
+    assert stats["books_year"] == 1
+    r = await client.patch(f"/api/books/{b2['book_id']}", json={"finished_year": 2023}, headers=headers)
+    assert r.status_code == 200 and r.json()["finished_at"].startswith("2023-06-30")
+    stats = (await client.get("/api/stats/reading", headers=headers)).json()
+    assert stats["books_year"] == 0
+
+
+async def test_join_club_code_is_tolerant_and_admin_can_offer_premium(client, fake_db):
+    h1, u1 = await register(client, email="owner@manent-tests.org", pseudo="Owner")
+    h2, u2 = await register(client, email="guest@manent-tests.org", pseudo="Guest")
+    # Premium offert par l'admin (0 € pour les tests), puis création d'un club privé
+    await fake_db.users.update_one({"user_id": u1["user_id"]}, {"$set": {"is_admin": True}})
+    r = await client.patch(f"/api/admin/users/{u1['user_id']}/premium", json={"is_premium": True}, headers=h1)
+    assert r.status_code == 200 and r.json()["plan"] == "offert"
+    assert (await client.get("/api/premium/status", headers=h1)).json()["is_premium"] is True
+    r = await client.post("/api/clubs", json={"name": "Club test", "visibility": "private"}, headers=h1)
+    assert r.status_code == 200, r.text
+    club = r.json()
+    # Code tapé avec des espaces et en minuscules, ou lien d'invitation collé en entier : accepté
+    r = await client.post("/api/clubs/join", json={"code": f" {club['code'][:3].lower()} {club['code'][3:]} "}, headers=h2)
+    assert r.status_code == 200 and r.json()["club_id"] == club["club_id"]
+    r = await client.post("/api/clubs/join", json={"code": f"https://example.org/api/s/c/{club['code']}"}, headers=h2)
+    assert r.status_code == 200
+    assert (await client.get(f"/api/clubs/{club['club_id']}", headers=h2)).json()["members_count"] == 2
+    assert (await client.post("/api/clubs/join", json={"code": "ZZZZZZ"}, headers=h2)).status_code == 404
+    # Retrait du Premium offert
+    r = await client.patch(f"/api/admin/users/{u1['user_id']}/premium", json={"is_premium": False}, headers=h1)
+    assert r.status_code == 200 and (await client.get("/api/premium/status", headers=h1)).json()["is_premium"] is False
+
+
+async def test_reader_contacts_is_not_shadowed_by_handle_route(client, fake_db):
+    h1, u1 = await register(client, email="c1@manent-tests.org", pseudo="Camille")
+    h2, u2 = await register(client, email="c2@manent-tests.org", pseudo="Dara")
+    await fake_db.follows.insert_one({"follower_id": u1["user_id"], "followed_id": u2["user_id"], "created_at": server.now_utc()})
+    r = await client.get("/api/readers/contacts", headers=h1)
+    assert r.status_code == 200, r.text
+    assert [x["pseudo"] for x in r.json()["readers"]] == ["Dara"]

@@ -59,7 +59,7 @@ export default function BrowseScreen() {
       <ScreenHeader title={params.title || t('Livres')} backTestID="browse-back" />
 
       <View style={styles.toolbar}>
-        <Pressable testID="browse-filters" onPress={() => router.push({ pathname: '/filters', params: { f: params.f || '', sort, q: params.q || '', from: 'browse' } })} style={styles.toolBtn}>
+        <Pressable testID="browse-filters" onPress={() => router.push({ pathname: '/filters', params: { f: params.f || '', sort, q: params.q || '', from: 'browse', title: params.title || '' } })} style={styles.toolBtn}>
           <Feather name="sliders" size={15} color={colors.espresso} />
           <Text style={styles.toolText}>{t('Filtres')}</Text>
           {n > 0 && <View style={styles.countPill}><Text style={styles.countText}>{n}</Text></View>}

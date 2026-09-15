@@ -43,48 +43,50 @@ export function QuoteCard({ quote, onPress, compact, onPressAuthor, onLike }: { 
       <Text style={styles.quoteMark}>&ldquo;</Text>
       <Text style={styles.quoteText} numberOfLines={compact ? 6 : undefined}>{quote.text}</Text>
       <View style={styles.divider} />
+      {/* Source : titre complet (deux lignes), auteur, et la page. En grille, la page reste discrète (« p. 89 »)
+          pour laisser toute la largeur au titre ; en pleine largeur, le grand chiffre de page est conservé. */}
       <View style={styles.footer}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.source} numberOfLines={1}>{source}</Text>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={styles.source} numberOfLines={2}>{source}</Text>
           {!!authorLine && <Text style={styles.author} numberOfLines={1}>{authorLine}</Text>}
+          {compact && num ? <Text style={styles.pageInline}>{isWattpad ? t('chap. {n}', { n: num }) : t('p. {n}', { n: num })}</Text> : null}
         </View>
-        {num ? (
+        {!compact && num ? (
           <View style={styles.pageBox}>
             <Text style={styles.pageNum}>{num}</Text>
             <Text style={styles.pageLabel}>{label}</Text>
           </View>
         ) : null}
       </View>
-      {(reader || hasStats) ? (
-        <View style={styles.metaRow}>
-          {reader ? (
-            <Pressable
-              testID={`quote-author-${quote.quote_id}`}
-              onPress={openAuthor}
-              disabled={!openAuthor}
-              hitSlop={6}
-              accessibilityRole={openAuthor ? 'button' : undefined}
-              accessibilityLabel={openAuthor ? t('Voir le profil de {pseudo}', { pseudo: reader }) : reader}
-              style={styles.readerRow}
-            >
-              <Avatar uri={quote.author?.picture} name={quote.author?.pseudo} size={compact ? 22 : 26} />
-              <Text style={styles.reader} numberOfLines={1}>{reader}</Text>
-            </Pressable>
-          ) : <View style={{ flex: 1 }} />}
-          {hasStats && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-              <Pressable testID={`quote-like-${quote.quote_id}`} onPress={onLike} disabled={!onLike} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('Aimer')} accessibilityState={{ selected: !!quote.liked_by_me }} style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                <Feather name="heart" size={13} color={quote.liked_by_me ? colors.danger : colors.clay} />
-                <Text style={[styles.stat, quote.liked_by_me && { color: colors.danger }]}>{quote.likes_count || 0}</Text>
-              </Pressable>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                <Feather name="message-circle" size={13} color={colors.clay} />
-                <Text style={styles.stat}>{quote.comments_count || 0}</Text>
-              </View>
-            </View>
-          )}
-        </View>
+      {reader ? (
+        <Pressable
+          testID={`quote-author-${quote.quote_id}`}
+          onPress={openAuthor}
+          disabled={!openAuthor}
+          hitSlop={6}
+          accessibilityRole={openAuthor ? 'button' : undefined}
+          accessibilityLabel={openAuthor ? t('Voir le profil de {pseudo}', { pseudo: reader }) : reader}
+          style={styles.readerRow}
+        >
+          <Avatar uri={quote.author?.picture} name={quote.author?.pseudo} size={compact ? 34 : 36} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.reader} numberOfLines={2}>{reader}</Text>
+            {!!handle && quote.author?.pseudo ? <Text style={styles.readerHandle} numberOfLines={1}>@{handle}</Text> : null}
+          </View>
+        </Pressable>
       ) : null}
+      {hasStats && (
+        <View style={styles.statsRow}>
+          <Pressable testID={`quote-like-${quote.quote_id}`} onPress={onLike} disabled={!onLike} hitSlop={8} accessibilityRole="button" accessibilityLabel={t('Aimer')} accessibilityState={{ selected: !!quote.liked_by_me }} style={styles.statItem}>
+            <Feather name="heart" size={14} color={quote.liked_by_me ? colors.danger : colors.clay} />
+            <Text style={[styles.stat, quote.liked_by_me && { color: colors.danger }]}>{quote.likes_count || 0}</Text>
+          </Pressable>
+          <View style={styles.statItem}>
+            <Feather name="message-circle" size={14} color={colors.clay} />
+            <Text style={styles.stat}>{quote.comments_count || 0}</Text>
+          </View>
+        </View>
+      )}
     </Pressable>
   );
 }
@@ -107,14 +109,17 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   },
   quoteText: { fontFamily: fonts.display, fontSize: 20, lineHeight: 28, color: colors.espresso },
   divider: { height: 1, backgroundColor: colors.borderSoft, marginVertical: spacing.md, opacity: 0.5 },
-  footer: { flexDirection: 'row', alignItems: 'flex-end' },
-  source: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1.6, textTransform: 'uppercase' },
-  author: { fontFamily: fonts.body, fontSize: 12, color: colors.clay, marginTop: 2 },
-  pageBox: { alignItems: 'flex-end' },
+  footer: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
+  source: { fontFamily: fonts.displayMedium, fontSize: 15, lineHeight: 19, color: colors.espresso },
+  author: { fontFamily: fonts.body, fontSize: 12.5, color: colors.clay, marginTop: 2 },
+  pageInline: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay, letterSpacing: 1, textTransform: 'uppercase', marginTop: 4 },
+  pageBox: { alignItems: 'flex-end', flexShrink: 0 },
   pageNum: { fontFamily: fonts.displayMedium, fontSize: 34, color: colors.espresso, lineHeight: 36 },
   pageLabel: { fontFamily: fonts.bodyMedium, fontSize: 10, color: colors.clay, letterSpacing: 2 },
-  metaRow: { marginTop: spacing.md, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  readerRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0 },
-  reader: { flexShrink: 1, fontFamily: fonts.bodyMedium, fontSize: 12, color: colors.espresso },
-  stat: { fontFamily: fonts.bodyMedium, fontSize: 11, color: colors.clay },
+  readerRow: { marginTop: spacing.md, flexDirection: 'row', alignItems: 'center', gap: 10, minWidth: 0 },
+  reader: { fontFamily: fonts.bodyMedium, fontSize: 13.5, lineHeight: 17, color: colors.espresso },
+  readerHandle: { fontFamily: fonts.body, fontSize: 11.5, color: colors.clay, marginTop: 1 },
+  statsRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: spacing.sm },
+  statItem: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 28 },
+  stat: { fontFamily: fonts.bodyMedium, fontSize: 12, color: colors.clay },
 });
