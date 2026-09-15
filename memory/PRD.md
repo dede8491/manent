@@ -362,6 +362,11 @@ Testé e2e via curl (création publique, discover, join, correspondance titre in
 - L'utilisatrice publie et lance elle-même l'analyse puis la suppression depuis le Dashboard admin en production. Aucun identifiant/URL de prod partagé (choix définitif de l'utilisatrice).
 - Contexte : la base de PROD n'est pas accessible depuis le pod (environnements isolés, confirmé support). Workflow validé avec l'utilisatrice : Publish → appel de la route sur le backend déployé (dry-run) → validation utilisatrice → apply. NE JAMAIS lancer apply sans validation explicite.
 
+## Fusion 75aa23b→a255626 — Fiches de lecture, boutons vérifiés, Léa plus recréée (juin 2026)
+- Fusion sans conflit des 7 commits (fiches de lecture avec livres terminés + fiche de fin, QuoteCard titre complet/avatar 34px, année de lecture « Lu en », erreurs d'ajout visibles, titres BnF nettoyés, code club tolérant + lien d'invitation sans compte, Premium offert depuis UsersAdmin, /readers/contacts déclaré avant /readers/{handle}, aucun bouton muet, POST /dev/seed SUPPRIMÉ — Léa plus jamais recréée, sera supprimée par l'utilisatrice via l'admin).
+- Vérifié : /dev/seed absent, ordre des routes readers OK, /api/upload Emergent intact, aucun fichier supprimé recréé, gating applinks intact, .env intacts. tsc 0 erreur, lint 0 erreur, pytest 34/34, backend+expo relancés, e2e : accueil + admin (Premium offert visible) OK.
+- Workflow post-fusion demandé par l'utilisatrice À CHAQUE fusion : rappeler « Save to GitHub → dede8491/manent → main » puis « Générer un nouveau build iOS » (aucun push direct possible, pas de token GitHub dans le pod).
+
 ## Fusion e6b3bcf — Entitlement Associated Domains purgé + chiffrement déclaré (juin 2026)
 - Fusion sans conflit, app.config.js seul : iosWithoutApplinks() retire com.apple.developer.associated-domains PARTOUT (associatedDomains + ios.entitlements) tant que EXPO_PUBLIC_IOS_APPLINKS≠1, et ITSAppUsesNonExemptEncryption=false. Vérifié via `npx expo config` : aucun associatedDomains résolu, flag chiffrement présent. EXPO_PUBLIC_IOS_APPLINKS absent du .env (voulu). Build iOS à relancer par l'utilisatrice APRÈS re-Publish (le build du 3 sept. utilisait un vieux snapshot).
 
