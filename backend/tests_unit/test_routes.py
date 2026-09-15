@@ -201,3 +201,12 @@ async def test_join_club_code_is_tolerant_and_admin_can_offer_premium(client, fa
     # Retrait du Premium offert
     r = await client.patch(f"/api/admin/users/{u1['user_id']}/premium", json={"is_premium": False}, headers=h1)
     assert r.status_code == 200 and (await client.get("/api/premium/status", headers=h1)).json()["is_premium"] is False
+
+
+async def test_reader_contacts_is_not_shadowed_by_handle_route(client, fake_db):
+    h1, u1 = await register(client, email="c1@manent-tests.org", pseudo="Camille")
+    h2, u2 = await register(client, email="c2@manent-tests.org", pseudo="Dara")
+    await fake_db.follows.insert_one({"follower_id": u1["user_id"], "followed_id": u2["user_id"], "created_at": server.now_utc()})
+    r = await client.get("/api/readers/contacts", headers=h1)
+    assert r.status_code == 200, r.text
+    assert [x["pseudo"] for x in r.json()["readers"]] == ["Dara"]
