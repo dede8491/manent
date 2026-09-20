@@ -1,22 +1,21 @@
-"""Notifications push — relais Emergent managed (SuprSend)."""
+"""Notifications push — service push d'Expo (https://exp.host/--/api/v2/push/send).
+
+Chaque appareil enregistre son jeton Expo (`ExponentPushToken[...]`) via POST /register-push ; les envois
+passent par l'API Expo, qui relaie vers APNs / FCM avec les clés déposées sur le projet EAS.
+Variable d'environnement optionnelle : EXPO_ACCESS_TOKEN (sécurité renforcée des envois).
+"""
 import os
 import logging
 import httpx
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from deps import get_current_user, db, now_utc, new_id
 
 logger = logging.getLogger("manent")
 
-PUSH_BASE_URL = "https://integrations.emergentagent.com"
-PUSH_KEY = os.environ.get("EMERGENT_PUSH_KEY", "placeholder")
-
-_client = httpx.AsyncClient(
-    base_url=PUSH_BASE_URL,
-    headers={"X-Push-Key": PUSH_KEY},
-    timeout=10.0,
-)
+EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
+EXPO_ACCESS_TOKEN = os.environ.get("EXPO_ACCESS_TOKEN", "")
 
 router = APIRouter(prefix="/api")
 
@@ -28,14 +27,16 @@ class RegisterPushBody(BaseModel):
 
 @router.post("/register-push", status_code=201)
 async def register_push(body: RegisterPushBody, user=Depends(get_current_user)):
-    # L'identité vient de la session — jamais du client
-    payload = {"user_id": user["user_id"], "platform": body.platform, "device_token": body.device_token}
-    resp = await _client.post("/api/v1/push/users/register", json=payload)
-    if resp.status_code == 401:
-        raise HTTPException(500, "EMERGENT_PUSH_KEY missing or invalid")
-    if resp.status_code >= 500:
-        raise HTTPException(502, "Push provider unavailable")
-    resp.raise_for_status()
+    """Enregistre (ou rattache à ce compte) le jeton push de l'appareil. L'identité vient de la session."""
+    token = (body.device_token or "").strip()
+    if not token.startswith("ExponentPushToken[") and not token.startswith("ExpoPushToken["):
+        return {"status": "ignored"}
+    await db.push_tokens.update_one(
+        {"token": token},
+        {"$set": {"user_id": user["user_id"], "platform": body.platform, "token": token, "updated_at": now_utc()},
+         "$setOnInsert": {"created_at": now_utc()}},
+        upsert=True,
+    )
     return {"status": "registered"}
 
 
@@ -115,6 +116,19 @@ async def store_notifications(recipients: list, data: dict, idempotency_key: str
         logger.warning("notification store failed (non-blocking): %s", e)
 
 
+async def _expo_send(messages: list) -> list:
+    """POST vers l'API push d'Expo (jusqu'à 100 messages par appel). Renvoie les tickets."""
+    headers = {"Accept": "application/json", "Content-Type": "application/json"}
+    if EXPO_ACCESS_TOKEN:
+        headers["Authorization"] = f"Bearer {EXPO_ACCESS_TOKEN}"
+    async with httpx.AsyncClient(timeout=15) as http:
+        r = await http.post(EXPO_PUSH_URL, json=messages, headers=headers)
+    if r.status_code >= 400:
+        logger.warning("expo push failed: %s %s", r.status_code, r.text[:200])
+        return []
+    return (r.json() or {}).get("data") or []
+
+
 async def send_push(recipients: list, data: dict, idempotency_key: str | None = None) -> None:
     """Envoie un push aux user_ids donnés. Ne jamais bloquer l'opération principale (appeler dans try/except)."""
     if not recipients:
@@ -125,14 +139,23 @@ async def send_push(recipients: list, data: dict, idempotency_key: str | None = 
     if not recipients:
         return
     await store_notifications(recipients, data, idempotency_key)
-    # max 100 destinataires par appel — on découpe
-    for i in range(0, len(recipients), 100):
-        payload: dict = {"recipients": recipients[i:i + 100], "data": data}
-        if idempotency_key:
-            payload["$idempotency_key"] = f"{idempotency_key}-{i}"
-        resp = await _client.post("/api/v1/push/trigger", json=payload)
-        if resp.status_code == 401:
-            raise HTTPException(500, "EMERGENT_PUSH_KEY missing or invalid")
-        if resp.status_code >= 500:
-            raise HTTPException(502, "Push provider unavailable")
-        resp.raise_for_status()
+    tokens = await db.push_tokens.find({"user_id": {"$in": recipients}}, {"_id": 0, "token": 1}).to_list(5000)
+    if not tokens:
+        return
+    payload = {k: v for k, v in (data.get("data") or {}).items()}
+    if data.get("action_url"):
+        payload["action_url"] = data["action_url"]
+    messages = [{"to": t["token"], "title": data["title"], "body": data["message"], "data": payload, "sound": "default"}
+                for t in tokens]
+    for i in range(0, len(messages), 100):
+        chunk = messages[i:i + 100]
+        try:
+            tickets = await _expo_send(chunk)
+        except Exception as e:
+            logger.warning("expo push error: %s", e)
+            continue
+        # Jetons périmés (appareil désinstallé) : on les oublie
+        for msg, ticket in zip(chunk, tickets):
+            if isinstance(ticket, dict) and ticket.get("status") == "error" \
+                    and (ticket.get("details") or {}).get("error") == "DeviceNotRegistered":
+                await db.push_tokens.delete_one({"token": msg["to"]})

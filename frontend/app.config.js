@@ -19,8 +19,17 @@ function iosWithoutApplinks(ios = {}) {
   return { ...rest, ...(Object.keys(ent).length ? { entitlements: ent } : {}) };
 }
 
+// Projet Expo (EAS) : identifiant et propriétaire fournis par l'environnement de build (secrets GitHub),
+// pour que le même dépôt puisse être compilé depuis n'importe quel compte Expo sans modifier app.json.
+const EAS_PROJECT_ID = process.env.EAS_PROJECT_ID || (config => config.extra && config.extra.eas && config.extra.eas.projectId);
+
 module.exports = ({ config }) => ({
   ...config,
+  ...(process.env.EXPO_OWNER ? { owner: process.env.EXPO_OWNER } : {}),
+  extra: {
+    ...config.extra,
+    eas: { ...((config.extra || {}).eas || {}), ...(typeof EAS_PROJECT_ID === 'string' ? { projectId: EAS_PROJECT_ID } : {}) },
+  },
   ios: {
     ...(APPLINKS_ON ? { ...config.ios, associatedDomains: [`applinks:${PUBLIC_DOMAIN}`] } : iosWithoutApplinks(config.ios)),
     infoPlist: {
