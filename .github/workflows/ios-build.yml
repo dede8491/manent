@@ -68,9 +68,18 @@ jobs:
                EXPO_PUBLIC_REVENUECAT_TEST_API_KEY: $t }' eas.json > "$tmp" && mv "$tmp" eas.json
 
       - name: Clé App Store Connect (signature et envoi sans identifiant Apple)
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
         run: |
           printf '%s' "${{ secrets.ASC_API_KEY_P8 }}" > "$RUNNER_TEMP/asc-key.p8"
           echo "EXPO_ASC_API_KEY_PATH=$RUNNER_TEMP/asc-key.p8" >> "$GITHUB_ENV"
+          # La même clé sert à l'envoi TestFlight (profil submit), hors du dossier du projet pour ne pas être
+          # téléversée avec les sources du build.
+          tmp=$(mktemp)
+          jq --arg p "$RUNNER_TEMP/asc-key.p8" --arg k "$ASC_KEY_ID" --arg i "$ASC_ISSUER_ID" \
+            '.submit.production.ios += { ascApiKeyPath: $p, ascApiKeyId: $k, ascApiKeyIssuerId: $i }' \
+            eas.json > "$tmp" && mv "$tmp" eas.json
 
       - name: Build EAS (et envoi TestFlight)
         env:
@@ -93,7 +102,8 @@ jobs:
             # EAS refuse de créer les certificats Apple en mode non interactif, et il passe en non interactif
             # dès que CI=true (le cas sur GitHub Actions) ou sans terminal. On lui donne donc CI=false et un
             # pseudo-terminal, puis on valide chaque question par Entrée : les réponses par défaut génèrent le
-            # certificat de distribution, le profil de provisionnement, la clé push et la clé de soumission.
+            # certificat de distribution et le profil de provisionnement. La clé push n'est pas créée ici :
+            # Apple exige une session Apple ID (mot de passe + code) pour cela, voir DEPLOIEMENT.md.
             ( while true; do echo; sleep 2; done ) | CI=false script -qefc "eas build $ARGS" /dev/null
           else
             eas build $ARGS --non-interactive
