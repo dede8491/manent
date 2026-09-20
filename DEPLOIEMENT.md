@@ -47,8 +47,11 @@ Chaque fusion sur `main` redéploie le backend automatiquement.
 | `ASC_ISSUER_ID` | l'Issuer ID affiché sur la même page |
 | `APPLE_TEAM_ID` | Apple Developer → Membership (ex. `LKS2WGPAQ5`) |
 
-Le build iOS se lance depuis GitHub → Actions → « Build iOS (TestFlight) » → Run workflow. EAS génère et conserve
-les certificats et profils grâce à la clé App Store Connect ; le build est envoyé sur TestFlight automatiquement.
+Le build iOS se lance depuis GitHub → Actions → « Build iOS (TestFlight) » → Run workflow. La toute première
+fois, cocher « premiere_fois » : EAS crée alors le certificat de distribution, le profil de provisionnement, la clé
+push et la clé de soumission grâce à la clé App Store Connect, et les conserve sur expo.dev. Les fois suivantes, la
+case reste décochée. L'envoi automatique sur TestFlight sans intervention exige l'identifiant numérique de l'app
+(App Store Connect → Informations sur l'app → « ID Apple ») dans `frontend/eas.json` (`submit.production.ios.ascAppId`).
 
 ## Ordre de mise en place
 
