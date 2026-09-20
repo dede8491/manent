@@ -81,6 +81,9 @@ jobs:
           EXPO_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           EXPO_APPLE_TEAM_TYPE: INDIVIDUAL
           EAS_BUILD_NO_EXPO_GO_WARNING: "true"
+          # L'API Apple rejette la synchronisation automatique des capacités de l'App ID (bug EAS/Apple) ;
+          # les capacités se gèrent à la main sur developer.apple.com → Identifiers.
+          EXPO_NO_CAPABILITY_SYNC: "1"
         run: |
           ARGS="--platform ios --profile production --wait"
           if [ "${{ inputs.submit }}" = "true" ]; then
