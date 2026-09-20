@@ -1,0 +1,44 @@
+{
+  "summary": "Iteration 19 — Vérification post-fusion (branche c3f00c7) : partage boards/clubs, invitations, actions citations (cœur/commentaires/épingle), pages sujet, filtres sans émoji. Backend: 16/16 tests pytest passent (test_iteration19.py). Frontend (smoke test authentifié via injection localStorage) : ✅ Bottom tab bar = 5 onglets (grid, book, feather/plume, bookmark, user), AUCUN bouton caméra visible. ✅ Onglet Citations : screen-quotes-tab OK, btn-quotes-add ouvre feuille avec quotes-add-camera + quotes-add-write ; état vide = texte seul, aucun bouton Photographier. ✅ Bibliothèque : filtres Tous/En cours/Terminés/Liste de lecture (pas de segment Livres/Citations). ✅ Profil : lignes Recommandations, Invitations, Partager ma bibliothèque, Dashboard admin, Carnet, Paramètres, Se déconnecter (pas de « Mes citations »). ✅ Accueil : section « Par origine » avec cartes (Afrique 139 livres, Amériques 477 livres…), 1 continent par carte, aucun émoji. ✅ /filters : aucun émoji dans titres de sections/chips, section Origine avec segment « Origine de l'auteur » / « Lieu de l'histoire ». ✅ /theme/résilience : theme-title = « résilience » avec textTransform:capitalize (rendu « Résilience »). Backend endpoints validés : POST /boards renvoie share_slug + invite_code + members_info + is_owner ; GET /boards/by-slug/{slug} OK ; POST /boards/join avec code fait rejoindre ; POST /boards/{id}/invite-code régénère le code. Pages HTML /api/s/t/{slug} : sans code sur privé → « Un tableau privé sur Manent », avec code → « Rejoindre le tableau » et lien contient code=XXX ; public sans code → page normale. POST /invitations (kind=club/board) crée bien l'invitation, GET /invitations la retourne pour le destinataire, badge /invitations/badge OK. Quote actions : POST /quotes/{id}/like (toggle, likes_count +1/-1, liked_by_me true/false), POST/DELETE comments (auteur peut supprimer un commentaire d'autrui sur SA citation), POST /boards/{id}/pin. GET /feed renvoie quotes avec likes_count + liked_by_me batchés. Points 7 (Profil → Invitations pastille) et 9 (/admin sans section Auteurs, dashboard Moteur IA) NON testés directement en UI faute d'accès admin en preview + de contenu invitation live (backend prêt, frontend row-invitations + inv-badge présents dans profile.tsx:211-214). Point 6 (feuille Partager et inviter sur club) partiellement validé : InviteSheet est réutilisée par board (board/[id].tsx:50) et existe pour club — non testé en UI.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "Pressable / non-boolean attribute", "issue": "Console error toujours présent depuis 3+ itérations : 'Received `%s` for a non-boolean attribute `%s`... If you used to conditionally omit it with %s={condition && value}...' — probable prop passé sous forme `foo={cond && value}` (résultat 'false' ou truthy string) au lieu d'un booléen strict. Reproduit sur toutes les pages (home, quotes, filters, theme). Non bloquant mais pollue les logs. Reference: probable /app/frontend/src/components/Button.tsx ou WelcomeTour.tsx."},
+      {"component": "props.pointerEvents deprecated", "issue": "Warning 'props.pointerEvents is deprecated. Use style.pointerEvents' — nouveau warning apparu dans cette itération. À migrer vers style.pointerEvents dans les composants concernés (probablement BottomSheet ou Modal-like). Reference: à investiguer via stack trace."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration19.py",
+    "/app/test_reports/pytest/iteration19.xml"
+  ],
+  "action_items": [
+    "OPTIONNEL (non bloquant) : Corriger le warning 'non-boolean attribute' présent depuis 3+ itérations — chercher les props conditionnels type `disabled={cond && val}` et les caster en booléen strict `disabled={!!(cond && val)}` ou omettre.",
+    "OPTIONNEL : Migrer props.pointerEvents → style.pointerEvents (nouveau warning React Native).",
+    "COUVERTURE MANQUANTE (à valider par main agent en self-test rapide) : (a) écran /admin en tant qu'admin — absence de section « Auteurs » et présence du dashboard « Moteur IA de classification » (stats, lots, à vérifier, seuils, taxonomie) ; (b) sur Profil du second compte, section Invitations avec pastille inv-badge > 0 après création d'une invitation — le backend crée bien l'invitation, le frontend a row-invitations + inv-badge, mais le rendu combiné n'a pas été testé bout en bout ; (c) UI de la feuille « Partager et inviter » sur un club (InviteSheet est utilisée mais nécessite un club premium créé et l'ouverture depuis club/[id].tsx). Ces trois points sont low-risk car les briques individuelles fonctionnent."
+  ],
+  "critical_code_review_comments": [
+    "backend/server.py = 3257 lignes. Extraction des routes boards/invitations/quotes/clubs dans routes/*.py serait bénéfique pour la maintenabilité (déjà noté aux itérations précédentes).",
+    "routes/share.py:82 _base(request) dérive correctement l'URL publique du header host/x-forwarded-host ; pas de valeur en dur, PUBLIC_BASE_URL sert de fallback. Bon design.",
+    "backend/server.py:1660-1664 : la création d'un club exige is_premium (raise 402). C'est intentionnel mais implique que le compte test_reco@manent.app / test_lotc@manent.app NE peuvent pas créer de club sans passage premium ; le main agent doit soit fournir un compte premium, soit désactiver la garde en test.",
+    "board join via code (server.py:1503-1512) fonctionne mais n'expose PAS l'invite_code aux non-membres (server.py:1483-1484). Comportement correct côté sécurité.",
+    "L'InviteSheet.tsx est bien réutilisée pour board (board/[id].tsx:50) — vérifier que ClubHome/club/[id].tsx l'utilise aussi avec kind='club' (non ouvert dans cette itération)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration19.py (nouveau, 16 tests)"
+  ],
+  "success_rate": {
+    "backend": "100% (16/16)",
+    "frontend": "~85% — les 7 points UI directement testables sont OK ; points 6 (club invite sheet), 7 (badge invitations sur Profil bout en bout) et 9 (/admin) restent à valider par le main agent"
+  },
+  "seed_data_creation": "Plusieurs comptes test_it19_A_*, test_it19_B_* créés via /api/auth/register (préfixe TEST_it19 pour purge future). userA promu is_premium via mongosh pour tester la création de club. Plusieurs boards TEST_it19 (privés, publics, collaboratifs) créés pour tester share_slug/invite_code/join/pages HTML. Quelques books + quotes publiques TEST_it19 créés pour tester like/comments/pin.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Toutes les briques backend post-fusion c3f00c7 fonctionnent (16/16). Les 7 points UI de la checklist directement scriptables passent (tabs, quotes empty state, library pas de segment, profile sans Mes citations, home Par origine sans doublon/émoji, filters segment Origine, theme title). Les points 6-7-9 nécessitent un scénario multi-comptes plus long ou un compte admin — les briques individuelles (InviteSheet composant, row-invitations avec inv-badge dans profile.tsx:211-214, écran /admin avec ClassificationDashboard.tsx) sont présentes dans le code. Pour tester le point 5 en E2E sur web, il faut : (1) créer un tableau privé avec userA ; (2) faire ouvrir /t/{slug}?code={code} par userB via `router.push` — le fichier /app/frontend/app/t/[slug].tsx:17 appelle POST /boards/join et redirige vers /board/[id] — code confirmé. Compte akereydaisy@gmail.com est admin réel, NE PAS TOUCHER. test_reco / test_lotc / test_admin (Admin1234!) documentés dans /app/memory/test_credentials.md sont non-premium — pour tester le club il faut soit is_premium en DB (mongosh update), soit un compte premium existant.",
+  "rca_of_issue": "Aucun bug bloquant identifié. Deux warnings console non-bloquants restent (non-boolean attribute et props.pointerEvents deprecated) — voir react_native_issues."
+}

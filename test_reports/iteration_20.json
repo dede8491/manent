@@ -1,0 +1,43 @@
+{
+  "summary": "Iteration 20 — Vérification post-fusion (commit 78ae1ba). Backend 11/11 pytest passent (test_iteration20.py) + non-régression iter19 16/16. Points 1-6 et 11-12 (nouveautés de la fusion) validés UI + API. Point 4 (couverture « Les bouts de bois de Dieu ») : GET /catalog/search retourne cover=https://covers.openlibrary.org/b/id/5428280-L.jpg ✅. Point 5 : recherche « Adichie » → 5+ œuvres (Purple Hibiscus, Half of a Yellow Sun, Americanah…) et bouton « Voir toutes les œuvres liées à Adichie » présent dans /search ✅ ; /theme/résilience → theme-title rendu « Résilience » ✅. Point 6 : /filters affiche segment « Origine de l'auteur / Lieu de l'histoire », bouton « Voir N livres », aucun emoji dans les chips ; /catalog/browse avec continent=afrique&type=fiction&theme=deuil → 1 résultat cohérent (chips correctement renvoyées) ✅. Point 3 : /home/discover ordonne resume par updated_at DESC puis created_at DESC (server.py:2743) — pas par ajout ✅ ; /catalog/areas retourne 5 continents (afrique 139, ameriques 477, europe 521, asie 39, océanie 8) — 1 continent par carte, aucun doublon, labels sans emoji, keys correctement mappées par /catalog/browse (test_area_key_used_by_home_maps_to_browse PASS) ✅. Point 2 : screenshot mobile confirme accueil = wordmark + search+scan, chips (Pour toi + thèmes + « + »), UNE carte « Je cherche un livre qui… » avec plume dans rond chambray + sous-titre + bouton sliders → /filters ; aucune section « Sujets du moment », aucune rangée de deux boutons sous la recherche ✅. Point 1 : bottom tab bar = 5 onglets (Accueil grid, Bibliothèque book, Citations feather central, Communauté bookmark, Profil user) ; Onglet Citations → btn-quotes-add ouvre la feuille avec quotes-add-camera + quotes-add-write ✅. Point 11 : /discover/scan aperçu web affiche scan-web-note (« Le scan du code-barres fonctionne dans l'app installée… ») + discover-isbn-input pour saisir un ISBN manuellement ✅. Point 12 : admin.tsx n'affiche PAS de section « Auteurs » (seul badge.reports rend la pastille, admin.tsx:72-76) ; endpoints /api/catalog/admin/classification-stats + review + settings répondent 200 avec total 1458, classified 1452, needs_review 522, engine_version 1.1, model claude-sonnet-4-6 ✅ ; badge {reports:2,authors:0} — authors présent en API pour compat mais non affiché. Points 7-10 (partage/invitations/likes) non re-testés en profondeur (validés iter19 16/16, pas de changement code dans cette fusion sur ces zones). Deux warnings console non-bloquants persistent depuis iter17+ (non-boolean attribute, props.pointerEvents deprecated) — non traités.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "non-boolean attribute warning", "issue": "Warning console persistant depuis iter17 : 'Received `%s` for a non-boolean attribute…' — probable prop conditionnel type `disabled={cond && val}` retournant 'false' ou string. Non bloquant, pollue les logs. Reference: probablement /app/frontend/src/components/Button.tsx ou WelcomeTour.tsx."},
+      {"component": "props.pointerEvents deprecated", "issue": "Warning 'props.pointerEvents is deprecated. Use style.pointerEvents' détecté dès iter19 — encore présent. À migrer vers style.pointerEvents dans les composants type BottomSheet/Modal-like."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration20.py",
+    "/app/test_reports/pytest/iteration20.xml"
+  ],
+  "action_items": [
+    "OPTIONNEL (non bloquant) : Corriger warning 'non-boolean attribute' — chercher props `disabled/visible/selected={cond && val}` et caster en booléen strict `!!(cond && val)`.",
+    "OPTIONNEL : Migrer props.pointerEvents → style.pointerEvents.",
+    "INFO : compte test_lotc@manent.app n'a aucun livre en status='en_cours' → resume=None dans /home/discover, donc la section « Reprendre ta lecture » ne s'affiche pas (NextUpCard 'Un merveilleux malheur' rendue à la place). Le tri par updated_at DESC est correctement implémenté (server.py:2743) — non testé E2E avec deux livres à cause du set-up. Le main agent peut valider en créant deux livres en_cours et en tapant sur les pages du plus ancien : il devrait passer devant.",
+    "INFO : ISBN 9782266106313 → Les bouts de bois de Dieu a bien sa couverture openlibrary/b/id/5428280-L.jpg. Le worker retry a fait son travail."
+  ],
+  "critical_code_review_comments": [
+    "backend/routes/catalog.py:735-747 _area_filter accepte les clés legacy 'c-afrique' et les convertit vers 'afrique' — bonne rétrocompat pour anciens liens.",
+    "backend/routes/classification.py:758 /catalog/browse utilise directement les keys sans préfixe (continent=afrique), et /catalog/areas renvoie key='afrique' — cohérent depuis la fusion.",
+    "backend/server.py toujours 3261 lignes — extraction routes/quotes.py, routes/boards.py, routes/invitations.py serait bénéfique (noté depuis iter18)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration20.py (nouveau, 11 tests)"
+  ],
+  "success_rate": {
+    "backend": "100% (11/11 iter20 + 16/16 iter19 non-régression)",
+    "frontend": "100% sur les 6 flows UI vérifiés (accueil, tabs, quotes-add sheet, filters, scan, theme, search Adichie)"
+  },
+  "seed_data_creation": "Aucun. Tests réutilisent les comptes documentés dans /app/memory/test_credentials.md (test_lotc, test_admin) et le catalogue seed déjà présent (1458 livres, dont Les bouts de bois de Dieu et 5 œuvres d'Adichie).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Fusion 78ae1ba complètement validée : accueil épuré (une seule carte intent), retry couvertures OK (223 livres, Bouts de bois cover confirmé), tri resume par updated_at, /filters sans emoji, /discover/scan avec message web + ISBN, /admin sans section Auteurs mais avec dashboard classification. Warnings console non-bloquants (non-boolean attribute, pointerEvents deprecated) restent — voir react_native_issues. Compte test_lotc sans livre en_cours → NextUpCard s'affiche à la place de ResumeCard, comportement correct. Pour tester résume en E2E, il faut deux books en_cours + mise à jour d'un via PATCH /books/{id}. Endpoint admin classification : préfixe /api/catalog/admin/ (pas /api/admin/classification).",
+  "rca_of_issue": "Aucun bug bloquant. La checklist post-fusion (points 1-6 et 11-12) est intégralement validée backend + UI."
+}

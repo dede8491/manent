@@ -1,0 +1,48 @@
+{
+  "summary": "Iteration 18 — Testing des lots C (aires par pays d'auteur), A (share pages + .well-known dynamiques), E (suppression /books/search) et correctifs deploy (/health, /api/upload → Emergent Object Storage, _attach_public_meta batché). Backend: 21/21 tests pytest passent (test_iteration18.py) — /health & /api/health 200, /api/catalog/isbn/9782070368228 renvoie une fiche complète avec countries/country_labels, /api/books/search retourne 404 (route supprimée, capté par /books/{book_id}), /api/catalog/search?q=cyrulnik retourne des résultats avec countries/country_labels/areas, /api/catalog/areas/française renvoie 20+ livres avec facette countries (FR/BE) et filtre &country=FR fonctionne, admin authors 403 pour non-admin / 200 pour admin avec tri pays inconnu en tête et champs corrects, PATCH admin/authors/{id} avec {country:SN} recalcule bien areas=['africaine'] et countries=['SN'] sur les livres liés (testé avec auteur/livre temporaire), /api/upload retourne url https://…/api/files/manent/uploads/{user_id}/{uuid}.jpg puis GET public de cette url renvoie 200 image/jpeg sans auth, .well-known/apple-app-site-association et /assetlinks.json retournent du JSON valide avec com.manent.app, pages /api/s/q|b|u|c/{id} servent du HTML avec og:title/og:description/og:url (dérivée du header host de la requête), 'bientôt disponible' pour les boutons store et lien manent://, /api/feed renvoie des quotes avec author {pseudo,handle,picture} et book {title,author,type} batchés. Frontend: deep link redirect fonctionne (/q/{id} et /@{handle} sans auth → redirection vers /onboarding) MAIS pending_deep_link N'EST PAS PERSISTÉ en storage (AsyncStorage.setItem non awaité + router.replace immédiat → l'écriture IndexedDB est annulée avant complétion). Une erreur dev-overlay 'not_authenticated' s'affiche brièvement depuis app/quote/[id].tsx:36 avant la redirection. Impossible de tester la page /area/française et la recherche livre car l'app utilise AsyncStorage→IndexedDB (impossibilité d'injecter un token via localStorage pour bypass onboarding rapidement).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "app/quote/[id].tsx", "issue": "En ouvrant /q/{id} sans être connecté, l'écran quote détail lance un fetch AVANT que NavGate ne redirige, ce qui déclenche une erreur 'not_authenticated' rouge visible en dev overlay Metro (voir screenshot). En prod le user ne verra pas la stack mais l'écran clignote brièvement. Ajouter un guard useAuth() ou un early return si !user avant le fetch. Reference: /app/frontend/app/quote/[id].tsx:36-46 (api call in src/api.ts:43).", "testID": "screen-quote-detail", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [
+      {"flow": "Deep link mémorisation (Lot A4)", "issue": "En ouvrant /q/{id} ou /@{handle} sans compte, la redirection vers /onboarding fonctionne bien, MAIS la clé pending_deep_link N'EST PAS enregistrée dans le storage (ni localStorage ni IndexedDB après 6s d'attente). Cause probable: dans /app/frontend/app/_layout.tsx ligne 117, AsyncStorage.setItem('pending_deep_link', ...) est appelé SANS await avant router.replace('/onboarding') ligne 118. Sur web, AsyncStorage utilise IndexedDB (idb-async) qui est asynchrone — le router.replace déclenche un unmount/rerender qui interrompt l'écriture avant qu'elle ne se commit. Conséquence: après login, le user est envoyé vers /(tabs)/home au lieu de la citation. Fix: `await AsyncStorage.setItem(...)` puis router.replace. Reference: /app/frontend/app/_layout.tsx:116-118.", "affected_testIDs": []}
+    ],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "Pressable / non-boolean attr warning", "issue": "Console error récurrent 'Received `%s` for a non-boolean attribute `%s`... If you used to conditionally omit it with %s={condition && value}...' — présent depuis l'itération 16, non résolu. À investiguer côté Pressable/PrimaryButton (probablement un prop passé sous forme d'expression conditionnelle plutôt qu'un booléen strict, ex: disabled={condition && value} au lieu de disabled={!!(condition && value)}). Non bloquant mais pollue les logs. Reference: multiple, probable /app/frontend/src/components/Button.tsx."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration18.py",
+    "/app/test_reports/pytest/iteration18.xml"
+  ],
+  "action_items": [
+    "PRIORITÉ HAUTE: Corriger la persistance de pending_deep_link dans _layout.tsx:116-118 — utiliser `await AsyncStorage.setItem('pending_deep_link', ...)` avant `router.replace('/onboarding')`. Sans cela, la fonctionnalité 'deep link mémorisé + appliqué après onboarding' du Lot A4 ne fonctionne PAS sur web (et probablement idem sur natif car l'écriture peut être coupée par l'unmount).",
+    "PRIORITÉ MOYENNE: Dans app/quote/[id].tsx (et sans doute book/[id].tsx, profile/[handle].tsx, club/[code].tsx), ajouter un early return si !user (via useAuth) pour éviter le fetch qui déclenche une erreur 'not_authenticated' visible en dev.",
+    "OPTIONNEL: Nettoyer le warning console 'non-boolean attribute' présent depuis 3 itérations — probablement dans Button.tsx.",
+    "OPTIONNEL: Envisager de tester la page /area/[key] et book/add via un scénario end-to-end (register → onboarding thèmes complet → home → navigation) pour couvrir le frontend authentifié (hors périmètre de cette itération car trop long)."
+  ],
+  "critical_code_review_comments": [
+    "server.py atteint 2820 lignes (>>700). Extraction toujours candidate: routes/auth.py, routes/books.py, routes/quotes.py, routes/upload.py, routes/feed.py — la nouvelle route /api/upload + /api/files pourrait être extraite dans routes/upload.py aux côtés de _storage_put/_storage_get.",
+    "routes/book_search.py:232 définit encore `@router.get('/books/search')` mais le router n'est PAS monté dans server.py — code mort. À supprimer ou noter comme intentionnel (helper functions _search_google/_search_openlibrary sont importées ailleurs).",
+    "routes/share.py utilise `request.headers.get('x-forwarded-host') or request.headers.get('host')` — correct pour dériver l'og:url. Le fallback sur PUBLIC_BASE_URL (vide en prod) donnerait une URL relative si la requête ne contenait ni host ni x-forwarded-host — cas peu réaliste mais à surveiller.",
+    "_layout.tsx:117 — AsyncStorage.setItem non awaité avant router.replace: bug UX significatif sur web (voir integration_issues).",
+    "L'ID minimum pour manent://{target.lstrip('/')} dans share.py:42 est bien construit à partir de target (routes /q/{id}, /b/{id}, etc.) — pas d'injection HTML possible car html.escape est appliqué."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration18.py (nouveau, 21 tests)"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "50% — deep link redirect OK, mais persistance pending_deep_link KO; recherche livre et page aire non testées faute d'accès rapide au flow authentifié en web preview"
+  },
+  "seed_data_creation": "2 comptes test_it18_* créés via /api/auth/register (dont 1 promu admin via mongosh direct db.users.update). 1 auteur temporaire + 1 livre temporaire créés dans catalog_authors/catalog_books pour tester le PATCH admin (nettoyés en fin de test). 1 livre + 1 quote publique TEST_it18_share créés pour tester /api/s/q/{id} (nettoyés en fin de test). Compte admin akereydaisy@gmail.com NON touché.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend Lot C/A/E entièrement OK (21/21). Le seul vrai bug frontend est la NON-persistance de pending_deep_link dans _layout.tsx:117 — la redirection marche mais la mémorisation échoue. Pour tester le deep link mémorisé end-to-end après fix, il faut: (1) ouvrir /q/{quote_id_public_réel} sans compte, (2) vérifier localStorage/IndexedDB contient 'pending_deep_link' = '/q/{id}', (3) faire l'onboarding complet (register + choix thèmes), (4) vérifier redirection auto vers /q/{id}. Le pattern de test via injection localStorage NE MARCHE PAS car AsyncStorage sur web utilise IndexedDB. Comptes: akereydaisy@gmail.com (vrai admin — NE PAS toucher), test.manent@example.com/Test1234! (premium test), test_lotc@manent.app/Test1234! (test standard onboarding thèmes non complété). Le worker d'origine des auteurs tourne encore en arrière-plan (attendu). L'aire française a 47 livres avec countries=[FR,BE,...] — chips fonctionnelles côté backend. /api/books/search a été supprimé — les tests confirment que curl renvoie 404 (via fallback /books/{book_id}) ce qui satisfait la spec.",
+  "rca_of_issue": "BUG deep-link persistance: dans /app/frontend/app/_layout.tsx ligne 116-118, `AsyncStorage.setItem('pending_deep_link', normalizeDeepLink(pathname)).catch(() => {})` est appelé SANS await, puis `router.replace('/onboarding')` est exécuté immédiatement. Sur web, AsyncStorage utilise IndexedDB (asynchrone). router.replace déclenche un remount du composant Stack qui peut interrompre la transaction IndexedDB avant son commit. Test empirique confirmé: après 6s d'attente sur /q/abc123 ET /@someuser (redirigés vers /onboarding), localStorage ne contient que revenuecat_user_id et indexedDB.databases() retourne un array vide → pending_deep_link n'est jamais persisté. Mitigation: `await AsyncStorage.setItem('pending_deep_link', normalizeDeepLink(pathname));` avant router.replace. Alternative: écrire aussi dans sessionStorage/localStorage synchronement comme repli."
+}

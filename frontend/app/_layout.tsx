@@ -1,6 +1,6 @@
 import { Stack, useGlobalSearchParams, usePathname, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { LogBox, View, Platform, Linking, Alert } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -16,6 +16,12 @@ import { ThemeProvider, useColors, useScheme } from '@/src/themeCtx';
 import { I18nProvider, useT } from '@/src/i18n';
 import { initializeRevenueCat, SubscriptionProvider } from '@/src/revenuecat';
 import ManentLoader from '@/src/components/ManentLoader';
+
+// URL initiale du web, lue avant tout rendu (les redirections d'alias /q → /quote ne l'écrasent pas)
+const INITIAL_WEB_PATH: string | null =
+  Platform.OS === 'web' && typeof window !== 'undefined' ? window.location.pathname : null;
+const INITIAL_WEB_SEARCH: string =
+  Platform.OS === 'web' && typeof window !== 'undefined' ? window.location.search : '';
 
 LogBox.ignoreAllLogs(true);
 SplashScreen.preventAutoHideAsync();
@@ -101,8 +107,11 @@ function NavGate() {
 
   // Lot A4 : un lien profond ouvert sans compte est mémorisé, puis appliqué après l'onboarding.
   const pathname = usePathname();
+  // Chemin capturé au chargement (avant les redirections des routes alias /q → /quote)
+  const initialPath = useRef<string | null>(null);
+  if (initialPath.current === null) initialPath.current = INITIAL_WEB_PATH ?? pathname;
   const gparams = useGlobalSearchParams<{ follow?: string; edit?: string; code?: string }>();
-  const isDeepLink = (p: string) => /^\/(q|b|c|t)\//.test(p) || p.startsWith('/@') || p.startsWith('/api/s/');
+  const isDeepLink = (p: string) => /^\/(q|b|c|t|quote|book)\//.test(p) || p.startsWith('/@') || p.startsWith('/api/s/');
   const normalizeDeepLink = (p: string) => {
     let x = p.replace(/^\/api\/s/, '');
     if (x.startsWith('/u/')) x = '/@' + x.slice(3);
@@ -116,9 +125,17 @@ function NavGate() {
     const inOnboarding = first === 'onboarding';
     const inAuth = first === '(auth)';
     if (!user) {
-      if (isDeepLink(pathname)) {
-        AsyncStorage.setItem('pending_deep_link', normalizeDeepLink(pathname) + (gparams?.follow === '1' ? '?follow=1' : gparams?.code ? `?code=${gparams.code}` : '')).catch(() => {});
-        router.replace('/onboarding');
+      const target = isDeepLink(pathname) ? pathname
+        : (initialPath.current && isDeepLink(initialPath.current) ? initialPath.current : null);
+      if (target) {
+        initialPath.current = '';
+        const suffix = (gparams?.follow === '1' || INITIAL_WEB_SEARCH.includes('follow=1')) ? '?follow=1'
+          : (gparams?.code ? `?code=${gparams.code}`
+            : (INITIAL_WEB_SEARCH.includes('code=') ? INITIAL_WEB_SEARCH : ''));
+        (async () => {
+          try { await AsyncStorage.setItem('pending_deep_link', normalizeDeepLink(target) + suffix); } catch {}
+          router.replace('/onboarding');
+        })();
       } else if (atRoot || (!inOnboarding && !inAuth)) {
         router.replace('/onboarding');
       }

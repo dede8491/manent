@@ -10,6 +10,9 @@ import { api } from '@/src/api';
 import { useT } from '@/src/i18n';
 import { InviteSheet } from '@/src/components/InviteSheet';
 import { shareUrl } from '@/src/share';
+import { ErrorState } from '@/src/components/ErrorState';
+import { Toast } from '@/src/components/Toast';
+import { GhostButton } from '@/src/components/Button';
 
 export default function BoardDetail() {
   const t = useT();
@@ -20,12 +23,30 @@ export default function BoardDetail() {
   const router = useRouter();
   const [board, setBoard] = useState<any>(null);
   const [invite, setInvite] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  // 'private' : tableau privé d'une autre lectrice (403) ; 'error' : panne, on propose de réessayer.
+  const [loadError, setLoadError] = useState<null | 'private' | 'error'>(null);
 
-  useFocusEffect(useCallback(() => {
-    (async () => { const b = await api<any>(`/boards/${id}`); setBoard(b); })();
-  }, [id]));
+  const load = useCallback(async () => {
+    setLoadError(null);
+    try { setBoard(await api<any>(`/boards/${id}`)); }
+    catch (e: any) { setLoadError(e?.status === 403 ? 'private' : 'error'); }
+  }, [id]);
+  useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  if (!board) return <View style={{ flex: 1, backgroundColor: colors.glacier }} />;
+  if (!board || loadError === 'private') {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.glacier, alignItems: 'center', justifyContent: 'center', paddingTop: insets.top }} testID="screen-board-loading">
+        {loadError === 'private' ? (
+          <View style={styles.privateBox} testID="board-private">
+            <Feather name="lock" size={22} color={colors.clay} />
+            <Text style={styles.privateTitle}>{t('Ce tableau est privé.')}</Text>
+            <GhostButton title={t('Retour')} onPress={() => router.back()} testID="board-private-back" />
+          </View>
+        ) : loadError === 'error' ? <ErrorState onRetry={load} testID="board-error" /> : null}
+      </View>
+    );
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.glacier }} testID="screen-board">
@@ -58,9 +79,17 @@ export default function BoardDetail() {
         members={board.members_info}
         isOwner={!!board.is_owner}
         testID="board-invite"
-        onRegenerate={async () => { const r = await api<{ invite_code: string }>(`/boards/${id}/invite-code`, { method: 'POST' }); setBoard((b: any) => ({ ...b, invite_code: r.invite_code })); }}
-        onLeft={async () => { try { await api(`/boards/${id}/leave`, { method: 'POST' }); setInvite(false); router.back(); } catch {} }}
+        onRegenerate={async () => {
+          try { const r = await api<{ invite_code: string }>(`/boards/${id}/invite-code`, { method: 'POST' }); setBoard((b: any) => ({ ...b, invite_code: r.invite_code })); }
+          catch (e: any) {
+            // La feuille afficherait « Nouveau code » : on la ferme et on explique par-dessous.
+            setInvite(false);
+            setToast(e?.status === 403 ? t('Seule la propriétaire du tableau peut faire ça.') : t('Action impossible. Réessaie.'));
+          }
+        }}
+        onLeft={async () => { try { await api(`/boards/${id}/leave`, { method: 'POST' }); setInvite(false); router.back(); } catch { setToast(t('Action impossible. Réessaie.')); } }}
       />
+      <Toast visible={!!toast} text={toast || ''} onHide={() => setToast(null)} testID="toast-board" />
     </View>
   );
 }
@@ -73,4 +102,6 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   desc: { fontFamily: fonts.body, fontSize: 14, color: colors.espresso, marginTop: spacing.sm, lineHeight: 22 },
   emptyTitle: { fontFamily: fonts.displayMedium, fontSize: 22, color: colors.espresso, textAlign: 'center' },
   emptySub: { fontFamily: fonts.body, fontSize: 14, color: colors.clay, textAlign: 'center', marginTop: spacing.sm },
+  privateBox: { alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.xl },
+  privateTitle: { fontFamily: fonts.displayMedium, fontSize: 20, color: colors.espresso, textAlign: 'center' },
 });

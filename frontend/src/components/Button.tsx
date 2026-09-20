@@ -24,7 +24,7 @@ export function Button({ title, onPress, loading, disabled, testID, style, size 
     <Pressable
       testID={testID}
       onPress={onPress}
-      disabled={loading || disabled}
+      disabled={!!(loading || disabled)}
       accessibilityRole="button"
       accessibilityLabel={title}
       accessibilityState={{ disabled: !!(loading || disabled), busy: !!loading }}

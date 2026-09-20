@@ -1,3 +1,4 @@
+import { useAuth } from '@/src/auth';
 import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Modal, FlatList, Platform, Alert, Linking, TextInput, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,6 +16,7 @@ import { shareUrl } from '@/src/share';
 import { useT } from '@/src/i18n';
 import { GhostButton } from '@/src/components/Button';
 import ManentLoader from '@/src/components/ManentLoader';
+import { Toast } from '@/src/components/Toast';
 
 export default function QuoteDetail() {
   const t = useT();
@@ -23,6 +25,7 @@ export default function QuoteDetail() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { user } = useAuth();
   const [quote, setQuote] = useState<Quote | null>(null);
   const [style, setStyle] = useState<'papier'|'encre'|'glacier'>('papier');
   const [pinning, setPinning] = useState(false);
@@ -33,6 +36,8 @@ export default function QuoteDetail() {
   const [comments, setComments] = useState<any[] | null>(null);
   const [comment, setComment] = useState('');
   const [sendingComment, setSendingComment] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [pinError, setPinError] = useState('');
 
   const toggleLike = async () => {
     if (!quote) return;
@@ -53,21 +58,30 @@ export default function QuoteDetail() {
     } catch {} finally { setSendingComment(false); }
   };
   const deleteComment = async (cid: string) => {
-    try { const r = await api<{ comments_count: number }>(`/quotes/${id}/comments/${cid}`, { method: 'DELETE' }); setComments(prev => (prev || []).filter(c => c.comment_id !== cid)); setQuote(prev => prev ? ({ ...(prev as any), comments_count: r.comments_count }) : prev); } catch {}
+    try { const r = await api<{ comments_count: number }>(`/quotes/${id}/comments/${cid}`, { method: 'DELETE' }); setComments(prev => (prev || []).filter(c => c.comment_id !== cid)); setQuote(prev => prev ? ({ ...(prev as any), comments_count: r.comments_count }) : prev); }
+    catch (e: any) { setToast(e?.status === 403 ? t('Tu ne peux supprimer que tes commentaires.') : t('Suppression impossible.')); }
   };
 
   useEffect(() => {
+    if (!user) return; // NavGate redirige (deep link mémorisé) — pas de fetch sans session
     (async () => {
       const q = await api<Quote>(`/quotes/${id}`); setQuote(q);
     })();
-  }, [id]);
+  }, [id, user]);
 
   const openPin = async () => {
+    setPinError('');
     const r = await api<{ boards: any[] }>('/boards'); setBoards(r.boards); setPinning(true);
   };
   const pinTo = async (boardId: string) => {
-    await api(`/boards/${boardId}/pin`, { method: 'POST', body: JSON.stringify({ quote_id: id }) });
-    setPinning(false);
+    setPinError('');
+    try {
+      await api(`/boards/${boardId}/pin`, { method: 'POST', body: JSON.stringify({ quote_id: id }) });
+      setPinning(false);
+    } catch (e: any) {
+      // La feuille reste ouverte : un autre tableau peut accepter l'épingle.
+      setPinError(e?.status === 403 ? t('Impossible d’épingler dans ce tableau.') : t('Action impossible. Réessaie.'));
+    }
   };
   const del = async () => {
     await api(`/quotes/${id}`, { method: 'DELETE' });
@@ -354,10 +368,12 @@ export default function QuoteDetail() {
                 )}
               />
             )}
+            {pinError ? <Text style={styles.feedback} testID="pin-error">{pinError}</Text> : null}
             <GhostButton title={t('Fermer')} onPress={() => setPinning(false)} />
           </View>
         </View>
       </Modal>
+      <Toast visible={!!toast} text={toast || ''} onHide={() => setToast(null)} testID="toast-quote" />
     </View>
   );
 }

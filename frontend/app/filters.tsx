@@ -19,7 +19,7 @@ export default function FiltersScreen() {
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const params = useLocalSearchParams<{ f?: string; sort?: string; q?: string; from?: string }>();
+  const params = useLocalSearchParams<{ f?: string; sort?: string; q?: string; from?: string; title?: string }>();
   const tax = useTaxonomy();
   const [sel, setSel] = useState<Sel>(() => parseSel(params.f));
   const [count, setCount] = useState<number | null>(null);
@@ -52,8 +52,9 @@ export default function FiltersScreen() {
 
   const apply = () => {
     const f = JSON.stringify(sel);
-    if (params.from === 'browse') router.navigate({ pathname: '/browse', params: { f, sort: params.sort || 'pertinence', q: params.q || '' } });
-    else router.push({ pathname: '/browse', params: { f, sort: params.sort || 'pertinence', q: params.q || '' } });
+    const next = { f, sort: params.sort || 'pertinence', q: params.q || '', title: params.title || '' };
+    if (params.from === 'browse') router.navigate({ pathname: '/browse', params: next });
+    else router.push({ pathname: '/browse', params: next });
   };
 
   // Chip sans état : peut être définie ici sans risque (aucun focus à conserver).

@@ -2,8 +2,8 @@
 Manent — backend
 FastAPI + MongoDB + Emergent LLM (Claude Sonnet 4.6 vision) + Emergent Google Auth
 """
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, UploadFile, File, Form
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, UploadFile, File, Form, Request
+from fastapi.responses import JSONResponse, Response
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 import os, logging, uuid, base64, re, io, asyncio, unicodedata, hashlib, contextlib
@@ -19,11 +19,8 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 MONGO_URL = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
-DB_NAME = os.environ.get('DB_NAME', 'manent_db')
+DB_NAME = os.environ['DB_NAME']
 EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY', '')
-SUPABASE_URL = os.environ.get('SUPABASE_URL', '')
-SUPABASE_KEY = os.environ.get('SUPABASE_KEY', '')
-SUPABASE_BUCKET = os.environ.get('SUPABASE_BUCKET', 'manent-photos')
 
 from routes.book_search import _search_google, _search_openlibrary
 from routes.push import router as push_router, send_push
@@ -37,6 +34,13 @@ from deps import db, _client as client, now_utc, new_id, get_current_user  # une
 import reading
 
 app = FastAPI(title="Manent API")
+
+
+@app.get("/health")
+@app.get("/api/health")
+async def health():
+    """Sonde de santé Kubernetes (liveness/readiness)."""
+    return {"status": "ok"}
 api = APIRouter(prefix="/api")
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -187,7 +191,7 @@ async def emergent_session(body: SessionExchange):
     try:
         async with httpx.AsyncClient(timeout=15) as http:
             r = await http.get(
-                "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
+                os.environ["AUTH_SESSION_URL"],
                 headers={"X-Session-ID": body.session_id},
             )
         if r.status_code != 200:
@@ -242,7 +246,8 @@ async def admin_users(q: str = "", user=Depends(require_admin)):
     if q.strip():
         rx = {"$regex": re.escape(q.strip().lstrip("@")), "$options": "i"}
         flt = {"$or": [{"pseudo": rx}, {"handle": rx}, {"email": rx}]}
-    users = await db.users.find(flt, {"_id": 0, "user_id": 1, "pseudo": 1, "handle": 1, "email": 1, "picture": 1, "is_admin": 1, "created_at": 1}) \
+    users = await db.users.find(flt, {"_id": 0, "user_id": 1, "pseudo": 1, "handle": 1, "email": 1, "picture": 1, "is_admin": 1, "created_at": 1,
+                                      "is_premium": 1, "premium_plan": 1}) \
         .sort("created_at", -1).to_list(5000)
     uids = [u["user_id"] for u in users]
 
@@ -258,6 +263,25 @@ async def admin_users(q: str = "", user=Depends(require_admin)):
         u["last_login"] = last.get(u["user_id"])
         u["is_me"] = u["user_id"] == user["user_id"]
     return {"users": [clean_doc(u) for u in users], "total": len(users)}
+
+
+class AdminPremiumBody(BaseModel):
+    is_premium: bool
+
+
+@api.patch("/admin/users/{user_id}/premium")
+async def admin_set_premium(user_id: str, body: AdminPremiumBody, user=Depends(require_admin)):
+    """Premium offert (tests, bêta-testeuses) : active ou retire Premium sans passer par l'App Store.
+    Un achat réel via RevenueCat écrase ce réglage par le plan payé."""
+    target = await db.users.find_one({"user_id": user_id}, {"_id": 0, "user_id": 1})
+    if not target:
+        raise HTTPException(status_code=404, detail="user_not_found")
+    if body.is_premium:
+        await db.users.update_one({"user_id": user_id}, {"$set": {"is_premium": True, "premium_plan": "offert", "premium_since": now_utc()}})
+    else:
+        await db.users.update_one({"user_id": user_id}, {"$set": {"is_premium": False}, "$unset": {"premium_plan": "", "premium_since": ""}})
+    logger.info("premium %s for %s by admin @%s", "granted" if body.is_premium else "removed", user_id, user.get("handle"))
+    return {"user_id": user_id, "is_premium": body.is_premium, "plan": "offert" if body.is_premium else None}
 
 
 @api.delete("/admin/users/{user_id}")
@@ -329,11 +353,19 @@ async def get_my_themes(user=Depends(get_current_user)):
 
 
 async def _attach_public_meta(quotes: list):
+    # Chargement groupé (évite le N+1 : une requête livres + une requête lecteurs)
+    book_ids = list({qd["book_id"] for qd in quotes if qd.get("book_id")})
+    user_ids = list({qd["user_id"] for qd in quotes})
+    books = {b["book_id"]: b for b in await db.books.find(
+        {"book_id": {"$in": book_ids}}, {"_id": 0, "book_id": 1, "title": 1, "author": 1, "type": 1}).to_list(len(book_ids) or 1)} if book_ids else {}
+    users = {u["user_id"]: u for u in await db.users.find(
+        {"user_id": {"$in": user_ids}}, {"_id": 0, "user_id": 1, "pseudo": 1, "handle": 1, "picture": 1}).to_list(len(user_ids) or 1)} if user_ids else {}
     for qd in quotes:
-        if qd.get("book_id"):
-            qd["book"] = await db.books.find_one({"book_id": qd["book_id"]}, {"_id": 0, "title": 1, "author": 1, "type": 1})
-        u = await db.users.find_one({"user_id": qd["user_id"]}, {"_id": 0, "pseudo": 1, "handle": 1, "picture": 1})
-        qd["author"] = u
+        b = books.get(qd.get("book_id"))
+        if b:
+            qd["book"] = {k: b.get(k) for k in ("title", "author", "type")}
+        u = users.get(qd["user_id"])
+        qd["author"] = {k: u.get(k) for k in ("pseudo", "handle", "picture")} if u else None
 
 
 @api.get("/themes/{theme}/page")
@@ -444,6 +476,21 @@ async def toggle_follow(handle: str, user=Depends(get_current_user)):
     return {"following": following, "followers": followers}
 
 
+@api.get("/readers/contacts")
+async def reader_contacts(q: str = "", user=Depends(get_current_user)):
+    """Lectrices que je suis ou qui me suivent (destinataires possibles d'une recommandation)."""
+    uid = user["user_id"]
+    ids = set(f["followed_id"] for f in await db.follows.find({"follower_id": uid}, {"_id": 0, "followed_id": 1}).to_list(500))
+    ids |= set(f["follower_id"] for f in await db.follows.find({"followed_id": uid}, {"_id": 0, "follower_id": 1}).to_list(500))
+    flt: dict = {"user_id": {"$in": list(ids)}}
+    if q.strip():
+        rx = {"$regex": re.escape(q.strip()), "$options": "i"}
+        flt["$or"] = [{"pseudo": rx}, {"handle": rx}]
+    users = await db.users.find(flt, {"_id": 0, "pseudo": 1, "handle": 1, "picture": 1, "recos_enabled": 1}).sort("pseudo", 1).to_list(200)
+    return {"readers": [{"pseudo": u["pseudo"], "handle": u["handle"], "picture": u.get("picture"),
+                         "accepts": u.get("recos_enabled", True) is not False} for u in users]}
+
+
 @api.get("/readers/{handle}")
 async def public_profile(handle: str, user=Depends(get_current_user)):
     u = await db.users.find_one(
@@ -540,6 +587,7 @@ class BookCreate(BaseModel):
     mode: Literal['perso', 'etudes'] = 'perso'
     level: Optional[str] = None  # scolaire
     exam_date: Optional[str] = None
+    finished_year: Optional[int] = Field(None, ge=1900, le=2100)  # livre ajouté « Terminé » lu une année passée
 
 
 class BookPatch(BaseModel):
@@ -559,6 +607,7 @@ class BookPatch(BaseModel):
     exam_date: Optional[str] = None
     level: Optional[str] = None
     sheet: Optional[dict] = None  # fiche d'études: author_bio, characters, summary, themes
+    finished_year: Optional[int] = Field(None, ge=1900, le=2100)  # corriger l'année de lecture d'un livre terminé
 
 
 # ---- Couvertures : récupération automatique + migration ----
@@ -657,15 +706,25 @@ async def _check_in_progress_limit(user: dict, exclude_book_id: Optional[str] = 
         raise HTTPException(status_code=402, detail="books_in_progress_limit")
 
 
+def finished_at_for_year(year: Optional[int]) -> datetime:
+    """Date de fin pour une année de lecture déclarée : aujourd'hui si c'est l'année en cours (ou rien),
+    sinon le 30 juin de l'année dite, pour que l'objectif et la rétrospective de cette année-là le comptent."""
+    now = now_utc()
+    if not year or year >= now.year:
+        return now
+    return datetime(year, 6, 30, 12, 0, tzinfo=timezone.utc)
+
+
 @api.post("/books")
 async def create_book(body: BookCreate, user=Depends(get_current_user)):
     if body.status == "en_cours":
         await _check_in_progress_limit(user)
     book_id = new_id("bk")
+    finished_year = body.finished_year
     doc = {
         "book_id": book_id,
         "user_id": user["user_id"],
-        **body.dict(),
+        **body.dict(exclude={"finished_year"}),
         "rating": 0,
         "recap": "",
         "lessons": [],
@@ -681,7 +740,7 @@ async def create_book(body: BookCreate, user=Depends(get_current_user)):
             doc["progress_chapter"] = body.chapters
         elif body.pages:
             doc["progress_page"] = body.pages
-        doc["finished_at"] = now_utc()
+        doc["finished_at"] = finished_at_for_year(finished_year)
         doc["read_count"] = 1
     # Lecture suivante : un livre « à lire » rejoint la fin de la file
     if body.status == "a_lire":
@@ -817,6 +876,7 @@ async def patch_book(book_id: str, body: BookPatch, user=Depends(get_current_use
     if not book:
         raise HTTPException(status_code=404, detail="not_found")
     upd = {k: v for k, v in body.dict().items() if v is not None}
+    finished_year = upd.pop("finished_year", None)
     is_wattpad = book.get("type") == "wattpad"
     prog_key = "progress_chapter" if is_wattpad else "progress_page"
     total = (upd.get("chapters") or book.get("chapters")) if is_wattpad else (upd.get("pages") or book.get("pages"))
@@ -832,9 +892,12 @@ async def patch_book(book_id: str, body: BookPatch, user=Depends(get_current_use
         if total:
             upd[prog_key] = int(total)
         if book.get("status") != "termine":
-            upd["finished_at"] = now_utc()
+            upd["finished_at"] = finished_at_for_year(finished_year)
             upd["read_count"] = (book.get("read_count") or 0) + 1
             upd["is_rereading"] = False
+    # Année de lecture corrigée après coup (« je l'ai lu en 2024 ») : ne compte plus dans l'objectif de cette année
+    if finished_year and new_status != "termine" and book.get("status") == "termine":
+        upd["finished_at"] = finished_at_for_year(finished_year)
     elif new_status == "a_lire":
         upd[prog_key] = 0
         upd["is_rereading"] = False
@@ -1179,11 +1242,15 @@ async def list_quotes(book_id: Optional[str] = None, user=Depends(get_current_us
         q["book_id"] = book_id
     cur = db.quotes.find(q, {"_id": 0}).sort("created_at", -1)
     quotes = await cur.to_list(500)
-    # attach book info (title/author) minimal
-    for qd in quotes:
-        if qd.get("book_id"):
-            b = await db.books.find_one({"book_id": qd["book_id"]}, {"_id": 0, "title": 1, "author": 1, "type": 1})
-            qd["book"] = b
+    # attache titre/auteur des livres en une seule requête (pas de N+1)
+    bids = list({qd["book_id"] for qd in quotes if qd.get("book_id")})
+    if bids:
+        books = {b["book_id"]: b for b in await db.books.find(
+            {"book_id": {"$in": bids}}, {"_id": 0, "book_id": 1, "title": 1, "author": 1, "type": 1}).to_list(len(bids))}
+        for qd in quotes:
+            if qd.get("book_id"):
+                b = books.get(qd["book_id"])
+                qd["book"] = {k: b.get(k) for k in ("title", "author", "type")} if b else None
     return {"quotes": quotes}
 
 
@@ -1990,7 +2057,9 @@ async def _notify_clubs_progress(user: dict, book: dict, upd: dict):
 
 @api.post("/clubs/join")
 async def join_club(body: ClubJoin, user=Depends(get_current_user)):
-    club = await db.clubs.find_one({"code": body.code.strip().upper()}, {"_id": 0})
+    # Tolérant : espaces, tirets, minuscules, ou un lien d'invitation collé en entier (on garde les 6 derniers caractères).
+    code = re.sub(r"[^A-Z0-9]", "", (body.code or "").upper())[-6:]
+    club = await db.clubs.find_one({"code": code}, {"_id": 0}) if len(code) == 6 else None
     if not club:
         raise HTTPException(status_code=404, detail="unknown_code")
     if user["user_id"] not in club.get("members", []):
@@ -2393,10 +2462,7 @@ async def reading_stats(user=Depends(get_current_user)):
     # objectif annuel
     u = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "yearly_goal": 1})
     year_start = datetime(today.year, 1, 1, tzinfo=timezone.utc)
-    books_year = await db.books.count_documents({
-        "user_id": user["user_id"], "status": "termine",
-        "$or": [{"finished_at": {"$gte": year_start}}, {"finished_at": {"$exists": False}}],
-    })
+    books_year = await db.books.count_documents({"user_id": user["user_id"], "status": "termine", "finished_at": {"$gte": year_start}})
     return {
         "streak": streak, "week": week, "week_pages": week_pages,
         "active_days_month": active_month, "total_pages": total_pages,
@@ -2503,17 +2569,23 @@ async def save_fiche(book_id: str, body: FichePatch, user=Depends(get_current_us
 
 @api.get("/fiches")
 async def list_fiches(user=Depends(get_current_user)):
+    """« Mes fiches de lecture » : un livre y figure dès qu'il a une fiche de lecture commencée OU qu'il est terminé
+    (sa fiche de fin de livre existe alors, générée depuis le journal). Une seule liste, deux portes par livre."""
     books = await db.books.find(
-        {"user_id": user["user_id"], "fiche": {"$exists": True}},
-        {"_id": 0, "book_id": 1, "title": 1, "author": 1, "cover": 1, "rating": 1, "fiche.updated_at": 1, "fiche.summary": 1},
+        {"user_id": user["user_id"], "$or": [{"fiche": {"$exists": True}}, {"status": "termine"}]},
+        {"_id": 0, "book_id": 1, "title": 1, "author": 1, "cover": 1, "rating": 1, "status": 1, "finished_at": 1,
+         "fiche.updated_at": 1, "fiche.summary": 1},
     ).to_list(300)
     out = []
     for b in books:
-        f = b.pop("fiche", {}) or {}
-        b["updated_at"] = f.get("updated_at")
-        b["has_summary"] = bool(f.get("summary"))
+        f = b.pop("fiche", None)
+        finished_at = b.pop("finished_at", None)
+        b["has_fiche"] = f is not None
+        b["finished"] = b.pop("status", None) == "termine"
+        b["updated_at"] = (f or {}).get("updated_at") or finished_at
+        b["has_summary"] = bool((f or {}).get("summary"))
         out.append(b)
-    out.sort(key=lambda x: x.get("updated_at") or "", reverse=True)
+    out.sort(key=lambda x: str(x.get("updated_at") or ""), reverse=True)
     return {"fiches": out}
 
 
@@ -2854,21 +2926,6 @@ class RecommendationDecision(BaseModel):
     accept: bool
 
 
-@api.get("/readers/contacts")
-async def reader_contacts(q: str = "", user=Depends(get_current_user)):
-    """Lectrices que je suis ou qui me suivent (destinataires possibles d'une recommandation)."""
-    uid = user["user_id"]
-    ids = set(f["followed_id"] for f in await db.follows.find({"follower_id": uid}, {"_id": 0, "followed_id": 1}).to_list(500))
-    ids |= set(f["follower_id"] for f in await db.follows.find({"followed_id": uid}, {"_id": 0, "follower_id": 1}).to_list(500))
-    flt: dict = {"user_id": {"$in": list(ids)}}
-    if q.strip():
-        rx = {"$regex": re.escape(q.strip()), "$options": "i"}
-        flt["$or"] = [{"pseudo": rx}, {"handle": rx}]
-    users = await db.users.find(flt, {"_id": 0, "pseudo": 1, "handle": 1, "picture": 1, "recos_enabled": 1}).sort("pseudo", 1).to_list(200)
-    return {"readers": [{"pseudo": u["pseudo"], "handle": u["handle"], "picture": u.get("picture"),
-                         "accepts": u.get("recos_enabled", True) is not False} for u in users]}
-
-
 @api.post("/recommendations")
 async def create_recommendation(body: RecommendationBody, user=Depends(get_current_user)):
     target = await db.users.find_one({"handle": body.to_handle.lstrip("@")}, {"_id": 0, "user_id": 1, "pseudo": 1, "recos_enabled": 1})
@@ -3084,9 +3141,53 @@ async def feed(theme: Optional[str] = None, user=Depends(get_current_user)):
     return {"quotes": quotes}
 
 
-# ============ Upload (Supabase Storage) ============
+# ============ Upload (Emergent Object Storage) ============
+STORAGE_BASE = (os.environ.get("INTEGRATION_PROXY_URL") or "").strip() or "https://integrations.emergentagent.com"
+STORAGE_URL = STORAGE_BASE.rstrip("/") + "/objstore/api/v1/storage"
+_storage_key: Optional[str] = None
+
+
+async def _storage_init() -> str:
+    global _storage_key
+    if _storage_key:
+        return _storage_key
+    async with httpx.AsyncClient(timeout=30) as http:
+        r = await http.post(f"{STORAGE_URL}/init", json={"emergent_key": os.environ.get("EMERGENT_LLM_KEY")})
+    r.raise_for_status()
+    _storage_key = r.json()["storage_key"]
+    return _storage_key
+
+
+async def _storage_put(path: str, data: bytes, content_type: str):
+    global _storage_key
+    key = await _storage_init()
+    async with httpx.AsyncClient(timeout=120) as http:
+        r = await http.put(f"{STORAGE_URL}/objects/{path}",
+                           headers={"X-Storage-Key": key, "Content-Type": content_type}, content=data)
+        if r.status_code == 503:  # clé de stockage périmée → ré-init une fois
+            _storage_key = None
+            key = await _storage_init()
+            r = await http.put(f"{STORAGE_URL}/objects/{path}",
+                               headers={"X-Storage-Key": key, "Content-Type": content_type}, content=data)
+    r.raise_for_status()
+    return r.json()
+
+
+async def _storage_get(path: str) -> tuple[bytes, str]:
+    global _storage_key
+    key = await _storage_init()
+    async with httpx.AsyncClient(timeout=60) as http:
+        r = await http.get(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key})
+        if r.status_code == 503:
+            _storage_key = None
+            key = await _storage_init()
+            r = await http.get(f"{STORAGE_URL}/objects/{path}", headers={"X-Storage-Key": key})
+    r.raise_for_status()
+    return r.content, r.headers.get("Content-Type", "image/jpeg")
+
+
 @api.post("/upload")
-async def upload(file: UploadFile = File(...), user=Depends(get_current_user)):
+async def upload(request: Request, file: UploadFile = File(...), user=Depends(get_current_user)):
     data = await file.read()
     if len(data) > 10 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="file_too_large")
@@ -3099,105 +3200,35 @@ async def upload(file: UploadFile = File(...), user=Depends(get_current_user)):
         ext, ctype = "webp", "image/webp"
     else:
         raise HTTPException(status_code=415, detail="unsupported_image")
-    key = f"{user['user_id']}/{uuid.uuid4().hex}.{ext}"
-    if not SUPABASE_URL or not SUPABASE_KEY:
-        # Fallback: store as data URL locally in DB (dev only)
+    path = f"manent/uploads/{user['user_id']}/{uuid.uuid4().hex}.{ext}"
+    try:
+        await _storage_put(path, data, ctype)
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 402:
+            raise HTTPException(status_code=402, detail="storage_quota")
+        logger.error("object storage upload failed: %s %s", e.response.status_code, e.response.text[:300])
+        # Repli : data URL (dev uniquement)
         b64 = base64.b64encode(data).decode()
-        return {"url": f"data:{ctype};base64,{b64}", "key": key}
-    upload_url = f"{SUPABASE_URL}/storage/v1/object/{SUPABASE_BUCKET}/{key}"
-    headers = {
-        "apikey": SUPABASE_KEY,
-        "Authorization": f"Bearer {SUPABASE_KEY}",
-        "Content-Type": ctype,
-        "x-upsert": "true",
-    }
-    async with httpx.AsyncClient(timeout=30) as http:
-        r = await http.post(upload_url, headers=headers, content=data)
-    if r.status_code not in (200, 201):
-        logger.error("supabase upload failed: %s %s", r.status_code, r.text[:500])
-        raise HTTPException(status_code=502, detail="upload_failed")
-    public_url = f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET}/{key}"
-    return {"url": public_url, "key": key}
+        return {"url": f"data:{ctype};base64,{b64}", "key": path, "storage_failed": True}
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
+    url = f"https://{host}/api/files/{path}" if host else f"/api/files/{path}"
+    return {"url": url, "key": path}
+
+
+@api.get("/files/{path:path}")
+async def get_file(path: str):
+    """Lecture publique des images téléversées (chemins UUID non devinables)."""
+    if not re.fullmatch(r"manent/uploads/[A-Za-z0-9_\-]+/[a-f0-9]{32}\.(jpg|jpeg|png|webp)", path):
+        raise HTTPException(status_code=404, detail="not_found")
+    try:
+        content, ctype = await _storage_get(path)
+    except Exception:
+        raise HTTPException(status_code=404, detail="not_found")
+    return Response(content=content, media_type=ctype,
+                    headers={"Cache-Control": "public, max-age=31536000, immutable"})
 
 
 # ============ Seed demo data ============
-@api.post("/dev/seed")
-async def seed(user=Depends(get_current_user)):
-    if not user.get("is_admin"):
-        raise HTTPException(status_code=403, detail="forbidden")
-    # Seed public quotes for the feed if empty
-    existing_public = await db.quotes.count_documents({"is_public": True})
-    if existing_public > 5:
-        return {"ok": True, "already_seeded": True}
-    demos = [
-        {"title": "L'Alchimiste", "author": "Paulo Coelho", "type": "papier", "pages": 208,
-         "quotes": [
-            ("Quand tu veux quelque chose, tout l'univers conspire à te permettre de réaliser ton rêve.", 42, ["résilience", "confiance"]),
-            ("C'est la possibilité de réaliser un rêve qui rend la vie intéressante.", 18, ["confiance"]),
-         ]},
-        {"title": "Une si longue lettre", "author": "Mariama Bâ", "type": "papier", "pages": 165,
-         "quotes": [
-            ("L'amitié a des grandeurs inconnues de l'amour.", 71, ["amour", "famille"]),
-            ("Mon cœur est en fête chaque fois qu'une femme émerge de l'ombre.", 128, ["leadership", "confiance"]),
-         ]},
-        {"title": "Les Étoiles Perdues", "author": "@lunemauve", "type": "wattpad", "chapters": 42,
-         "quotes": [
-            ("Elle marchait comme si le monde lui devait des excuses.", None, ["résilience"]),
-         ]},
-    ]
-    demo_user_id = "user_demo_manent"
-    await db.users.update_one(
-        {"user_id": demo_user_id},
-        {"$setOnInsert": {
-            "user_id": demo_user_id,
-            "email": "demo@manent.app",
-            "pseudo": "Léa",
-            "handle": "lea",
-            "password_hash": None,
-            "picture": None,
-            "themes": ["résilience", "amour", "leadership"],
-            "premium": False,
-            "created_at": now_utc(),
-        }},
-        upsert=True,
-    )
-    for d in demos:
-        book_id = new_id("bk")
-        await db.books.insert_one({
-            "book_id": book_id,
-            "user_id": demo_user_id,
-            "type": d["type"],
-            "title": d["title"],
-            "author": d["author"],
-            "pages": d.get("pages"),
-            "chapters": d.get("chapters"),
-            "status": "en_cours",
-            "mode": "perso",
-            "cover": None,
-            "rating": 4,
-            "recap": "",
-            "lessons": [],
-            "progress_page": 0,
-            "progress_chapter": 0,
-            "created_at": now_utc(),
-        })
-        for text, page, themes in d["quotes"]:
-            await db.quotes.insert_one({
-                "quote_id": new_id("q"),
-                "user_id": demo_user_id,
-                "book_id": book_id,
-                "text": text,
-                "page": page if d["type"] != "wattpad" else None,
-                "chapter": 12 if d["type"] == "wattpad" else None,
-                "note": "",
-                "themes": themes,
-                "is_public": True,
-                "created_at": now_utc(),
-            })
-    return {"ok": True}
-
-
-# ============ Health & indexes ============
 @api.get("/")
 async def root():
     return {"ok": True, "service": "manent"}

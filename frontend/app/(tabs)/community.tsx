@@ -1,7 +1,7 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, Pressable, TextInput, ScrollView, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { fonts, radius, spacing } from '@/src/theme';
 import { useColors, useStyles } from '@/src/themeCtx';
@@ -41,7 +41,13 @@ export default function Community() {
   const [clubName, setClubName] = useState('');
   const [clubDesc, setClubDesc] = useState('');
   const [clubVisibility, setClubVisibility] = useState<'private' | 'public'>('private');
+  const [createError, setCreateError] = useState('');
   const [joinModal, setJoinModal] = useState(false);
+  // Arrivée depuis un lien d'invitation qui n'a pas pu rejoindre seul (/c/CODE) : feuille « Rejoindre » ouverte, code prérempli.
+  const linkParams = useLocalSearchParams<{ join?: string; code?: string }>();
+  useEffect(() => {
+    if (linkParams.join === '1') { if (linkParams.code) setJoinCode(String(linkParams.code).toUpperCase().slice(0, 6)); setJoinModal(true); }
+  }, [linkParams.join, linkParams.code]);
   const [joinCode, setJoinCode] = useState('');
   const [joinError, setJoinError] = useState('');
   const [readers, setReaders] = useState<any[]>([]);
@@ -85,12 +91,19 @@ export default function Community() {
 
   const createClub = async () => {
     if (!clubName.trim()) return;
+    setCreateError('');
     setCreating(true);
     try {
       const c = await api<any>('/clubs', { method: 'POST', body: JSON.stringify({ name: clubName.trim(), description: clubDesc, visibility: clubVisibility }) });
       setClubModal(false); setClubName(''); setClubDesc(''); setClubVisibility('private');
       await load();
       router.push({ pathname: '/club/[id]', params: { id: c.club_id } });
+    } catch (e: any) {
+      // Créer un club est Premium : le 402 mène à l'offre, le reste s'explique sous le formulaire.
+      if (e?.status === 402) { setClubModal(false); router.push('/premium'); return; }
+      setCreateError(e?.status === 401 ? t('Ta session a expiré : reconnecte-toi, puis réessaie.')
+        : e?.status ? t('Impossible pour l’instant ({detail}). Réessaie dans un moment.', { detail: `HTTP ${e.status}` })
+        : t('Pas de réseau. Réessaie quand tu seras connectée.'));
     } finally { setCreating(false); }
   };
 
@@ -99,12 +112,16 @@ export default function Community() {
     setJoinError('');
     setCreating(true);
     try {
-      const r = await api<{ club_id: string }>('/clubs/join', { method: 'POST', body: JSON.stringify({ code: joinCode.trim() }) });
+      const r = await api<{ club_id: string }>('/clubs/join', { method: 'POST', body: JSON.stringify({ code: joinCode.replace(/[^A-Za-z0-9]/g, '').toUpperCase() }) });
       setJoinModal(false); setJoinCode('');
       await load();
       router.push({ pathname: '/club/[id]', params: { id: r.club_id } });
-    } catch {
-      setJoinError(t('Code inconnu. Vérifie auprès du club.'));
+    } catch (e: any) {
+      // Chaque cause a son message : un code inconnu, une session expirée et une panne réseau ne se corrigent pas pareil.
+      setJoinError(e?.status === 404 ? t('Code inconnu. Vérifie auprès du club.')
+        : e?.status === 401 ? t('Ta session a expiré : reconnecte-toi, puis réessaie.')
+        : e?.status ? t('Impossible pour l’instant ({detail}). Réessaie dans un moment.', { detail: `HTTP ${e.status}` })
+        : t('Pas de réseau. Réessaie quand tu seras connectée.'));
     } finally { setCreating(false); }
   };
 
@@ -195,7 +212,7 @@ export default function Community() {
       <ClubHome
         clubs={clubs}
         onOpenClub={(cid: string) => router.push({ pathname: '/club/[id]', params: { id: cid } })}
-        onCreateClub={() => setClubModal(true)}
+        onCreateClub={() => { setCreateError(''); setClubModal(true); }}
         onJoinClub={() => { setJoinError(''); setJoinModal(true); }}
       />
       )}
@@ -238,13 +255,14 @@ export default function Community() {
                 </Pressable>
               ))}
             </View>
+            {createError ? <Text style={[styles.joinError, { marginTop: spacing.sm }]} testID="create-club-error">{createError}</Text> : null}
             <View style={{ height: spacing.md }} />
             <PrimaryButton testID="btn-create-club" title={t('Créer le club')} onPress={createClub} loading={creating} disabled={!clubName.trim()} />
             <GhostButton title={t('Annuler')} onPress={() => setClubModal(false)} />
       </BottomSheet>
 
       <BottomSheet visible={joinModal} onClose={() => setJoinModal(false)} title={t('Rejoindre un club')} subtitle={t('Le code à six caractères transmis par le club.')} testID="sheet-join-club">
-            <TextInput testID="join-club-code" value={joinCode} onChangeText={t => setJoinCode(t.toUpperCase())} placeholder={t('Code (ex: A7K2PX)')} autoCapitalize="characters" placeholderTextColor={colors.clay} style={[styles.input, styles.codeInput]} maxLength={6} />
+            <TextInput testID="join-club-code" value={joinCode} onChangeText={v => setJoinCode(v.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 6))} placeholder={t('Code (ex: A7K2PX)')} autoCapitalize="characters" autoCorrect={false} placeholderTextColor={colors.clay} style={[styles.input, styles.codeInput]} maxLength={6} accessibilityLabel={t('Code du club')} />
             {joinError ? <Text style={styles.joinError} testID="join-club-error">{joinError}</Text> : null}
             <View style={{ height: spacing.md }} />
             <PrimaryButton testID="btn-join-club-confirm" title={t('Rejoindre')} onPress={joinClub} loading={creating} disabled={joinCode.trim().length < 4} />

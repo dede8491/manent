@@ -346,3 +346,83 @@ Testé e2e via curl (création publique, discover, join, correspondance titre in
 - Domaine : rattachement manentlc.app à faire côté plateforme (bouton Publish → domaine personnalisé) ; variables déjà pointées dessus.
 - A2 non réalisable sans évolution d'ingress → statiques .well-known conservés provisoirement.
 - Le shelf « Ce que la communauté lit » est retiré du Club (D1) mais pas encore réaffiché dans Découvrir (D2 à faire) : fonctionnalité momentanément non visible.
+
+## Session juin 2026 — Lots C/A/E + fusion branche GitHub
+- Lot C : catalog_authors + worker origines (Wikidata→OpenLibrary→IA), aires dérivées, admin Auteurs, chips pays sur /area, pays sur fiches livres.
+- Lot A : pages OG backend /api/s/* (stores, manent://, base dérivée de l'hôte), .well-known dynamiques, deep link mémorisé (pending_deep_link, fiable via capture window.location au chargement) appliqué après onboarding, suffixe ?follow=1.
+- Lot E : GET /books/search supprimé ; scan ISBN et recherches via /catalog/isbn et /catalog/search.
+- Déploiement : /health ajouté, DB_NAME/AUTH_SESSION_URL depuis env, httpx+bs4 dans requirements, .gitignore corrigé, Supabase → Emergent Object Storage (upload + /api/files publics), _attach_public_meta batché. Health check: PASS (warns: plist push iOS, URL politique de confidentialité).
+- Domaine : rattachement custom non supporté pour déploiements mobiles (réponse support) ; PUBLIC_BASE_URL vidé, URLs dérivées dynamiquement.
+- Fusion branche claude/sillage-mobile-app-4hvnle : BottomSheet/BookHero/AreaCard/ClubCard partagés, liste de lecture (queue + réordonnancement), écran Lecture suivante, Pour toi (moteur + worker), Recommandations entre lectrices (+badge), Partager ma bibliothèque, pages publiques profil (Suivre) et bibliothèque, refonte onboarding/accueil/bibliothèque/fiches. Conflits résolus : share.py (fusion base dynamique + extra/open_label), _layout.tsx (deep link fiable + follow=1). Fix post-fusion : /readers/contacts déclaré avant /readers/{handle}.
+
+## Fusion 1939737 — Nettoyage des données de test via route admin (juin 2026)
+- Fusion de claude/sillage-mobile-app-4hvnle (commit 1939737) : backend/cleanup.py (logique partagée plan/report/apply), route POST /api/admin/cleanup-test-data (admin uniquement, répétition à blanc par défaut, apply=true + confirm="SUPPRIMER" requis, sauvegarde JSON dans backend/cleanup_backups/), scripts/cleanup_test_data.py allégé (réutilise cleanup.py).
+- Smoke test local (base aperçu manent_db) : dry-run 200 OK, apply sans confirm → 400 confirm_required, admin requis.
+- Fusion c96c054 : section « Données de test » dans le Dashboard admin (CleanupAdmin.tsx : Analyser, champs Protéger/Ajouter, suppression après saisie « SUPPRIMER » dans une BottomSheet, rapport complet affiché). Vérifié e2e sur l'aperçu (login admin → /admin → Analyser → rapport OK).
+- L'utilisatrice publie et lance elle-même l'analyse puis la suppression depuis le Dashboard admin en production. Aucun identifiant/URL de prod partagé (choix définitif de l'utilisatrice).
+- Contexte : la base de PROD n'est pas accessible depuis le pod (environnements isolés, confirmé support). Workflow validé avec l'utilisatrice : Publish → appel de la route sur le backend déployé (dry-run) → validation utilisatrice → apply. NE JAMAIS lancer apply sans validation explicite.
+
+## Fusion 75aa23b→a255626 — Fiches de lecture, boutons vérifiés, Léa plus recréée (juin 2026)
+- Fusion sans conflit des 7 commits (fiches de lecture avec livres terminés + fiche de fin, QuoteCard titre complet/avatar 34px, année de lecture « Lu en », erreurs d'ajout visibles, titres BnF nettoyés, code club tolérant + lien d'invitation sans compte, Premium offert depuis UsersAdmin, /readers/contacts déclaré avant /readers/{handle}, aucun bouton muet, POST /dev/seed SUPPRIMÉ — Léa plus jamais recréée, sera supprimée par l'utilisatrice via l'admin).
+- Vérifié : /dev/seed absent, ordre des routes readers OK, /api/upload Emergent intact, aucun fichier supprimé recréé, gating applinks intact, .env intacts. tsc 0 erreur, lint 0 erreur, pytest 34/34, backend+expo relancés, e2e : accueil + admin (Premium offert visible) OK.
+- Workflow post-fusion demandé par l'utilisatrice À CHAQUE fusion : rappeler « Save to GitHub → dede8491/manent → main » puis « Générer un nouveau build iOS » (aucun push direct possible, pas de token GitHub dans le pod).
+
+## Fusion e6b3bcf — Entitlement Associated Domains purgé + chiffrement déclaré (juin 2026)
+- Fusion sans conflit, app.config.js seul : iosWithoutApplinks() retire com.apple.developer.associated-domains PARTOUT (associatedDomains + ios.entitlements) tant que EXPO_PUBLIC_IOS_APPLINKS≠1, et ITSAppUsesNonExemptEncryption=false. Vérifié via `npx expo config` : aucun associatedDomains résolu, flag chiffrement présent. EXPO_PUBLIC_IOS_APPLINKS absent du .env (voulu). Build iOS à relancer par l'utilisatrice APRÈS re-Publish (le build du 3 sept. utilisait un vieux snapshot).
+
+## Diagnostic build iOS + health check déploiement (juin 2026)
+- Échec build iOS (955bfa99, profil sans capacité Associated Domains) : cause = le build a utilisé un ANCIEN instantané du code (version b3a2f28d, antérieur au commit 0460484 qui conditionne associatedDomains à EXPO_PUBLIC_IOS_APPLINKS=1 — l'archive contenait quotes.tsx, area/[key].tsx, book_search.py, tous supprimés depuis). Le code actuel ne peut PAS injecter l'entitlement (vérifié par deployment_agent : expo_release_build_ok true). Solution : re-Publish puis régénérer le build iOS.
+- Blocker corrigé : frontend/.env METRO_CACHE_ROOT mis entre guillemets. lint frontend/src : 0 issue. Health check final : warn uniquement (fallback localhost MONGO_URL dans deps.py, N+1 dans /api/feed — non bloquants). WARN accepté : GoogleService-Info.plist iOS non fourni (push iOS non configuré tant que l'utilisatrice ne fournit pas le fichier Firebase).
+
+## Fusion 03d428f — Clubs accessibles, avatar sous citations, Premium complet (juin 2026)
+- Fusion sans conflit (5 fichiers frontend) : section « Clubs de lecture » en bas de Découvrir, « Mes tableaux et clubs » dans le profil, avatar rond + pseudo sous chaque citation (QuoteCard → profil lectrice), page Premium avec fiches PDF et création de club. tsc 0 erreur, lint 0 erreur, pytest 30/30, vérifié e2e (Découvrir/Profil/Premium OK).
+
+## Fusion notifications — commits 3c0a8a9→ad52464 (juin 2026)
+- Fusion des 6 commits (accueil épuré sans boutons Journal/Découvrir, profil sans doublon + « Mes fiches de lecture », centre de notifications /inbox avec cloche+pastille testID home-notifications, 8 types réglables dans Paramètres via GET/PATCH /api/me/notifications, filtrage serveur routes/push.py store_notifications/filter_recipients/notif_kind idempotent, GET /api/notifications + /badge, index _idx au démarrage, navigation auditée). area/ et genre/ supprimés par la branche (ne pas recréer).
+- 2 conflits résolus : test_routes.py (assertion upload Emergent Object Storage conservée + 2 nouveaux tests notifications de la branche), _layout.tsx (isDeepLink version HEAD avec quote|book, superset).
+- Vérifications : tsc 0 erreur, expo lint 0 erreur (13 warnings), pytest 30/30, backend redémarré OK, e2e aperçu : accueil loupe+cloche sans boutons, carte Mon évolution, /inbox avec filtres Tout/Activité/Livres/Invitations OK.
+
+## Fusion fe26a8b — Carte « Mon évolution » sur l'accueil (juin 2026)
+- Fusion sans conflit : home.tsx + translations.ts uniquement (série, semaine de lecture, objectif 2026, rétrospective), alimentée par GET /api/stats/reading existant. /api/upload (Emergent Object Storage) intact. tsc 0 erreur, lint 0 erreur, pytest 28/28, carte vérifiée à l'écran.
+
+## Fusion audit + 34615e9 — Lots 0-5 et session robuste (juin 2026)
+- Fusion de claude/sillage-mobile-app-4hvnle jusqu'à 34615e9 : f1bbdc8 (audit, lots 0-1), d0b80a8 (Journal+Citations fusionnés, boîte Reçus, rétrospective annuelle, export PDF), da7e06c (recherche 2 modes, Découvrir hiérarchisé, fiche catalogue unique /discover/book par catalog_id, un seul flux d'ajout), ac50f1c (design system, Button pilule 3 tailles/variantes), 8e5e9fb (backend consolidé : deps.py exporte db/_client/now_utc/new_id/get_current_user, module reading.py, quota LLM /intent 20/j par compte, tests_unit mongomock 28 tests), 34615e9 (nouvel écran de bienvenue « Lis. Ressens. Garde. », sessions 90 j glissantes deps.py SESSION_DAYS=90, auth.tsx ne déconnecte que sur 401 — jamais sur erreur réseau, tour_seen sur le compte via PATCH /api/me/settings).
+- 4 conflits résolus : requirements.txt (union : httpx/bs4 + mongomock-motor/pytest-asyncio), Button.tsx (accessibilité de la branche + coercition !!), b/[id].tsx (Redirect catalog_id de la branche — fiche catalogue unique), server.py /api/upload (détection type par octets de signature de la branche + stockage Emergent Object Storage conservé, PAS de retour à Supabase). Test test_upload_rejects_non_images adapté (accepte URL /api/files/… ou data URL).
+- Vérifications : tsc 0 erreur, expo lint 0 erreur (12 warnings), pytest tests_unit 28/28, backend démarre, écran de bienvenue rendu OK. .env intacts, gating applinks intact, pas de fichiers supprimés recréés.
+
+## Fusion journal de lecture — commits 373227e→1d4929e (juin 2026)
+- Fusion de claude/sillage-mobile-app-4hvnle jusqu'à 1d4929e (fast-forward, aucun conflit) :
+  - 373227e (parent requis, inclus) : UsersAdmin.tsx remplace CleanupAdmin.tsx (liste des comptes + suppression directe), cleanup.py refactoré (_collect_plan/titled).
+  - 6264dfd : backend/routes/journal.py (journal_entries + journal_prompts, 12 prompts insérés au démarrage si collection vide, création idempotente client_id, /journal/home, humeurs, quotas gratuit 3 entrées/semaine + 1 nouveau livre en cours), cascade cleanup journal_entries, tests_unit/test_journal.py.
+  - 82f9417 : app/journal/new.tsx + [id].tsx, src/journal.ts (brouillon local + file hors ligne).
+  - a3f5c10 : accueil recentré journal, onglets Accueil/Journal/Bibliothèque/Découvrir/Profil (quotes et community masqués href:null, PAS supprimés), discover.tsx, WelcomeTour mis à jour.
+  - 1d4929e : intégrations photo/citation, JournalBookSection, MoodTimeline, wrapup/[bookId] (fiche de fin export image Stories), paywall premium réécrit, PromptsAdmin dans le Dashboard.
+- Vérifications : tsc --noEmit 0 erreur, expo lint 0 erreur (10 warnings), pytest tests_unit 20/20, backend démarre, prompts seedés (12), e2e aperçu : login → tour → accueil journal + 5 onglets OK. Contraintes respectées : pas de quotes.tsx/capture-tab.tsx recréés, redirections area/genre gardées, gating applinks intact, .env intacts.
+
+## Fusion 3e0c3e3 — Moteur IA de classification (sept. 2026)
+- Fusion Git de claude/sillage-mobile-app-4hvnle (4 commits) : taxonomy.py, ai_provider.py, routes/classification.py, filters.tsx, browse.tsx, intent.tsx, Classification*.tsx + notation, visite guidée, pages légales, genres Babelio.
+- Conflit unique (_layout.tsx) : deep link fiable conservé + paramètre edit=1 de la branche.
+- Corrections post-fusion (ordre des routes FastAPI, statique avant dynamique) : /classification/review et /classification/settings interceptés par /classification/{catalog_id}.
+- Amélioration : relâchement cumulatif des filtres dans /catalog/intent (0 résultat → progressif en gardant thèmes/émotions).
+- Vérifié : backfill 1457 livres en file, 13 tests unitaires verts, stats admin (classés ↑, erreurs 0, quota ↑), filtres cumulables + bascule auteur/histoire, intention (chips+résultats stables), corrections manuelles conservées après reclassification, taxonomie extensible (theme « exil »), quota modifiable (300→250).
+- Comptes : test_admin@manent.app / Admin1234! (admin).
+
+## Correctif build iOS + estimation backfill (sept. 2026)
+- Build iOS App Store : retrait de ios.associatedDomains dans app.config.js (le profil de provisionnement Emergent n'inclut pas l'entitlement Associated Domains → ARCHIVE FAILED). Partage inchangé via /api/s/* + scheme manent://. Intent filters Android conservés.
+- Admin Moteur IA : ligne « Temps restant estimé » (testID admin-ia-eta) calculée depuis unclassified / quota_limit / quota_used (fin aujourd'hui, ≈ N jours, ou terminé).
+
+## Fusion e334fcc (sept. 2026) — Onglet Citations + origines automatiques
+- Fusion Git : onglet Citations (plume au centre, plus de bouton caméra), bibliothèque livres uniquement, origines pilotées par le moteur de classification (section Auteurs admin supprimée, area/[key] = redirection), recherche « Voir toutes les œuvres liées à … », cartes « Par origine » et filtres sans émojis, scan avec messages explicites (aperçu web / permission).
+- Conflits résolus : app.config.js (iOS applinks conditionné à EXPO_PUBLIC_IOS_APPLINKS=1 — version branche, rejoint mon correctif), classification.py (version branche, inclut mes fixes d'ordre de routes + relâchement cumulatif amélioré), translations.ts (clés combinées, ETA conservée).
+- Vérifié (10/10) : barre du bas, onglet Citations + feuille +, bibliothèque, profil/fiche livre → citations filtrées, Par origine (accueil+recherche), bouton œuvres liées (Adichie), filtres sans émoji + bascule origine, admin sans Auteurs + Moteur IA, scan web explicite, 13 tests unitaires verts + tsc clean.
+
+## Fusion c3f00c7 (sept. 2026) — Partage tableaux/clubs, invitations, réactions
+- Fusion Git : feuille « Partager et inviter » (tableaux + clubs : lien /t/{slug}?code, code, invitations directes), section Invitations au profil (pastille, Rejoindre), cœurs/commentaires/épingler sur citations + notifications, page sujet avec titre, état vide Citations épuré.
+- Conflits résolus : share.py (_board_page avec base dynamique + Request), _layout.tsx (deep link fiable + suffixe ?code=), app.config.js (intentFilters conditionnels + /t).
+- Vérifié : testing agent 16/16 backend + 7 points UI verts ; compléments main agent : invitation club envoyée→pastille→accept→membre (API), admin sans Auteurs + Moteur IA (1452/1458 classés). 13 tests unitaires + tsc clean.
+- Note : test_admin@manent.app passé premium (is_premium) pour tester la création de club.
+
+## Fusion 6b4e34a (sept. 2026) — Accueil épuré + reprise par activité + retry couvertures
+- Fusion Git : carte unique « Je cherche un livre qui… » (plume, sous-titre, bouton filtres), suppression « Sujets du moment » et double rangée de boutons, « Reprendre ta lecture » trié par activité (updated_at), retry couvertures au démarrage (« covers retry: N livres remis en file », fenêtre échec 2 j).
+- Conflit unique résolu (catalog.py) : fenêtre 2 jours de la branche + clôture non destructive _finish_task conservée (contrainte déploiement).
+- Vérifié (iteration 20) : 13/13 checklist — backend 11/11 pytest + non-régression iter19 16/16, couverture « Les Bouts de bois de Dieu » récupérée, accueil épuré confirmé par captures, filtres/origine/scan/admin OK, 13 tests unitaires + tsc clean. Prêt à publier.

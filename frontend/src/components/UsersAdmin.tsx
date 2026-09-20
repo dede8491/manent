@@ -8,7 +8,7 @@ import { useT, useLang } from '@/src/i18n';
 import { timeAgo } from '@/src/timeago';
 import { BottomSheet } from '@/src/components/BottomSheet';
 
-type U = { user_id: string; pseudo: string; handle: string; email: string; picture?: string | null; is_admin?: boolean; is_me?: boolean; created_at: string; last_login?: string | null; books: number; quotes: number };
+type U = { user_id: string; pseudo: string; handle: string; email: string; picture?: string | null; is_admin?: boolean; is_me?: boolean; created_at: string; last_login?: string | null; books: number; quotes: number; is_premium?: boolean; premium_plan?: string | null };
 
 // Admin — liste de tous les comptes, recherche, suppression directe d'un compte (et de tout son contenu)
 // après confirmation. Les comptes admin ne sont pas supprimables.
@@ -28,6 +28,14 @@ export function UsersAdmin() {
     catch { setUsers([]); }
   }, [q]);
   useEffect(() => { const h = setTimeout(load, 250); return () => clearTimeout(h); }, [load]);
+
+  // Premium offert : pour tester l'abonnement à 0 € (bêta-testeuses), sans passer par l'App Store.
+  const togglePremium = async (u: U) => {
+    const next = !u.is_premium;
+    setUsers(prev => (prev || []).map(x => x.user_id === u.user_id ? { ...x, is_premium: next, premium_plan: next ? 'offert' : null } : x));
+    try { await api(`/admin/users/${u.user_id}/premium`, { method: 'PATCH', body: JSON.stringify({ is_premium: next }) }); setMsg(next ? t('Premium offert à @{h}.', { h: u.handle }) : t('Premium retiré à @{h}.', { h: u.handle })); }
+    catch { setMsg(t('Modification impossible.')); load(); }
+  };
 
   const remove = async () => {
     if (!target) return;
@@ -60,14 +68,17 @@ export function UsersAdmin() {
             <View style={[styles.avatar, { alignItems: 'center', justifyContent: 'center' }]}><Text style={styles.avatarLetter}>{(u.pseudo || '?').slice(0, 1).toUpperCase()}</Text></View>
           )}
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.name} numberOfLines={1}>{u.pseudo} <Text style={styles.handle}>@{u.handle}</Text>{u.is_admin ? <Text style={styles.adminTag}>  {t('admin')}</Text> : null}</Text>
+            <Text style={styles.name} numberOfLines={1}>{u.pseudo} <Text style={styles.handle}>@{u.handle}</Text>{u.is_admin ? <Text style={styles.adminTag}>  {t('admin')}</Text> : null}{u.is_premium ? <Text style={styles.adminTag}>  {u.premium_plan === 'offert' ? t('premium offert') : t('premium')}</Text> : null}</Text>
             <Text style={styles.meta} numberOfLines={1}>{u.email}</Text>
             <Text style={styles.meta} numberOfLines={1}>
               {t('{n} livres', { n: u.books })} · {t('{n} citations', { n: u.quotes })} · {t('créé')} {timeAgo(u.created_at, lang)}{u.last_login ? ` · ${t('connecté')} ${timeAgo(u.last_login, lang)}` : ''}
             </Text>
           </View>
+          <Pressable testID={`admin-user-premium-${u.handle}`} onPress={() => togglePremium(u)} accessibilityRole="switch" accessibilityState={{ checked: !!u.is_premium }} accessibilityLabel={t('Premium offert')} style={styles.trashBtn} hitSlop={6}>
+            <Feather name="star" size={15} color={u.is_premium ? colors.chambray : colors.clay} />
+          </Pressable>
           {!u.is_admin && !u.is_me && (
-            <Pressable testID={`admin-user-delete-${u.handle}`} onPress={() => setTarget(u)} style={styles.trashBtn} hitSlop={6}>
+            <Pressable testID={`admin-user-delete-${u.handle}`} onPress={() => setTarget(u)} accessibilityRole="button" accessibilityLabel={t('Supprimer ce compte')} style={styles.trashBtn} hitSlop={6}>
               <Feather name="trash-2" size={15} color={colors.danger} />
             </Pressable>
           )}

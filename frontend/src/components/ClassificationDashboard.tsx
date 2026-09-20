@@ -104,6 +104,22 @@ export function ClassificationDashboard({ onOpenBook }: { onOpenBook: (catalogId
             <Stat k="ai" label={t('Avec l’IA')} />
             <Stat k="corrections" label={t('Corrections')} />
           </View>
+          {(() => {
+            const remaining = stats.unclassified ?? 0;
+            const limit = stats.quota_limit ?? 0;
+            const leftToday = Math.max(limit - (stats.quota_used ?? 0), 0);
+            if (remaining <= 0) return <Text style={styles.eta} testID="admin-ia-eta">{t('Classification terminée : tout le catalogue est classé.')}</Text>;
+            if (limit <= 0) return null;
+            const done = remaining <= leftToday;
+            const days = done ? 0 : 1 + Math.ceil((remaining - leftToday) / limit);
+            return (
+              <Text style={styles.eta} testID="admin-ia-eta">
+                {done
+                  ? t('Temps restant estimé : fin aujourd’hui ({n} livres, quota restant {q}).', { n: remaining, q: leftToday })
+                  : t('Temps restant estimé : ≈ {d} jours pour {n} livres (quota {l}/jour, {q} restants aujourd’hui).', { d: days, n: remaining, l: limit, q: leftToday })}
+              </Text>
+            );
+          })()}
           <Text style={styles.meta}>
             {t('Moteur {e} · prompt {p} · {m} via {v}{off} · quota du jour {u}/{l} · analyses {n}, succès {s} %, {ms} ms en moyenne · {r} classifications en {rm} ms',
               { e: stats.engine_version, p: stats.prompt_version, m: stats.model, v: stats.provider, off: stats.ai_available ? '' : ` (${t('clé IA absente')})`,
@@ -223,6 +239,7 @@ const makeStyles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   statNum: { fontFamily: fonts.displayMedium, fontSize: 20, color: colors.espresso },
   statLabel: { fontFamily: fonts.bodyMedium, fontSize: 8.5, color: colors.clay, letterSpacing: 0.8, textTransform: 'uppercase', marginTop: 2, textAlign: 'center' },
   meta: { fontFamily: fonts.body, fontSize: 11.5, color: colors.clay, marginTop: spacing.sm, lineHeight: 16 },
+  eta: { fontFamily: fonts.bodyMedium, fontSize: 12.5, color: colors.chambray, marginTop: spacing.sm, lineHeight: 17 },
   msg: { fontFamily: fonts.body, fontSize: 12.5, color: colors.chambray, marginTop: spacing.sm },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: spacing.md },
   primaryBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 36, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: colors.chambray },

@@ -12,6 +12,7 @@ import ManentLoader from '@/src/components/ManentLoader';
 import { ErrorState } from '@/src/components/ErrorState';
 import { InfoTooltip } from '@/src/components/InfoTooltip';
 import { ClubCard } from '@/src/components/ClubCard';
+import { Toast } from '@/src/components/Toast';
 import { useT } from '@/src/i18n';
 
 export default function Discover() {
@@ -25,6 +26,7 @@ export default function Discover() {
   const [themes, setThemes] = useState<string[]>([]);
   const [pubClubs, setPubClubs] = useState<any[]>([]);
   const [joiningClub, setJoiningClub] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const [forYou, setForYou] = useState<any[]>([]);
   const [forYouTotal, setForYouTotal] = useState(0);
   const [daily, setDaily] = useState<Quote | null>(null);
@@ -67,8 +69,12 @@ export default function Discover() {
       await api(`/clubs/${cid}/join`, { method: 'POST' });
       setPubClubs(prev => prev.filter(c => c.club_id !== cid));
       router.push({ pathname: '/club/[id]', params: { id: cid } });
-    } catch {}
-    finally { setJoiningClub(null); }
+    } catch (e: any) {
+      // Un club passé en fermé entre-temps ne se rejoint plus qu'avec son code.
+      setToast(e?.status === 403 && e?.detail?.detail === 'private_club'
+        ? t('Ce club est sur invitation : demande son code à sa créatrice.')
+        : t('Impossible de rejoindre ce club pour l’instant.'));
+    } finally { setJoiningClub(null); }
   };
 
   useEffect(() => {
@@ -245,7 +251,7 @@ export default function Discover() {
           )}
         </View>
       </ScrollView>
-
+      <Toast visible={!!toast} text={toast || ''} onHide={() => setToast(null)} testID="toast-discover" />
     </View>
   );
 }
