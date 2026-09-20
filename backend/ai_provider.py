@@ -1,8 +1,8 @@
 """Abstraction du fournisseur IA (AIProvider).
 
 Frontend → Backend → ClassificationService → AIProvider → API du fournisseur.
-Le fournisseur actuel est la passerelle Emergent (`emergentintegrations`, clé `EMERGENT_LLM_KEY`,
-modèle `AI_MODEL`, Claude par défaut). Changer de fournisseur = remplacer `_send()` ici, rien d'autre.
+Le fournisseur est l'API Anthropic en direct (`llm.py`, clé `ANTHROPIC_API_KEY`, modèle `AI_MODEL`).
+Changer de fournisseur = remplacer `llm.chat()`, rien d'autre.
 
 Chaque appel est journalisé (`ai_calls` : type, modèle, durée, succès, erreur) sans données sensibles.
 """
@@ -18,22 +18,24 @@ logger = logging.getLogger("manent")
 
 
 class AIProvider:
-    name = "emergent"
+    name = "anthropic"
     db = None  # injecté (journal des appels)
 
     def __init__(self):
-        self.api_key = os.environ.get("EMERGENT_LLM_KEY", "")
-        self.vendor = os.environ.get("AI_VENDOR", "anthropic")
-        self.model = os.environ.get("AI_MODEL", "claude-sonnet-4-6")
+        self.vendor = "anthropic"
+        self.model = os.environ.get("AI_MODEL", "claude-opus-5")
 
     @property
     def available(self) -> bool:
-        return bool(self.api_key)
+        import llm
+        return llm.available()
 
     async def _send(self, system: str, user: str, session_id: str) -> str:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-        chat = LlmChat(api_key=self.api_key, session_id=session_id, system_message=system).with_model(self.vendor, self.model)
-        return str(await chat.send_message(UserMessage(text=user)))
+        import llm
+        out = await llm.chat(system, user, model=self.model, max_tokens=4096)
+        if not out:
+            raise RuntimeError("llm_empty")
+        return out
 
     async def _log(self, kind: str, ok: bool, ms: int, error: Optional[str] = None, meta: Optional[dict] = None):
         if self.db is None:

@@ -1,0 +1,76 @@
+# Build iOS et envoi sur TestFlight, sans terminal : Actions → « Build iOS (TestFlight) » → Run workflow.
+#
+# Secrets à créer dans GitHub (Settings → Secrets and variables → Actions) :
+#   EXPO_TOKEN                      jeton d'accès Expo (expo.dev → Account settings → Access tokens)
+#   EAS_PROJECT_ID                  identifiant du projet EAS (expo.dev → projet → Overview → Project ID)
+#   EXPO_OWNER                      nom du compte Expo (propriétaire du projet)
+#   EXPO_PUBLIC_BACKEND_URL         URL publique du backend (https://…), sans slash final
+#   EXPO_PUBLIC_REVENUECAT_IOS_API_KEY
+#   EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY
+#   EXPO_PUBLIC_REVENUECAT_TEST_API_KEY
+#   ASC_API_KEY_P8                  contenu du fichier .p8 de la clé App Store Connect
+#   ASC_KEY_ID                      identifiant de cette clé (10 caractères)
+#   ASC_ISSUER_ID                   Issuer ID (App Store Connect → Users and Access → Integrations)
+#   APPLE_TEAM_ID                   identifiant d'équipe Apple (ex. LKS2WGPAQ5)
+name: Build iOS (TestFlight)
+
+on:
+  workflow_dispatch:
+    inputs:
+      submit:
+        description: "Envoyer automatiquement sur TestFlight"
+        type: boolean
+        default: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+          packager: yarn
+
+      - name: Dépendances
+        run: yarn install --frozen-lockfile
+
+      - name: Variables publiques de l'app (.env embarqué dans le build)
+        run: |
+          cat > .env <<EOF
+          EXPO_PUBLIC_BACKEND_URL=${{ secrets.EXPO_PUBLIC_BACKEND_URL }}
+          EXPO_PUBLIC_PUBLIC_BASE_URL=${{ secrets.EXPO_PUBLIC_BACKEND_URL }}
+          EXPO_PUBLIC_REVENUECAT_IOS_API_KEY=${{ secrets.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY }}
+          EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY=${{ secrets.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY }}
+          EXPO_PUBLIC_REVENUECAT_TEST_API_KEY=${{ secrets.EXPO_PUBLIC_REVENUECAT_TEST_API_KEY }}
+          EOF
+
+      - name: Clé App Store Connect (signature et envoi sans identifiant Apple)
+        run: |
+          printf '%s' "${{ secrets.ASC_API_KEY_P8 }}" > "$RUNNER_TEMP/asc-key.p8"
+          echo "EXPO_ASC_API_KEY_PATH=$RUNNER_TEMP/asc-key.p8" >> "$GITHUB_ENV"
+
+      - name: Build EAS (et envoi TestFlight)
+        env:
+          EAS_PROJECT_ID: ${{ secrets.EAS_PROJECT_ID }}
+          EXPO_OWNER: ${{ secrets.EXPO_OWNER }}
+          EXPO_ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          EXPO_ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          EXPO_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          EXPO_APPLE_TEAM_TYPE: INDIVIDUAL
+          EAS_BUILD_NO_EXPO_GO_WARNING: "true"
+        run: |
+          if [ "${{ inputs.submit }}" = "true" ]; then
+            eas build --platform ios --profile production --non-interactive --auto-submit --wait
+          else
+            eas build --platform ios --profile production --non-interactive --wait
+          fi

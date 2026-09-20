@@ -25,11 +25,13 @@ Monétisation : Premium via RevenueCat (App Store / Google Play). Pas de paiemen
 | Thème | `src/theme.ts` (jetons) + `src/themeCtx.tsx` (clair / sombre, `useColors`, `useStyles(makeStyles)`) |
 | i18n | `src/i18n.tsx` : les clés sont les phrases françaises, `src/translations.ts` porte l'anglais |
 | Données mobile | `src/api.ts` (`api()` avec Bearer), pas de cache global ; hors ligne pour le journal dans `src/journal.ts` |
-| Backend | FastAPI + Motor sur MongoDB (hébergé par Emergent). `backend/server.py` (historique) + `backend/routes/*` (modules) |
+| Backend | FastAPI + Motor sur MongoDB Atlas, hébergé sur Railway (déploiement automatique depuis `main`, voir `DEPLOIEMENT.md`). `backend/server.py` (historique) + `backend/routes/*` (modules) |
 | Helpers partagés | `backend/deps.py` : `db`, `now_utc`, `new_id`, `get_current_user` (server.py et les routes importent d'ici, une seule connexion Mongo) |
 | Règles de lecture | `backend/reading.py` : progression (ne recule jamais, bornée, termine le livre), événements de lecture, série de jours, visibilité d'une citation. **Toute nouvelle route qui touche à la progression ou à la visibilité passe par là.** |
-| IA | Clé Emergent (`EMERGENT_LLM_KEY`) via `ai_provider.py` pour la classification ; appels directs ailleurs (vision, résumés) |
-| Fichiers | `/api/upload` : Emergent Object Storage (version Emergent conservée lors des fusions), repli base64 en base si non configuré |
+| IA | API Anthropic en direct : `backend/llm.py` (`chat(system, user, image_b64)`), clé `ANTHROPIC_API_KEY`, modèle `AI_MODEL` (claude-opus-5 par défaut). `ai_provider.py` (classification) passe par `llm.py` |
+| Fichiers | `/api/upload` : Supabase Storage (bucket public), repli data URL si non configuré |
+| Push | Service push d'Expo (`routes/push.py`, jetons `ExponentPushToken` dans `push_tokens`) |
+| Builds iOS | EAS Build via l'action GitHub « Build iOS (TestFlight) », clé App Store Connect en secrets |
 | Tests | `backend/tests_unit` : helpers purs + routes en mémoire (mongomock, httpx) ; `pytest` seul ne lance que ceux-là. `backend/tests` = anciens tests d'intégration sur base réelle, à ne pas lancer |
 
 Commandes de vérification avant tout commit :
@@ -142,6 +144,7 @@ le centre (`app/inbox.tsx`) ne montre pas en double une invitation ou une recomm
 | 2026-09 | Statistiques d'évolution sur l'accueil, cloche de notifications en haut à droite, profil sans doublon | Demande produit |
 | 2026-09 | Notifications : huit types réglables un à un, un seul centre pour activité + invitations + recommandations | Demande produit |
 | 2026-09 | Session glissante de 90 jours, tour de bienvenue mémorisé côté serveur | Plus de reconnexion à chaque ouverture |
+| 2026-09 | Sortie d'Emergent : Railway + Atlas + Supabase + Anthropic + Expo (push et builds) | Reprendre la main sur l'hébergement, les clés et les builds |
 
 ## 9. Problèmes connus
 
