@@ -87,10 +87,11 @@ jobs:
             ARGS="$ARGS --auto-submit"
           fi
           if [ "${{ inputs.premiere_fois }}" = "true" ]; then
-            # EAS refuse de créer les certificats Apple en mode non interactif. On lui donne un pseudo-terminal
-            # et on valide chaque question par Entrée : les réponses par défaut génèrent le certificat de
-            # distribution, le profil de provisionnement, la clé push et la clé App Store Connect de soumission.
-            ( while true; do echo; sleep 2; done ) | script -qefc "eas build $ARGS" /dev/null
+            # EAS refuse de créer les certificats Apple en mode non interactif, et il passe en non interactif
+            # dès que CI=true (le cas sur GitHub Actions) ou sans terminal. On lui donne donc CI=false et un
+            # pseudo-terminal, puis on valide chaque question par Entrée : les réponses par défaut génèrent le
+            # certificat de distribution, le profil de provisionnement, la clé push et la clé de soumission.
+            ( while true; do echo; sleep 2; done ) | CI=false script -qefc "eas build $ARGS" /dev/null
           else
             eas build $ARGS --non-interactive
           fi
