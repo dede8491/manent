@@ -21,19 +21,24 @@ on:
         description: "Envoyer automatiquement sur TestFlight"
         type: boolean
         default: true
+      premiere_fois:
+        description: "Première fois : laisser EAS créer le certificat, le profil et la clé push Apple"
+        type: boolean
+        default: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     defaults:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
 
       - uses: expo/expo-github-action@v8
         with:
@@ -44,20 +49,37 @@ jobs:
       - name: Dépendances
         run: yarn install --frozen-lockfile
 
-      - name: Variables publiques de l'app (.env embarqué dans le build)
+      # Un fichier .env serait ignoré par git, donc jamais envoyé au serveur de build : les variables publiques
+      # sont ajoutées au profil « production » de eas.json (lu localement par eas-cli et transmis au build).
+      - name: Variables publiques de l'app (profil production de eas.json)
+        env:
+          BACKEND_URL: ${{ secrets.EXPO_PUBLIC_BACKEND_URL }}
+          RC_IOS: ${{ secrets.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY }}
+          RC_ANDROID: ${{ secrets.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY }}
+          RC_TEST: ${{ secrets.EXPO_PUBLIC_REVENUECAT_TEST_API_KEY }}
         run: |
-          cat > .env <<EOF
-          EXPO_PUBLIC_BACKEND_URL=${{ secrets.EXPO_PUBLIC_BACKEND_URL }}
-          EXPO_PUBLIC_PUBLIC_BASE_URL=${{ secrets.EXPO_PUBLIC_BACKEND_URL }}
-          EXPO_PUBLIC_REVENUECAT_IOS_API_KEY=${{ secrets.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY }}
-          EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY=${{ secrets.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY }}
-          EXPO_PUBLIC_REVENUECAT_TEST_API_KEY=${{ secrets.EXPO_PUBLIC_REVENUECAT_TEST_API_KEY }}
-          EOF
+          tmp=$(mktemp)
+          jq --arg u "$BACKEND_URL" --arg i "$RC_IOS" --arg a "$RC_ANDROID" --arg t "$RC_TEST" \
+            '.build.production.env += {
+               EXPO_PUBLIC_BACKEND_URL: $u,
+               EXPO_PUBLIC_PUBLIC_BASE_URL: $u,
+               EXPO_PUBLIC_REVENUECAT_IOS_API_KEY: $i,
+               EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY: $a,
+               EXPO_PUBLIC_REVENUECAT_TEST_API_KEY: $t }' eas.json > "$tmp" && mv "$tmp" eas.json
 
       - name: Clé App Store Connect (signature et envoi sans identifiant Apple)
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
         run: |
           printf '%s' "${{ secrets.ASC_API_KEY_P8 }}" > "$RUNNER_TEMP/asc-key.p8"
           echo "EXPO_ASC_API_KEY_PATH=$RUNNER_TEMP/asc-key.p8" >> "$GITHUB_ENV"
+          # La même clé sert à l'envoi TestFlight (profil submit), hors du dossier du projet pour ne pas être
+          # téléversée avec les sources du build.
+          tmp=$(mktemp)
+          jq --arg p "$RUNNER_TEMP/asc-key.p8" --arg k "$ASC_KEY_ID" --arg i "$ASC_ISSUER_ID" \
+            '.submit.production.ios += { ascApiKeyPath: $p, ascApiKeyId: $k, ascApiKeyIssuerId: $i }' \
+            eas.json > "$tmp" && mv "$tmp" eas.json
 
       - name: Build EAS (et envoi TestFlight)
         env:
@@ -68,9 +90,21 @@ jobs:
           EXPO_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           EXPO_APPLE_TEAM_TYPE: INDIVIDUAL
           EAS_BUILD_NO_EXPO_GO_WARNING: "true"
+          # L'API Apple rejette la synchronisation automatique des capacités de l'App ID (bug EAS/Apple) ;
+          # les capacités se gèrent à la main sur developer.apple.com → Identifiers.
+          EXPO_NO_CAPABILITY_SYNC: "1"
         run: |
+          ARGS="--platform ios --profile production --wait"
           if [ "${{ inputs.submit }}" = "true" ]; then
-            eas build --platform ios --profile production --non-interactive --auto-submit --wait
+            ARGS="$ARGS --auto-submit"
+          fi
+          if [ "${{ inputs.premiere_fois }}" = "true" ]; then
+            # EAS refuse de créer les certificats Apple en mode non interactif, et il passe en non interactif
+            # dès que CI=true (le cas sur GitHub Actions) ou sans terminal. On lui donne donc CI=false et un
+            # pseudo-terminal, puis on valide chaque question par Entrée : les réponses par défaut génèrent le
+            # certificat de distribution et le profil de provisionnement. La clé push n'est pas créée ici :
+            # Apple exige une session Apple ID (mot de passe + code) pour cela, voir DEPLOIEMENT.md.
+            ( while true; do echo; sleep 2; done ) | CI=false script -qefc "eas build $ARGS" /dev/null
           else
-            eas build --platform ios --profile production --non-interactive --wait
+            eas build $ARGS --non-interactive
           fi

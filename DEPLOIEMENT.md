@@ -47,8 +47,11 @@ Chaque fusion sur `main` redéploie le backend automatiquement.
 | `ASC_ISSUER_ID` | l'Issuer ID affiché sur la même page |
 | `APPLE_TEAM_ID` | Apple Developer → Membership (ex. `LKS2WGPAQ5`) |
 
-Le build iOS se lance depuis GitHub → Actions → « Build iOS (TestFlight) » → Run workflow. EAS génère et conserve
-les certificats et profils grâce à la clé App Store Connect ; le build est envoyé sur TestFlight automatiquement.
+Le build iOS se lance depuis GitHub → Actions → « Build iOS (TestFlight) » → Run workflow. La toute première
+fois, cocher « premiere_fois » : EAS crée alors le certificat de distribution, le profil de provisionnement, la clé
+push et la clé de soumission grâce à la clé App Store Connect, et les conserve sur expo.dev. Les fois suivantes, la
+case reste décochée. L'envoi automatique sur TestFlight sans intervention exige l'identifiant numérique de l'app
+(App Store Connect → Informations sur l'app → « ID Apple ») dans `frontend/eas.json` (`submit.production.ios.ascAppId`).
 
 ## Ordre de mise en place
 
@@ -62,6 +65,19 @@ les certificats et profils grâce à la clé App Store Connect ; le build est en
 7. GitHub : les secrets du tableau. Puis Actions → Build iOS (TestFlight).
 8. TestFlight : installer la nouvelle version. Les universal links iOS restent désactivés tant que la capacité
    Associated Domains n'est pas ajoutée sur l'App ID Apple (`EXPO_PUBLIC_IOS_APPLINKS=1` ensuite).
+
+## Notifications push iOS : la clé APNs
+
+EAS ne peut pas créer la clé push depuis GitHub (Apple exige une session Apple ID avec code à deux facteurs).
+À faire une fois, dans un navigateur :
+
+1. developer.apple.com → Certificates, Identifiers & Profiles → **Keys** → **+** → nom `Manent push`, cocher
+   **Apple Push Notifications service (APNs)** → Continue → Register → **Download** (fichier `AuthKey_XXXXXXXXXX.p8`,
+   une seule fois) et noter le **Key ID**.
+2. expo.dev → projet `manent` → **Credentials** → iOS → `com.manent.app` → **Push Key** → Add / Upload : le
+   fichier `.p8`, le Key ID et le Team ID (`LKS2WGPAQ5`).
+
+Sans cette clé, l'app se construit et fonctionne, mais les notifications push iOS ne partent pas.
 
 ## Données existantes (Emergent)
 
