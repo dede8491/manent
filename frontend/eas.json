@@ -7,18 +7,29 @@
     "production": {
       "distribution": "store",
       "autoIncrement": true,
-      "ios": { "resourceClass": "m-medium" },
-      "env": { "EXPO_NO_TELEMETRY": "1" }
+      "ios": {
+        "resourceClass": "m-medium"
+      },
+      "env": {
+        "EXPO_NO_TELEMETRY": "1"
+      }
     },
     "preview": {
       "distribution": "internal",
-      "ios": { "simulator": false },
-      "env": { "EXPO_NO_TELEMETRY": "1" }
+      "ios": {
+        "simulator": false
+      },
+      "env": {
+        "EXPO_NO_TELEMETRY": "1"
+      }
     }
   },
   "submit": {
     "production": {
-      "ios": {}
+      "ios": {
+        "ascAppId": "6807305315",
+        "appleTeamId": "LKS2WGPAQ5"
+      }
     }
   }
 }
