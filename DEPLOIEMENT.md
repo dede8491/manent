@@ -27,8 +27,12 @@ SUPABASE_KEY=<clé service_role>
 SUPABASE_BUCKET=manent-photos
 ANTHROPIC_API_KEY=sk-ant-…
 AI_MODEL=claude-opus-5            # ou claude-sonnet-5 pour réduire le coût
+ADMIN_EMAILS=toi@exemple.fr        # e-mails (séparés par des virgules) des comptes administrateurs
 EXPO_ACCESS_TOKEN=                 # optionnel
 ```
+
+Les comptes dont l'e-mail figure dans `ADMIN_EMAILS` sont administrateurs dès l'inscription, ou à la connexion
+suivante s'ils existaient déjà.
 
 Railway lit `backend/railway.json` : démarrage `uvicorn server:app`, contrôle de santé sur `/api/health`.
 Chaque fusion sur `main` redéploie le backend automatiquement.

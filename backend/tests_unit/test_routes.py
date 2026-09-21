@@ -61,6 +61,20 @@ async def test_register_login_and_bruteforce(client, fake_db):
     assert r.status_code == 200
 
 
+async def test_admin_emails_grant_admin_at_register_and_login(client, fake_db, monkeypatch):
+    monkeypatch.setattr(server, "ADMIN_EMAILS", {"daisy@manent-tests.org"})
+    headers, user = await register(client, email="Daisy@manent-tests.org", pseudo="Daisy")
+    assert user.get("is_admin") is True, "l'e-mail listé dans ADMIN_EMAILS est admin dès l'inscription"
+    assert (await client.get("/api/admin/badge", headers=headers)).status_code == 200
+    headers2, user2 = await register(client, email="lea@manent-tests.org", pseudo="Léa")
+    assert not user2.get("is_admin") and (await client.get("/api/admin/badge", headers=headers2)).status_code == 403
+    # Compte créé avant l'ajout de la variable : le droit arrive à la connexion suivante
+    monkeypatch.setattr(server, "ADMIN_EMAILS", {"lea@manent-tests.org"})
+    r = await client.post("/api/auth/login", json={"email": "lea@manent-tests.org", "password": "secret123"})
+    assert r.status_code == 200 and r.json()["user"]["is_admin"] is True
+    assert (await fake_db.users.find_one({"email": "lea@manent-tests.org"}))["is_admin"] is True
+
+
 async def test_journal_entry_advances_book_and_quota(client, fake_db):
     headers, user = await register(client)
     uid = user["user_id"]

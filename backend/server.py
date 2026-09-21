@@ -128,6 +128,15 @@ async def create_session(user_id: str) -> dict:
     return {"session_token": token}
 
 
+# Comptes administrateurs : e-mails séparés par des virgules (variable ADMIN_EMAILS). Sur une base neuve, personne
+# ne peut poser is_admin à la main ; le droit est accordé à l'inscription et vérifié à chaque connexion.
+ADMIN_EMAILS = {e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()}
+
+
+def _is_admin_email(email: str) -> bool:
+    return email.lower() in ADMIN_EMAILS
+
+
 @api.post("/auth/register")
 async def register(body: RegisterBody):
     existing = await db.users.find_one({"email": body.email.lower()}, {"_id": 0})
@@ -152,6 +161,8 @@ async def register(body: RegisterBody):
         "premium": False,
         "created_at": now_utc(),
     }
+    if _is_admin_email(user["email"]):
+        user["is_admin"] = True
     await db.users.insert_one(user.copy())
     sess = await create_session(user_id)
     return {"session_token": sess["session_token"], "user": clean_doc({**user, "password_hash": None})}
@@ -184,6 +195,9 @@ async def login(body: LoginBody):
         await db.login_attempts.update_one({"email": email}, {"$inc": {"count": 1}, "$setOnInsert": {"first_at": now_utc()}}, upsert=True)
         raise HTTPException(status_code=401, detail="invalid_credentials")
     await db.login_attempts.delete_one({"email": email})
+    if _is_admin_email(email) and not user.get("is_admin"):
+        await db.users.update_one({"user_id": user["user_id"]}, {"$set": {"is_admin": True}})
+        user["is_admin"] = True
     sess = await create_session(user["user_id"])
     user.pop("_id", None); user.pop("password_hash", None)
     return {"session_token": sess["session_token"], "user": user}
